@@ -151,9 +151,6 @@ Access the Web UI at `http://127.0.0.1:7860`.
 
 ---
 
-
----
-
 ### 📦 Using as a Python SDK (via `pip`)
 
 If you want to integrate VieNeu-TTS into your own project:
@@ -308,8 +305,6 @@ Best if you have `make` installed (standard on Linux/macOS, or via Git Bash on W
 
 
 Then access the Web UI at `http://127.0.0.1:7860`.
-
----
 
 ---
 
