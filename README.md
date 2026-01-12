@@ -122,8 +122,12 @@ Phonemizer requires eSpeak NG to function.
 
 **B. Install dependencies:**
 
-> [!TIP]
-> **For NVIDIA GPU Users:** To use LMDeploy (Turbo mode), ensure you have updated drivers and **CUDA Toolkit 12.8+**.
+> [!IMPORTANT]
+> **For NVIDIA GPU Users:**
+> **Update your NVIDIA Drivers & Install CUDA Toolkit!**
+> This project uses **CUDA 12.8**. Please ensure your NVIDIA driver is up-to-date (support CUDA 12.8 or newer) to avoid compatibility issues, especially on RTX 30 series.
+>
+> To use `lmdeploy`, you **MUST** install the **NVIDIA GPU Computing Toolkit**: [https://developer.nvidia.com/cuda-downloads](https://developer.nvidia.com/cuda-downloads).
 
 ```bash
 # Default setup (Includes GPU support)
