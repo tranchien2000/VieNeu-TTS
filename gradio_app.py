@@ -1,5 +1,5 @@
 import gradio as gr
-print("⏳ Đang khởi động... Vui lòng chờ...")
+print("⏳ Đang khởi động VieNeu-TTS... Vui lòng chờ...")
 import soundfile as sf
 import tempfile
 import torch
@@ -12,11 +12,9 @@ from typing import Generator, Optional, Tuple
 import queue
 import threading
 import yaml
-from vieneu_utils.core_utils import split_text_into_chunks, env_bool
+from vieneu_utils.core_utils import split_text_into_chunks, join_audio_chunks, env_bool
 from functools import lru_cache
 import gc
-
-print("⏳ Đang khởi động VieNeu-TTS...")
 
 # --- CONSTANTS & CONFIG ---
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
@@ -378,7 +376,8 @@ def load_reference_info(voice_choice: str) -> Tuple[Optional[str], str]:
 
 def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: str, 
                      mode_tab: str, generation_mode: str, use_batch: bool, max_batch_size_run: int,
-                     lora_repo_id: str, lora_hf_token: str, lora_audio, lora_text: str):
+                     lora_repo_id: str, lora_hf_token: str, lora_audio, lora_text: str,
+                     temperature: float, max_chars_chunk: int):
     """Synthesis with optimization support, max batch size control, and LoRA adapter support"""
     global tts, current_backbone, current_codec, model_loaded, using_lmdeploy
     
@@ -473,8 +472,11 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
         
     # Setup Reference (non-LoRA modes)
     elif mode_tab == "custom_mode":
-        if custom_audio is None or not custom_text:
-            yield None, "⚠️ Thiếu Audio hoặc Text mẫu custom."
+        if custom_audio is None:
+            yield None, "⚠️ Vui lòng upload file Audio mẫu (Reference Audio)!"
+            return
+        if not custom_text or not custom_text.strip():
+            yield None, "⚠️ Vui lòng nhập nội dung văn bản của Audio mẫu (Reference Text)!"
             return
         ref_audio_path = custom_audio
         ref_text_raw = custom_text
@@ -509,10 +511,10 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
         if isinstance(ref_codes, torch.Tensor):
             ref_codes = ref_codes.cpu().numpy()
     except Exception as e:
-        yield None, f"❌ Lỗi xử lý reference: {e}"
+        yield None, f"❌ Lỗi xử lý Reference Audio: {str(e)}"
         return
     
-    text_chunks = split_text_into_chunks(raw_text, max_chars=MAX_CHARS_PER_CHUNK)
+    text_chunks = split_text_into_chunks(raw_text, max_chars=max_chars_chunk)
     total_chunks = len(text_chunks)
     
     # === STANDARD MODE ===
@@ -527,9 +529,8 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
         
         yield None, f"🚀 Bắt đầu tổng hợp {backend_name}{batch_info}{batch_size_info} ({total_chunks} đoạn)..."
         
-        all_audio_segments = []
+        all_wavs = []
         sr = 24000
-        silence_pad = np.zeros(int(sr * 0.15), dtype=np.float32)
         
         start_time = time.time()
         
@@ -541,32 +542,39 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                 
                 yield None, f"⚡ Xử lý {num_batches} mini-batch(es) (max {max_batch_size_run} đoạn/batch)..."
                 
-                chunk_wavs = tts.infer_batch(text_chunks, ref_codes, ref_text_raw, max_batch_size=max_batch_size_run)
+                chunk_wavs = tts.infer_batch(
+                    text_chunks, ref_codes, ref_text_raw, 
+                    max_batch_size=max_batch_size_run,
+                    temperature=temperature
+                )
                 
-                for i, chunk_wav in enumerate(chunk_wavs):
+                for chunk_wav in chunk_wavs:
                     if chunk_wav is not None and len(chunk_wav) > 0:
-                        all_audio_segments.append(chunk_wav)
-                        if i < total_chunks - 1:
-                            all_audio_segments.append(silence_pad)
+                        all_wavs.append(chunk_wav)
+
             else:
                 # Sequential processing
                 for i, chunk in enumerate(text_chunks):
                     yield None, f"⏳ Đang xử lý đoạn {i+1}/{total_chunks}..."
                     
-                    chunk_wav = tts.infer(chunk, ref_codes, ref_text_raw)
+                    chunk_wav = tts.infer(
+                        chunk, ref_codes, ref_text_raw,
+                        temperature=temperature
+                    )
                     
                     if chunk_wav is not None and len(chunk_wav) > 0:
-                        all_audio_segments.append(chunk_wav)
-                        if i < total_chunks - 1:
-                            all_audio_segments.append(silence_pad)
+                        all_wavs.append(chunk_wav)
             
-            if not all_audio_segments:
+            if not all_wavs:
                 yield None, "❌ Không sinh được audio nào."
                 return
             
             yield None, "💾 Đang ghép file và lưu..."
             
-            final_wav = np.concatenate(all_audio_segments)
+            # Use utility function for joining with silence/crossfade
+            # Default silence=0.15s to match SDK
+            final_wav = join_audio_chunks(all_wavs, sr=sr, silence_p=0.15)
+            
             with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
                 sf.write(tmp.name, final_wav, sr)
                 output_path = tmp.name
@@ -620,7 +628,10 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                 previous_tail = None
                 
                 for i, chunk_text in enumerate(text_chunks):
-                    stream_gen = tts.infer_stream(chunk_text, ref_codes, ref_text_raw)
+                    stream_gen = tts.infer_stream(
+                        chunk_text, ref_codes, ref_text_raw,
+                        temperature=temperature
+                    )
                     
                     for part_idx, audio_part in enumerate(stream_gen):
                         if audio_part is None or len(audio_part) == 0:
@@ -873,6 +884,10 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS") as demo:
             <strong>Tác giả:</strong>
             <a href="https://www.facebook.com/bao.phamnguyenngoc.5" target="_blank" class="model-card-link">Phạm Nguyễn Ngọc Bảo</a>
         </div>
+        <div class="model-card-item">
+            <strong>Discord:</strong>
+            <a href="https://discord.gg/yJt8kzjzWZ" target="_blank" class="model-card-link">Tham gia cộng đồng</a>
+        </div>
     </div>
 </div>
         """)
@@ -910,7 +925,8 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS") as demo:
                     <div class="warning-banner-item">
                         <strong>🐆 Hệ máy GPU</strong>
                         <div class="warning-banner-content">
-                            Chọn <b>VieNeu-TTS-0.3B (GPU)</b> để x2 tốc độ (độ chính xác ~95% bản gốc).
+                            Chọn <b>VieNeu-TTS-0.3B (GPU)</b> để x2 tốc độ (độ chính xác ~95% bản gốc).<br><br>
+                            ⚠️ <b>Lưu ý GPU cũ (RTX 10/20, T4):</b> Các GPU này không hỗ trợ bfloat16, nên khi dùng LMDeploy <b>bắt buộc</b> phải chọn <b>VieNeu-TTS-0.3B</b> thay vì bản VieNeu-TTS gốc.
                         </div>
                     </div>
                 </div>
@@ -1033,6 +1049,19 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS") as demo:
                         info="Số lượng đoạn văn bản xử lý cùng lúc. Giá trị cao = nhanh hơn nhưng tốn VRAM hơn. Giảm xuống nếu gặp lỗi Out of Memory."
                     )
                 
+                with gr.Accordion("⚙️ Cài đặt nâng cao (Generation)", open=False):
+                    with gr.Row():
+                        temperature_slider = gr.Slider(
+                            minimum=0.1, maximum=1.5, value=1.0, step=0.1,
+                            label="🌡️ Temperature", 
+                            info="Độ sáng tạo. Cao = đa dạng cảm xúc hơn nhưng dễ lỗi. Thấp = ổn định hơn."
+                        )
+                        max_chars_chunk_slider = gr.Slider(
+                            minimum=128, maximum=512, value=256, step=32,
+                            label="📝 Max Chars per Chunk",
+                            info="Độ dài tối đa mỗi đoạn xử lý."
+                        )
+                
                 # State to track current mode (replaces unreliable Textbox/Tabs input)
                 current_mode_state = gr.State("preset_mode")
                 
@@ -1090,7 +1119,8 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS") as demo:
             fn=synthesize_speech,
             inputs=[text_input, voice_select, custom_audio, custom_text, current_mode_state, 
                     generation_mode, use_batch, max_batch_size_run,
-                    lora_repo_id, lora_hf_token, lora_audio, lora_text],
+                    lora_repo_id, lora_hf_token, lora_audio, lora_text,
+                    temperature_slider, max_chars_chunk_slider],
             outputs=[audio_output, status_output]
         )
         

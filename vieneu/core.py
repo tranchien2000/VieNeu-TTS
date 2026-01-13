@@ -5,9 +5,8 @@ import numpy as np
 import torch
 from neucodec import NeuCodec, DistillNeuCodec
 from vieneu_utils.phonemize_text import phonemize_with_dict
-from vieneu_utils.core_utils import split_text_into_chunks
+from vieneu_utils.core_utils import split_text_into_chunks, join_audio_chunks
 from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
 import re
 import gc
 import requests
@@ -41,48 +40,6 @@ def _linear_overlap_add(frames: list[np.ndarray], stride: int) -> np.ndarray:
         offset += stride
     assert sum_weight.min() > 0
     return out / sum_weight
-
-
-def _join_audio_chunks(chunks: list[np.ndarray], sr: int, silence_p: float = 0.0, crossfade_p: float = 0.0) -> np.ndarray:
-    """Join audio chunks with optional silence padding and crossfading."""
-    if not chunks:
-        return np.array([], dtype=np.float32)
-    if len(chunks) == 1:
-        return chunks[0]
-    
-    silence_samples = int(sr * silence_p)
-    crossfade_samples = int(sr * crossfade_p)
-    
-    final_wav = chunks[0]
-    
-    for i in range(1, len(chunks)):
-        next_chunk = chunks[i]
-        
-        if silence_samples > 0:
-            # 1. Add silence between chunks
-            silence = np.zeros(silence_samples, dtype=np.float32)
-            final_wav = np.concatenate([final_wav, silence, next_chunk])
-        elif crossfade_samples > 0:
-            # 2. Crossfade between chunks
-            overlap = min(len(final_wav), len(next_chunk), crossfade_samples)
-            if overlap > 0:
-                fade_out = np.linspace(1.0, 0.0, overlap, dtype=np.float32)
-                fade_in = np.linspace(0.0, 1.0, overlap, dtype=np.float32)
-                
-                blended = (final_wav[-overlap:] * fade_out + next_chunk[:overlap] * fade_in)
-                final_wav = np.concatenate([
-                    final_wav[:-overlap],
-                    blended,
-                    next_chunk[overlap:]
-                ])
-            else:
-                final_wav = np.concatenate([final_wav, next_chunk])
-        else:
-            # 3. Simple concatenation
-            final_wav = np.concatenate([final_wav, next_chunk])
-            
-    return final_wav
-
 
 def _compile_codec_with_triton(codec):
     """Compile codec with Triton for faster decoding (Windows/Linux compatible)"""
@@ -441,7 +398,7 @@ class VieNeuTTS:
             ref_codes = self.codec.encode_code(audio_or_path=wav_tensor).squeeze(0).squeeze(0)
         return ref_codes
 
-    def infer(self, text: str, ref_codes: np.ndarray | torch.Tensor = None, ref_text: str = None, max_chars: int = 256, silence_p: float = 0.0, crossfade_p: float = 0.0, voice: dict = None, temperature: float = 1.0, top_k: int = 50) -> np.ndarray:
+    def infer(self, text: str, ref_codes: np.ndarray | torch.Tensor = None, ref_text: str = None, max_chars: int = 256, silence_p: float = 0.15, crossfade_p: float = 0.0, voice: dict = None, temperature: float = 1.0, top_k: int = 50) -> np.ndarray:
         """
         Perform inference to generate speech from text using the TTS model and reference audio.
         Automatically splits long text into chunks.
@@ -486,7 +443,7 @@ class VieNeuTTS:
             all_wavs.append(wav)
 
         # Join all chunks with optional padding/crossfade
-        final_wav = _join_audio_chunks(all_wavs, self.sample_rate, silence_p, crossfade_p)
+        final_wav = join_audio_chunks(all_wavs, self.sample_rate, silence_p, crossfade_p)
 
         # Apply watermark if available
         if self.watermarker:
@@ -538,10 +495,7 @@ class VieNeuTTS:
         
         if len(speech_ids) == 0:
             raise ValueError(
-                "No valid speech tokens found in the output. "
-                "Lỗi này có thể do GPU của bạn không hỗ trợ định dạng bfloat16 (ví dụ: dòng T4, RTX 20-series) "
-                "dẫn đến sai số khi tính toán. Bạn hãy thử chuyển sang dùng phiên bản GGUF Q4/Q8 hoặc "
-                "bỏ chọn 'LMDeploy' trong Tùy chọn nâng cao."
+                "No valid speech tokens found in the output. Nếu gặp lỗi này, hãy tạo issue trên github repo hoặc thông báo với chúng tôi tại: https://discord.com/invite/yJt8kzjzWZ"
             )
         
         # Onnx decode
@@ -736,7 +690,7 @@ class FastVieNeuTTS:
         enable_prefix_caching=True,
         quant_policy=0,
         enable_triton=True,
-        max_batch_size=2,
+        max_batch_size=4,
     ):
         """
         Initialize FastVieNeuTTS with LMDeploy backend and optimizations.
@@ -949,8 +903,8 @@ class FastVieNeuTTS:
             raise ValueError(
                 "No valid speech tokens found in the output. "
                 "Lỗi này có thể do GPU của bạn không hỗ trợ định dạng bfloat16 (ví dụ: dòng T4, RTX 20-series) "
-                "khiến mô hình chạy không ổn định trên LMDeploy (Turbomind). Bạn hãy thử bỏ chọn 'LMDeploy' "
-                "trong Tùy chọn nâng cao hoặc chuyển sang dùng phiên bản GGUF Q4/Q8 để chạy ổn định hơn."
+                "dẫn đến sai số khi tính toán. Bạn hãy thử chuyển sang dùng phiên bản VieNeu-TTS-0.3B nếu vẫn muốn dùng LmDeploy hoặc "
+                "bỏ chọn 'LMDeploy' trong Tùy chọn nâng cao. Nếu vẫn gặp lỗi này, hãy thông báo với chúng tôi tại: https://discord.com/invite/yJt8kzjzWZ"
             )
         
         if self._is_onnx_codec:
@@ -964,36 +918,6 @@ class FastVieNeuTTS:
                 recon = self.codec.decode_code(codes).cpu().numpy()
         
         return recon[0, 0, :]
-    
-    def _decode_batch(self, codes_list: list[str], max_workers: int = None):
-        """
-        Decode multiple code strings in parallel.
-        
-        Args:
-            codes_list: List of code strings to decode
-            max_workers: Number of parallel workers (auto-tuned if None)
-            
-        Returns:
-            List of decoded audio arrays
-        """
-        # Auto-tune workers based on GPU memory and batch size
-        if max_workers is None:
-            if torch.cuda.is_available():
-                gpu_mem_gb = torch.cuda.get_device_properties(0).total_memory / 1e9
-                # 1 worker per 4GB VRAM, max 4 workers
-                max_workers = min(max(1, int(gpu_mem_gb / 4)), 4)
-            else:
-                max_workers = 2
-        
-        # For small batches, use sequential to avoid overhead
-        if len(codes_list) <= 2:
-            return [self._decode(codes) for codes in codes_list]
-        
-        # Parallel decoding with controlled workers
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(self._decode, codes) for codes in codes_list]
-            results = [f.result() for f in futures]
-        return results
     
     def _format_prompt(self, ref_codes: list[int], ref_text: str, input_text: str) -> str:
         """Format prompt for LMDeploy"""
@@ -1009,7 +933,7 @@ class FastVieNeuTTS:
         
         return prompt
     
-    def infer(self, text: str, ref_codes: np.ndarray | torch.Tensor = None, ref_text: str = None, max_chars: int = 256, silence_p: float = 0.0, crossfade_p: float = 0.0, voice: dict = None, temperature: float = 1.0, top_k: int = 50) -> np.ndarray:
+    def infer(self, text: str, ref_codes: np.ndarray | torch.Tensor = None, ref_text: str = None, max_chars: int = 256, silence_p: float = 0.15, crossfade_p: float = 0.0, voice: dict = None, temperature: float = 1.0, top_k: int = 50) -> np.ndarray:
         """
         Single inference (automatically splits long text and uses batching for speed).
         
@@ -1055,7 +979,7 @@ class FastVieNeuTTS:
         else:
             # Multiple chunks: use batching for parallel generation
             all_wavs = self.infer_batch(chunks, ref_codes, ref_text, voice=voice, temperature=temperature, top_k=top_k)
-            wav = _join_audio_chunks(all_wavs, self.sample_rate, silence_p, crossfade_p)
+            wav = join_audio_chunks(all_wavs, self.sample_rate, silence_p, crossfade_p)
 
         # Apply watermark if available
         if self.watermarker:
@@ -1098,10 +1022,8 @@ class FastVieNeuTTS:
             responses = self.backbone(prompts, gen_config=self.gen_config, do_preprocess=False)
             batch_codes = [response.text for response in responses]
             
-            if len(batch_codes) > 3:
-                batch_wavs = self._decode_batch(batch_codes)
-            else:
-                batch_wavs = [self._decode(codes) for codes in batch_codes]
+            # Decode sequentially to check for errors individually and save VRAM
+            batch_wavs = [self._decode(codes) for codes in batch_codes]
             
             # Apply watermark if available
             if self.watermarker:
@@ -1310,7 +1232,7 @@ class RemoteVieNeuTTS(VieNeuTTS):
         )
         return prompt
 
-    def infer(self, text: str, ref_codes: np.ndarray | torch.Tensor = None, ref_text: str = None, max_chars: int = 256, silence_p: float = 0.0, crossfade_p: float = 0.0, voice: dict = None, temperature: float = 1.0, top_k: int = 50) -> np.ndarray:
+    def infer(self, text: str, ref_codes: np.ndarray | torch.Tensor = None, ref_text: str = None, max_chars: int = 256, silence_p: float = 0.15, crossfade_p: float = 0.0, voice: dict = None, temperature: float = 1.0, top_k: int = 50) -> np.ndarray:
         """
         Remote inference (automatically splits long text).
         
@@ -1351,14 +1273,6 @@ class RemoteVieNeuTTS(VieNeuTTS):
 
             prompt = self._format_prompt(ref_codes_list, ref_text, chunk)
             
-            # Use chat/completions endpoint as it is standard in lmdeploy serve api_server
-            # even if we are sending a pre-formatted prompt string.
-            # We wrap the prompt in a user message. LMDeploy might re-template it, but
-            # usually if the model doesn't have a strict template or we rely on the model's
-            # ability to follow instructions within the user message, this works for now.
-            # Ideally we should construct messages properly without pre-formatting if possible,
-            # but _format_prompt does heavy lifting (phonemization etc).
-            
             payload = {
                 "model": self.model_name,
                 "messages": [{"role": "user", "content": prompt}],
@@ -1385,7 +1299,7 @@ class RemoteVieNeuTTS(VieNeuTTS):
                 continue
 
         # Join all chunks with optional padding/crossfade
-        final_wav = _join_audio_chunks(all_wavs, self.sample_rate, silence_p, crossfade_p)
+        final_wav = join_audio_chunks(all_wavs, self.sample_rate, silence_p, crossfade_p)
 
         if self.watermarker:
             final_wav = self.watermarker.apply_watermark(final_wav, sample_rate=self.sample_rate)
