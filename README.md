@@ -83,25 +83,32 @@ The fastest way to experience VieNeu-TTS is through the Web interface (Gradio).
     ```bash
     uv sync
     ```
-
-> [!IMPORTANT]
-> **Windows GPU Users:** To enable GPU acceleration for GGUF models, you **must** run the following command after `uv sync` (Optional: Skip this if you don't use GGUF):
-> ```bash
-> uv pip install "https://github.com/pnnbao97/VieNeu-TTS/releases/download/llama-cpp-python-cu124/llama_cpp_python-0.3.16-cp312-cp312-win_amd64.whl"
-> ```
-> *Note: This requires NVIDIA Driver version **570.65** (CUDA 12.8) or newer.*
+    *(Optional: See [GGUF GPU Acceleration](#gguf-gpu) if you want to use GGUF models on GPU)*
 
   - **Option 2: CPU-ONLY (Lightweight version)**
-
     ```bash
     uv sync --no-default-groups
     ```
+
 
 3. **Start the Web UI:**
    ```bash
    uv run gradio_app.py
    ```
    Access the UI at `http://127.0.0.1:7860`.
+
+### 🚀 GGUF GPU Acceleration (Optional) <a name="gguf-gpu"></a>
+If you want to use GGUF models with GPU acceleration (llama-cpp-python), follow these steps:
+
+#### **Windows Users**
+Run the following command after `uv sync`:
+```bash
+uv pip install "https://github.com/pnnbao97/VieNeu-TTS/releases/download/llama-cpp-python-cu124/llama_cpp_python-0.3.16-cp312-cp312-win_amd64.whl"
+```
+*Note: Requires NVIDIA Driver version **551.61** (CUDA 12.4) or newer.*
+
+#### **Linux / macOS Users**
+Please refer to the official [llama-cpp-python documentation](https://llama-cpp-python.readthedocs.io/en/latest/) for installation instructions specific to your hardware (CUDA, Metal, ROCm).
 
 ---
 
@@ -211,6 +218,7 @@ VieNeu-TTS allows you to load custom models directly from HuggingFace or local p
 
 - **LoRA Support:** Automatically merges LoRA into the base model and accelerates with **LMDeploy**.
 - **GGUF Support:** Runs smoothly on CPU using the llama.cpp backend.
+
 - **Private Repos:** Supports entering an HF Token to access private models.
 
 👉 See the detailed guide at: **[docs/CUSTOM_MODEL_USAGE.md](docs/CUSTOM_MODEL_USAGE.md)**

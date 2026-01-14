@@ -67,25 +67,33 @@ Cách nhanh nhất để trải nghiệm VieNeu-TTS là sử dụng giao diện 
     ```bash
     uv sync
     ```
-
-> [!IMPORTANT]
-> **Người dùng Windows (GPU):** Để kích hoạt tăng tốc GPU cho các mô hình GGUF, bạn **phải** chạy lệnh sau sau khi `uv sync` (Bỏ qua nếu bạn không dùng bản GGUF):
-> ```bash
-> uv pip install "https://github.com/pnnbao97/VieNeu-TTS/releases/download/llama-cpp-python-cu124/llama_cpp_python-0.3.16-cp312-cp312-win_amd64.whl"
-> ```
-> *Lưu ý: Yêu cầu NVIDIA Driver phiên bản **570.65** (CUDA 12.8) trở lên.*
+    *(Tùy chọn: Xem [Tăng tốc GPU cho GGUF](#gguf-gpu) nếu bạn muốn dùng GGUF trên GPU)*
 
   - **Cách 2: Chỉ dùng CPU (Bản rút gọn)**
-
     ```bash
     uv sync --no-default-groups
     ```
+
+
 
 3. **Chạy giao diện Web:**
    ```bash
    uv run gradio_app.py
    ```
    Truy cập `http://127.0.0.1:7860` để bắt đầu.
+
+### 🚀 Tăng tốc GPU cho GGUF (Tùy chọn) <a name="gguf-gpu"></a>
+Nếu bạn muốn sử dụng các mô hình GGUF với tăng tốc GPU (llama-cpp-python), hãy làm theo các bước sau:
+
+#### **Người dùng Windows**
+Chạy lệnh sau sau khi `uv sync`:
+```bash
+uv pip install "https://github.com/pnnbao97/VieNeu-TTS/releases/download/llama-cpp-python-cu124/llama_cpp_python-0.3.16-cp312-cp312-win_amd64.whl"
+```
+*Lưu ý: Yêu cầu NVIDIA Driver phiên bản **551.61** (CUDA 12.4) trở lên.*
+
+#### **Người dùng Linux / macOS**
+Vui lòng tham khảo [tài liệu chính thức của llama-cpp-python](https://llama-cpp-python.readthedocs.io/en/latest/) để biết hướng dẫn cài đặt cụ thể cho phần cứng của bạn (CUDA, Metal, ROCm).
 
 ---
 
@@ -194,6 +202,7 @@ VieNeu-TTS cho phép bạn tải các mô hình tùy chỉnh trực tiếp từ 
 
 - **LoRA Support:** Tự động merge LoRA vào model gốc và tăng tốc bằng **LMDeploy**.
 - **GGUF Support:** Chạy mượt mà trên CPU với backend llama.cpp.
+
 - **Private Repo:** Hỗ trợ nhập HF Token để tải các model riêng tư.
 
 👉 Xem hướng dẫn chi tiết tại: **[docs/CUSTOM_MODEL_USAGE.md](docs/CUSTOM_MODEL_USAGE.md)**
