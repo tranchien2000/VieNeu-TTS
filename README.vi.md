@@ -39,7 +39,7 @@ Cách nhanh nhất để trải nghiệm VieNeu-TTS là sử dụng giao diện 
   - **Windows:** Tải `.msi` từ [eSpeak NG Releases](https://github.com/espeak-ng/espeak-ng/releases).
   - **macOS:** `brew install espeak`
   - **Ubuntu/Debian:** `sudo apt install espeak-ng`
-- **NVIDIA GPU (Tùy chọn):** Để đạt tốc độ tối đa với LMDeploy.
+- **NVIDIA GPU (Tùy chọn):** Để đạt tốc độ tối đa với LMDeploy. Yêu cầu **CUDA 12.8 trở lên** và cài đặt [NVIDIA GPU Computing Toolkit](https://developer.nvidia.com/cuda-downloads).
 
 ### Các bước cài đặt
 1. **Clone Repo:**
@@ -81,25 +81,89 @@ pip install vieneu --extra-index-url https://pnnbao97.github.io/llama-cpp-python
 pip install vieneu
 ```
 
-### Mã nguồn mẫu
+### Hướng dẫn sử dụng đầy đủ (main.py)
 ```python
-from vieneu import Vieneu
+"""
+Demo VieNeuSDK v1.1.3 - Full Features Guide
+"""
+
+import time
 import soundfile as sf
+from vieneu import Vieneu
+from pathlib import Path
 
-# Khởi tạo (Mặc định dùng 0.3B-Q4 GGUF - Rất nhanh trên CPU)
-tts = Vieneu()
+def main():
+    print("🚀 Initializing VieNeu SDK (v1.1.3)...")
+    
+    # Initialize SDK
+    # Mặc định: "pnnbao-ump/VieNeu-TTS-0.3B-q4-gguf" (Tối ưu cho CPU)
+    # Chế độ:
+    # - mode="standard" (Mặc định): Chạy local
+    # - mode="remote": Kết nối tới LMDeploy server
+    
+    tts = Vieneu()
+    # Hoặc dùng Remote mode:
+    # tts = Vieneu(model_name="pnnbao-ump/VieNeu-TTS-0.3B", mode="remote", api_base="http://localhost:23333/v1")
 
-# Tạo giọng nói từ preset
-audio = tts.infer(
-    text="Xin chào, đây là hệ thống tổng hợp giọng nói VieNeu.",
-    voice="Binh",  # Giọng nam miền Bắc
-    temperature=1.0
-)
+    # ---------------------------------------------------------
+    # PHẦN 1: GIỌNG NÓI MẶC ĐỊNH
+    # ---------------------------------------------------------
+    print("\n--- 1. Danh sách giọng nói có sẵn ---")
+    available_voices = tts.list_preset_voices()
+    print("📋 Voices:", available_voices)
+    
+    # Chọn một giọng mặc định
+    current_voice = tts.get_preset_voice("Binh")
+    print("✅ Selected voice: Binh")
 
-# Lưu kết quả
-sf.write("output.wav", audio, 24000)
+
+    # ---------------------------------------------------------
+    # PHẦN 2: TỰ CLONE GIỌNG NÓI MỚI
+    # ---------------------------------------------------------
+    print("\n--- 2. Tạo giọng nói tùy chỉnh ---")
+    
+    # Thay bằng file .wav của bạn và nội dung tương ứng
+    sample_audio = Path(__file__).parent / "example.wav"
+    sample_text = "ví dụ 2. tính trung bình của dãy số."
+
+    if sample_audio.exists():
+        voice_name = "MyCustomVoice"
+        print(f"🎙️ Đang clone giọng từ: {sample_audio.name}")
+        
+        # 'clone_voice' hỗ trợ lưu trực tiếp với tham số 'name'
+        custom_voice = tts.clone_voice(
+            audio_path=sample_audio,
+            text=sample_text,
+            name=voice_name  # <-- Tự động lưu vào hệ thống
+        )
+        print(f"✅ Đã tạo và lưu giọng: '{voice_name}'")
+        
+        current_voice = custom_voice
+
+
+    # ---------------------------------------------------------
+    # PHẦN 3: TỔNG HỢP GIỌNG NÓI VỚI THAM SỐ NÂNG CAO
+    # ---------------------------------------------------------
+    print("\n--- 3. Tổng hợp tiếng nói ---")
+    text_input = "Xin chào, tôi là VieNeu-TTS. Tôi có thể giúp bạn đọc sách, hoặc clone giọng nói của bạn."
+    
+    print("🎧 Đang tạo âm thanh...")
+    audio = tts.infer(
+        text=text_input,
+        voice=current_voice,
+        temperature=1.0,  # 0.1 -> Ổn định, 1.0+ -> Biểu cảm
+        top_k=50
+    )
+    sf.write("output.wav", audio, 24000)
+    print("💾 Đã lưu: output.wav")
+
+    tts.close()
+    print("\n✅ Xong!")
+
+if __name__ == "__main__":
+    main()
 ```
-*Xem chi tiết mã nguồn mẫu tại [Examples](examples/).*
+*Xem thêm các script mẫu tại [main.py](main.py) ở thư mục gốc.*
 
 ---
 

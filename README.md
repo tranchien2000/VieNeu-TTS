@@ -55,7 +55,7 @@ The fastest way to experience VieNeu-TTS is through the Web interface (Gradio).
   - **Windows:** Download the `.msi` from [eSpeak NG Releases](https://github.com/espeak-ng/espeak-ng/releases).
   - **macOS:** `brew install espeak`
   - **Ubuntu/Debian:** `sudo apt install espeak-ng`
-- **NVIDIA GPU (Optional):** For maximum speed via LMDeploy.
+- **NVIDIA GPU (Optional):** For maximum speed via LMDeploy. Requires **CUDA 12.8 or newer** and [NVIDIA GPU Computing Toolkit](https://developer.nvidia.com/cuda-downloads) installed.
 
 ### Installation Steps
 1. **Clone the Repo:**
@@ -97,25 +97,90 @@ pip install vieneu --extra-index-url https://pnnbao97.github.io/llama-cpp-python
 pip install vieneu
 ```
 
-### Usage Example
+### Full Features Example (main.py)
 ```python
-from vieneu import Vieneu
+"""
+Demo VieNeuSDK v1.1.3 - Full Features Guide
+"""
+
+import time
 import soundfile as sf
+from vieneu import Vieneu
+from pathlib import Path
 
-# Initialize (Default: 0.3B-Q4 GGUF - Ultra fast on CPU)
-tts = Vieneu()
+def main():
+    print("🚀 Initializing VieNeu SDK (v1.1.3)...")
+    
+    # Initialize SDK
+    # Default: "pnnbao-ump/VieNeu-TTS-0.3B-q4-gguf" (Speed & CPU Optimized)
+    # Mode selection:
+    # - mode="standard" (Default): Runs locally using GGUF (CPU) or PyTorch
+    # - mode="remote": Connects to the LMDeploy server setup above for max speed
+    
+    tts = Vieneu()
+    # Or to use Remote mode (Must start 'lmdeploy serve api_server pnnbao-ump/VieNeu-TTS-0.3B' first):
+    # tts = Vieneu(model_name="pnnbao-ump/VieNeu-TTS-0.3B", mode="remote", api_base="http://localhost:23333/v1")
 
-# Generate speech from preset
-audio = tts.infer(
-    text="Xin chào, đây là hệ thống tổng hợp giọng nói VieNeu.",
-    voice="Binh",  # North Vietnamese male
-    temperature=1.0
-)
+    # ---------------------------------------------------------
+    # PART 1: PRESET VOICES
+    # ---------------------------------------------------------
+    print("\n--- 1. Available Preset Voices ---")
+    available_voices = tts.list_preset_voices()
+    print("📋 Voices:", available_voices)
+    
+    # Select a preset voice
+    current_voice = tts.get_preset_voice("Binh")
+    print("✅ Selected voice: Binh")
 
-# Save result
-sf.write("output.wav", audio, 24000)
+
+    # ---------------------------------------------------------
+    # PART 2: CREATE & SAVE CUSTOM VOICE
+    # ---------------------------------------------------------
+    print("\n--- 2. Create Custom Voice ---")
+    
+    # Replace with your actual .wav file path and its exact transcript
+    sample_audio = Path(__file__).parent / "example.wav"
+    sample_text = "ví dụ 2. tính trung bình của dãy số."
+
+    if sample_audio.exists():
+        voice_name = "MyCustomVoice"
+        print(f"🎙️ Cloning voice from: {sample_audio.name}")
+        
+        # 'clone_voice' supports saving directly with 'name' argument
+        custom_voice = tts.clone_voice(
+            audio_path=sample_audio,
+            text=sample_text,
+            name=voice_name  # <-- Automatically saves voice to system
+        )
+        print(f"✅ Voice created and saved as: '{voice_name}'")
+        
+        # Switch to new voice
+        current_voice = custom_voice
+
+
+    # ---------------------------------------------------------
+    # PART 3: SYNTHESIS WITH ADVANCED PARAMETERS
+    # ---------------------------------------------------------
+    print("\n--- 3. Speech Synthesis ---")
+    text_input = "Xin chào, tôi là VieNeu-TTS. Tôi có thể giúp bạn đọc sách, hoặc clone giọng nói của bạn."
+    
+    print("🎧 Generating...")
+    audio = tts.infer(
+        text=text_input,
+        voice=current_voice,
+        temperature=1.0,  # Adjustable: 0.1 -> Stable, 1.0+ -> Expressive
+        top_k=50
+    )
+    sf.write("output.wav", audio, 24000)
+    print("💾 Saved: output.wav")
+
+    tts.close()
+    print("\n✅ Done!")
+
+if __name__ == "__main__":
+    main()
 ```
-*See more examples in the [Examples](examples/) directory.*
+*For more scripts, see [main.py](main.py) in the project root.*
 
 ---
 
