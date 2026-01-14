@@ -65,16 +65,24 @@ The fastest way to experience VieNeu-TTS is through the Web interface (Gradio).
    ```
 
 2. **Environment Setup with `uv` (Recommended):**
-   ```bash
-   # Install uv if you haven't (Windows)
-   powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-   
-   # Install dependencies (Default with GPU support)
-   uv sync
+   - **Step A: Install uv (if you haven't)**
+     ```bash
+     # Windows:
+     powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+     
+     # Linux/macOS:
+     curl -LsSf https://astral.sh/uv/install.sh | sh
+     ```
 
-   # FOR CPU-ONLY: Install a lightweight version
-   uv sync --no-default-groups
-   ```
+   - **Step B: Install dependencies**
+     - **Option 1: Default (with GPU support)**
+       ```bash
+       uv sync
+       ```
+     - **Option 2: CPU-ONLY (Lightweight version)**
+       ```bash
+       uv sync --no-default-groups
+       ```
 
 3. **Start the Web UI:**
    ```bash
@@ -252,7 +260,7 @@ Check [docs/Deploy.md](docs/Deploy.md) for more details.
 
 ## 🤝 7. Support & Contact <a name="support"></a>
 
-- **Author:** Pham Nguyen Ngoc Bao
+- **Author:** Phạm Nguyễn Ngọc Bảo
 - **Hugging Face:** [pnnbao-ump](https://huggingface.co/pnnbao-ump)
 - **Discord:** [Join our community](https://discord.gg/yJt8kzjzWZ)
 - **Facebook:** [Pham Nguyen Ngoc Bao](https://www.facebook.com/bao.phamnguyenngoc.5)

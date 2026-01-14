@@ -49,16 +49,24 @@ Cách nhanh nhất để trải nghiệm VieNeu-TTS là sử dụng giao diện 
    ```
 
 2. **Cài đặt môi trường với `uv` (Khuyên dùng):**
-   ```bash
-   # Cài uv nếu chưa có (Windows)
-   powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-   
-   # Cài đặt dependencies (Mặc định hỗ trợ GPU)
-   uv sync
+   - **Bước A: Cài đặt uv (nếu chưa có)**
+     ```bash
+     # Windows:
+     powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+     
+     # Linux/macOS:
+     curl -LsSf https://astral.sh/uv/install.sh | sh
+     ```
 
-   # NẾU KHÔNG CÓ GPU: Cài bản rút gọn để tiết kiệm dung lượng
-   uv sync --no-default-groups
-   ```
+   - **Bước B: Cài đặt dependencies**
+     - **Cách 1: Mặc định (có hỗ trợ GPU)**
+       ```bash
+       uv sync
+       ```
+     - **Cách 2: Chỉ dùng CPU (Bản rút gọn)**
+       ```bash
+       uv sync --no-default-groups
+       ```
 
 3. **Chạy giao diện Web:**
    ```bash
