@@ -35,12 +35,14 @@
 Cách nhanh nhất để trải nghiệm VieNeu-TTS là sử dụng giao diện Web (Gradio).
 
 ### Yêu cầu hệ thống
-- **Python:** 3.10 - 3.12 (Khuyên dùng 3.12)
+- **Python:** 3.12
 - **eSpeak NG:** Bắt buộc để xử lý phiên âm.
   - **Windows:** Tải `.msi` từ [eSpeak NG Releases](https://github.com/espeak-ng/espeak-ng/releases).
   - **macOS:** `brew install espeak`
   - **Ubuntu/Debian:** `sudo apt install espeak-ng`
-- **NVIDIA GPU (Tùy chọn):** Để đạt tốc độ tối đa với LMDeploy. Yêu cầu **CUDA 12.8 trở lên** và cài đặt [NVIDIA GPU Computing Toolkit](https://developer.nvidia.com/cuda-downloads).
+- **NVIDIA GPU (Tùy chọn):** Để đạt tốc độ tối đa với LMDeploy hoặc tăng tốc GGUF bằng GPU.
+  - Yêu cầu cập nhật **NVIDIA Driver** bản mới nhất (Tối thiểu 570.65 - CUDA 12.8+).
+  - Đối với **LMDeploy**, khuyên dùng cài đặt thêm [NVIDIA GPU Computing Toolkit](https://developer.nvidia.com/cuda-downloads).
 
 ### Các bước cài đặt
 1. **Clone Repo:**
@@ -50,24 +52,31 @@ Cách nhanh nhất để trải nghiệm VieNeu-TTS là sử dụng giao diện 
    ```
 
 2. **Cài đặt môi trường với `uv` (Khuyên dùng):**
-   - **Bước A: Cài đặt uv (nếu chưa có)**
-     ```bash
-     # Windows:
-     powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-     
-     # Linux/macOS:
-     curl -LsSf https://astral.sh/uv/install.sh | sh
-     ```
+  - **Bước A: Cài đặt uv (nếu chưa có)**
+    ```bash
+    # Windows:
+    powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+    
+    # Linux/macOS:
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
 
-   - **Bước B: Cài đặt dependencies**
-     - **Cách 1: Mặc định (có hỗ trợ GPU)**
-       ```bash
-       uv sync
-       ```
-     - **Cách 2: Chỉ dùng CPU (Bản rút gọn)**
-       ```bash
-       uv sync --no-default-groups
-       ```
+  - **Bước B: Cài đặt dependencies**
+  - **Cách 1: Mặc định (có hỗ trợ GPU)**
+    ```bash
+    uv sync
+    ```
+    > [!IMPORTANT]
+    > **Người dùng Windows (GPU):** Để kích hoạt tăng tốc GPU cho các mô hình GGUF, bạn **phải** chạy lệnh sau sau khi `uv sync` (Bỏ qua nếu bạn không dùng bản GGUF):
+    > ```bash
+    > uv pip install "https://github.com/pnnbao97/VieNeu-TTS/releases/download/llama-cpp-python-cu124/llama_cpp_python-0.3.16-cp312-cp312-win_amd64.whl"
+    > ```
+    > *Lưu ý: Yêu cầu NVIDIA Driver phiên bản **551.61** (CUDA 12.4) trở lên.*
+
+  - **Cách 2: Chỉ dùng CPU (Bản rút gọn)**
+    ```bash
+    uv sync --no-default-groups
+    ```
 
 3. **Chạy giao diện Web:**
    ```bash

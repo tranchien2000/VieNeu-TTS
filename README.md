@@ -1,5 +1,7 @@
 # 🦜 VieNeu-TTS 
 
+[🇻🇳 Tiếng Việt](./README.vi.md)
+
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-blue)](https://github.com/pnnbao97/VieNeu-TTS)
 [![Hugging Face](https://img.shields.io/badge/Hugging%20Face-0.5B-yellow)](https://huggingface.co/pnnbao-ump/VieNeu-TTS)
 [![Hugging Face](https://img.shields.io/badge/Hugging%20Face-0.3B-orange)](https://huggingface.co/pnnbao-ump/VieNeu-TTS-0.3B)
@@ -26,7 +28,7 @@ These represent a significant upgrade from the previous VieNeu-TTS-140h with the
 - **Multiple model formats**: Support for PyTorch, GGUF Q4/Q8 (CPU optimized), and ONNX codec
 
 VieNeu-TTS delivers production-ready speech synthesis fully offline.
-- **Author:** Phạm Nguyễn Ngọc Bảo
+**Author:** Phạm Nguyễn Ngọc Bảo
 
 ---
 
@@ -51,12 +53,14 @@ VieNeu-TTS delivers production-ready speech synthesis fully offline.
 The fastest way to experience VieNeu-TTS is through the Web interface (Gradio).
 
 ### System Requirements
-- **Python:** 3.10 - 3.12 (3.12 recommended)
+- **Python:** 3.12
 - **eSpeak NG:** Required for phonemization.
   - **Windows:** Download the `.msi` from [eSpeak NG Releases](https://github.com/espeak-ng/espeak-ng/releases).
   - **macOS:** `brew install espeak`
   - **Ubuntu/Debian:** `sudo apt install espeak-ng`
-- **NVIDIA GPU (Optional):** For maximum speed via LMDeploy. Requires **CUDA 12.8 or newer** and [NVIDIA GPU Computing Toolkit](https://developer.nvidia.com/cuda-downloads) installed.
+- **NVIDIA GPU (Optional):** For maximum speed via LMDeploy or GGUF GPU acceleration.
+  - Requires **NVIDIA Driver >= 570.65** (CUDA 12.8+) or higher.
+  - For **LMDeploy**, it is recommended to have the [NVIDIA GPU Computing Toolkit](https://developer.nvidia.com/cuda-downloads) installed.
 
 ### Installation Steps
 1. **Clone the Repo:**
@@ -66,24 +70,31 @@ The fastest way to experience VieNeu-TTS is through the Web interface (Gradio).
    ```
 
 2. **Environment Setup with `uv` (Recommended):**
-   - **Step A: Install uv (if you haven't)**
-     ```bash
-     # Windows:
-     powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
-     
-     # Linux/macOS:
-     curl -LsSf https://astral.sh/uv/install.sh | sh
-     ```
+  - **Step A: Install uv (if you haven't)**
+    ```bash
+    # Windows:
+    powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+    
+    # Linux/macOS:
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
 
-   - **Step B: Install dependencies**
-     - **Option 1: Default (with GPU support)**
-       ```bash
-       uv sync
-       ```
-     - **Option 2: CPU-ONLY (Lightweight version)**
-       ```bash
-       uv sync --no-default-groups
-       ```
+  - **Step B: Install dependencies**
+  - **Option 1: Default (with GPU support)**
+    ```bash
+    uv sync
+    ```
+    > [!IMPORTANT]
+    > **Windows GPU Users:** To enable GPU acceleration for GGUF models, you **must** run the following command after `uv sync` (Optional: Skip this if you don't use GGUF):
+    > ```bash
+    > uv pip install "https://github.com/pnnbao97/VieNeu-TTS/releases/download/llama-cpp-python-cu124/llama_cpp_python-0.3.16-cp312-cp312-win_amd64.whl"
+    > ```
+    > *Note: This requires NVIDIA Driver version **551.61** (CUDA 12.4) or newer.*
+
+  - **Option 2: CPU-ONLY (Lightweight version)**
+    ```bash
+    uv sync --no-default-groups
+    ```
 
 3. **Start the Web UI:**
    ```bash
