@@ -25,7 +25,8 @@ These represent a significant upgrade from the previous VieNeu-TTS-140h with the
 - **Real-time synthesis**: 24 kHz waveform generation on CPU or GPU
 - **Multiple model formats**: Support for PyTorch, GGUF Q4/Q8 (CPU optimized), and ONNX codec
 
-VieNeu-TTS delivers production-ready speech synthesis fully offline.
+VieNeu-TTS delivers production-ready speech synthesis fully offline.  
+
 **Author:** Phạm Nguyễn Ngọc Bảo
 
 ---
@@ -83,14 +84,15 @@ The fastest way to experience VieNeu-TTS is through the Web interface (Gradio).
     uv sync
     ```
 
-    > [!IMPORTANT]
-    > **Windows GPU Users:** To enable GPU acceleration for GGUF models, you **must** run the following command after `uv sync` (Optional: Skip this if you don't use GGUF):
-    > ```bash
-    > uv pip install "https://github.com/pnnbao97/VieNeu-TTS/releases/download/llama-cpp-python-cu124/llama_cpp_python-0.3.16-cp312-cp312-win_amd64.whl"
-    > ```
-    > *Note: This requires NVIDIA Driver version **551.61** (CUDA 12.4) or newer.*
+> [!IMPORTANT]
+> **Windows GPU Users:** To enable GPU acceleration for GGUF models, you **must** run the following command after `uv sync` (Optional: Skip this if you don't use GGUF):
+> ```bash
+> uv pip install "https://github.com/pnnbao97/VieNeu-TTS/releases/download/llama-cpp-python-cu124/llama_cpp_python-0.3.16-cp312-cp312-win_amd64.whl"
+> ```
+> *Note: This requires NVIDIA Driver version **570.65** (CUDA 12.8) or newer.*
 
   - **Option 2: CPU-ONLY (Lightweight version)**
+
     ```bash
     uv sync --no-default-groups
     ```

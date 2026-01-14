@@ -9,7 +9,8 @@
 
 <img width="899" height="615" alt="VieNeu-TTS UI" src="https://github.com/user-attachments/assets/7eb9b816-6ab7-4049-866f-f85e36cb9c6f" />
 
-**VieNeu-TTS** là mô hình Text-to-Speech (TTS) tiếng Việt tiên tiến hỗ trợ **Instant Voice Cloning** (tái tạo giọng nói tức thì) chỉ với 3-5 giây âm thanh mẫu.
+**VieNeu-TTS** là mô hình Text-to-Speech (TTS) tiếng Việt tiên tiến hỗ trợ **Instant Voice Cloning** (tái tạo giọng nói tức thì) chỉ với 3-5 giây âm thanh mẫu.  
+
 - **Author:** Phạm Nguyễn Ngọc Bảo
 
 ---
@@ -67,14 +68,15 @@ Cách nhanh nhất để trải nghiệm VieNeu-TTS là sử dụng giao diện 
     uv sync
     ```
 
-    > [!IMPORTANT]
-    > **Người dùng Windows (GPU):** Để kích hoạt tăng tốc GPU cho các mô hình GGUF, bạn **phải** chạy lệnh sau sau khi `uv sync` (Bỏ qua nếu bạn không dùng bản GGUF):
-    > ```bash
-    > uv pip install "https://github.com/pnnbao97/VieNeu-TTS/releases/download/llama-cpp-python-cu124/llama_cpp_python-0.3.16-cp312-cp312-win_amd64.whl"
-    > ```
-    > *Lưu ý: Yêu cầu NVIDIA Driver phiên bản **551.61** (CUDA 12.4) trở lên.*
+> [!IMPORTANT]
+> **Người dùng Windows (GPU):** Để kích hoạt tăng tốc GPU cho các mô hình GGUF, bạn **phải** chạy lệnh sau sau khi `uv sync` (Bỏ qua nếu bạn không dùng bản GGUF):
+> ```bash
+> uv pip install "https://github.com/pnnbao97/VieNeu-TTS/releases/download/llama-cpp-python-cu124/llama_cpp_python-0.3.16-cp312-cp312-win_amd64.whl"
+> ```
+> *Lưu ý: Yêu cầu NVIDIA Driver phiên bản **570.65** (CUDA 12.8) trở lên.*
 
   - **Cách 2: Chỉ dùng CPU (Bản rút gọn)**
+
     ```bash
     uv sync --no-default-groups
     ```
