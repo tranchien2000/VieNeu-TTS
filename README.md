@@ -1,7 +1,5 @@
 # 🦜 VieNeu-TTS 
 
-[🇻🇳 Tiếng Việt](./README.vi.md)
-
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-blue)](https://github.com/pnnbao97/VieNeu-TTS)
 [![Hugging Face](https://img.shields.io/badge/Hugging%20Face-0.5B-yellow)](https://huggingface.co/pnnbao-ump/VieNeu-TTS)
 [![Hugging Face](https://img.shields.io/badge/Hugging%20Face-0.3B-orange)](https://huggingface.co/pnnbao-ump/VieNeu-TTS-0.3B)
@@ -84,6 +82,7 @@ The fastest way to experience VieNeu-TTS is through the Web interface (Gradio).
     ```bash
     uv sync
     ```
+
     > [!IMPORTANT]
     > **Windows GPU Users:** To enable GPU acceleration for GGUF models, you **must** run the following command after `uv sync` (Optional: Skip this if you don't use GGUF):
     > ```bash

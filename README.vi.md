@@ -66,6 +66,7 @@ Cách nhanh nhất để trải nghiệm VieNeu-TTS là sử dụng giao diện 
     ```bash
     uv sync
     ```
+
     > [!IMPORTANT]
     > **Người dùng Windows (GPU):** Để kích hoạt tăng tốc GPU cho các mô hình GGUF, bạn **phải** chạy lệnh sau sau khi `uv sync` (Bỏ qua nếu bạn không dùng bản GGUF):
     > ```bash
