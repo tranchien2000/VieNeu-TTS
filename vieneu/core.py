@@ -88,6 +88,7 @@ class VieNeuTTS:
         backbone_device="cpu",
         codec_repo="neuphonic/distill-neucodec",
         codec_device="cpu",
+        hf_token=None,
     ):
         """
         Initialize VieNeu-TTS.
@@ -118,7 +119,7 @@ class VieNeuTTS:
 
         # Load models
         if backbone_repo:
-            self._load_backbone(backbone_repo, backbone_device)
+            self._load_backbone(backbone_repo, backbone_device, hf_token)
         self._load_codec(codec_repo, codec_device)
 
         # Asset path
@@ -188,7 +189,7 @@ class VieNeuTTS:
             # Silence all exit errors as we are shutting down anyway
             pass
     
-    def _load_backbone(self, backbone_repo, backbone_device):
+    def _load_backbone(self, backbone_repo, backbone_device, hf_token=None):
         # MPS device validation
         if backbone_device == "mps":
             if not torch.backends.mps.is_available():
@@ -213,13 +214,14 @@ class VieNeuTTS:
                 n_ctx=self.max_context,
                 mlock=True,
                 flash_attn=True if backbone_device == "gpu" else False,
+                token=hf_token,
             )
             self._is_quantized_model = True
             
         else:
             from transformers import AutoTokenizer, AutoModelForCausalLM
-            self.tokenizer = AutoTokenizer.from_pretrained(backbone_repo)
-            self.backbone = AutoModelForCausalLM.from_pretrained(backbone_repo).to(
+            self.tokenizer = AutoTokenizer.from_pretrained(backbone_repo, token=hf_token)
+            self.backbone = AutoModelForCausalLM.from_pretrained(backbone_repo, token=hf_token).to(
                 torch.device(backbone_device)
             )
     
@@ -691,6 +693,7 @@ class FastVieNeuTTS:
         quant_policy=0,
         enable_triton=True,
         max_batch_size=4,
+        hf_token=None,
     ):
         """
         Initialize FastVieNeuTTS with LMDeploy backend and optimizations.
@@ -732,7 +735,7 @@ class FastVieNeuTTS:
         self._triton_enabled = False
         
         # Load models
-        self._load_backbone_lmdeploy(backbone_repo, memory_util, tp, enable_prefix_caching, quant_policy)
+        self._load_backbone_lmdeploy(backbone_repo, memory_util, tp, enable_prefix_caching, quant_policy, hf_token)
         self._load_codec(codec_repo, codec_device, enable_triton)
 
         # Load watermarker (optional)
@@ -748,9 +751,15 @@ class FastVieNeuTTS:
         print("✅ FastVieNeuTTS with optimizations loaded successfully!")
         print(f"   Max batch size: {self.max_batch_size} (adjustable to prevent GPU overload)")
     
-    def _load_backbone_lmdeploy(self, repo, memory_util, tp, enable_prefix_caching, quant_policy):
+    def _load_backbone_lmdeploy(self, repo, memory_util, tp, enable_prefix_caching, quant_policy, hf_token=None):
         """Load backbone using LMDeploy's TurbomindEngine"""
         print(f"Loading backbone with LMDeploy from: {repo}")
+        
+        # Set HF Token for private models
+        if hf_token:
+            import os
+            os.environ["HF_TOKEN"] = hf_token
+            print("   🔑 Set HF_TOKEN for private model access")
         
         try:
             from lmdeploy import pipeline, TurbomindEngineConfig, GenerationConfig

@@ -1,0 +1,174 @@
+# 🦜 VieNeu-TTS
+
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-blue)](https://github.com/pnnbao97/VieNeu-TTS)
+[![Hugging Face](https://img.shields.io/badge/Hugging%20Face-0.5B-yellow)](https://huggingface.co/pnnbao-ump/VieNeu-TTS)
+[![Hugging Face](https://img.shields.io/badge/Hugging%20Face-0.3B-orange)](https://huggingface.co/pnnbao-ump/VieNeu-TTS-0.3B)
+[![Hugging Face](https://img.shields.io/badge/Hugging%20Face-0.3B--GGUF-green)](https://huggingface.co/pnnbao-ump/VieNeu-TTS-0.3B-q8-gguf)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Us-5865F2?logo=discord&logoColor=white)](https://discord.gg/yJt8kzjzWZ)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1V1DjG-KdmurCAhvXrxxTLsa9tteDxSVO?usp=sharing) 
+
+<img width="899" height="615" alt="VieNeu-TTS UI" src="https://github.com/user-attachments/assets/7eb9b816-6ab7-4049-866f-f85e36cb9c6f" />
+
+**VieNeu-TTS** là mô hình Text-to-Speech (TTS) tiếng Việt tiên tiến hỗ trợ **Instant Voice Cloning** (tái tạo giọng nói tức thì) chỉ với 3-5 giây âm thanh mẫu.
+
+---
+
+[<img width="600" height="595" alt="VieNeu-TTS Demo" src="https://github.com/user-attachments/assets/6b32df9d-7e2e-474f-94c8-43d6fa586d15" />](https://github.com/user-attachments/assets/6b32df9d-7e2e-474f-94c8-43d6fa586d15)
+
+---
+
+## 📌 Mục lục
+
+1. [🦜 Cài đặt & Chạy Web UI](#1-cài-đặt--chạy-web-ui)
+2. [📦 Sử dụng Python SDK](#2-sử-dụng-python-sdk-vieneu)
+3. [🎯 Custom Model (LoRA, GGUF, Finetune)](#3-custom-model-lora-gguf-finetune)
+4. [🛠️ Hướng dẫn Fine-tuning](#4-hướng-dẫn-fine-tuning)
+5. [🔬 Tổng quan mô hình (Backbones)](#5-tổng-quan-mô-hình-backbones)
+6. [🐋 Triển khai với Docker](#6-triển-khai-với-docker)
+7. [🤝 Hỗ trợ & Liên hệ](#7-hỗ-trợ--liên-hệ)
+
+---
+
+## 🚀 1. Cài đặt & Chạy Web UI
+
+Cách nhanh nhất để trải nghiệm VieNeu-TTS là sử dụng giao diện Web (Gradio).
+
+### Yêu cầu hệ thống
+- **Python:** 3.10 - 3.12 (Khuyên dùng 3.12)
+- **eSpeak NG:** Bắt buộc để xử lý phiên âm.
+  - **Windows:** Tải `.msi` từ [eSpeak NG Releases](https://github.com/espeak-ng/espeak-ng/releases).
+  - **macOS:** `brew install espeak`
+  - **Ubuntu/Debian:** `sudo apt install espeak-ng`
+- **NVIDIA GPU (Tùy chọn):** Để đạt tốc độ tối đa với LMDeploy.
+
+### Các bước cài đặt
+1. **Clone Repo:**
+   ```bash
+   git clone https://github.com/pnnbao97/VieNeu-TTS.git
+   cd VieNeu-TTS
+   ```
+
+2. **Cài đặt môi trường với `uv` (Khuyên dùng):**
+   ```bash
+   # Cài uv nếu chưa có (Windows)
+   powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
+   
+   # Cài đặt dependencies (Mặc định hỗ trợ GPU)
+   uv sync
+
+   # NẾU KHÔNG CÓ GPU: Cài bản rút gọn để tiết kiệm dung lượng
+   uv sync --no-default-groups
+   ```
+
+3. **Chạy giao diện Web:**
+   ```bash
+   uv run gradio_app.py
+   ```
+   Truy cập `http://127.0.0.1:7860` để bắt đầu.
+
+---
+
+## 📦 2. Sử dụng Python SDK (vieneu)
+
+Nếu bạn muốn tích hợp VieNeu-TTS vào dự án phần mềm của mình.
+
+### Cài đặt nhanh
+```bash
+# Windows (Tránh lỗi build llama-cpp)
+pip install vieneu --extra-index-url https://pnnbao97.github.io/llama-cpp-python-v0.3.16/cpu/
+
+# Linux / MacOS
+pip install vieneu
+```
+
+### Mã nguồn mẫu
+```python
+from vieneu import Vieneu
+import soundfile as sf
+
+# Khởi tạo (Mặc định dùng 0.3B-Q4 GGUF - Rất nhanh trên CPU)
+tts = Vieneu()
+
+# Tạo giọng nói từ preset
+audio = tts.infer(
+    text="Xin chào, đây là hệ thống tổng hợp giọng nói VieNeu.",
+    voice="Binh",  # Giọng nam miền Bắc
+    temperature=1.0
+)
+
+# Lưu kết quả
+sf.write("output.wav", audio, 24000)
+```
+*Xem chi tiết mã nguồn mẫu tại [Examples](examples/).*
+
+---
+
+## 🎯 3. Custom Model (LoRA, GGUF, Finetune)
+
+VieNeu-TTS cho phép bạn tải các mô hình tùy chỉnh trực tiếp từ HuggingFace Repo hoặc đường dẫn cục bộ ngay trên giao diện Web.
+
+- **LoRA Support:** Tự động merge LoRA vào model gốc và tăng tốc bằng **LMDeploy**.
+- **GGUF Support:** Chạy mượt mà trên CPU với backend llama.cpp.
+- **Private Repo:** Hỗ trợ nhập HF Token để tải các model riêng tư.
+
+👉 Xem hướng dẫn chi tiết tại: **[docs/CUSTOM_MODEL_USAGE.md](docs/CUSTOM_MODEL_USAGE.md)**
+
+---
+
+## 🛠️ 4. Hướng dẫn Fine-tuning
+
+Bạn có thể tự huấn luyện VieNeu-TTS với giọng nói của chính mình hoặc dữ liệu tùy chỉnh.
+
+- **Dễ dàng:** Sử dụng script `train.py` với cấu hình LoRA tối ưu.
+- **Tài liệu:** Xem hướng dẫn từng bước tại **[finetune/README.md](finetune/README.md)**.
+- **Notebook:** Trải nghiệm trực tiếp trên Google Colab với `finetune/finetune_VieNeu-TTS.ipynb`.
+
+---
+
+## 🔬 5. Tổng quan mô hình (Backbones)
+
+| Model Variant | Format | Thiết bị KHUYÊN DÙNG | Đặc điểm |
+| :--- | :--- | :--- | :--- |
+| **VieNeu-TTS** | PyTorch | NVIDIA GPU (LMDeploy) | Chất lượng tốt nhất (High Quality) |
+| **VieNeu-TTS-0.3B** | PyTorch | GPU / CPU | Tốc độ cực nhanh (2x), độ trễ thấp (**Train từ đầu - Scratch**) |
+| **0.3B-q8-gguf** | GGUF | CPU | Cân bằng giữa chất lượng và tốc độ |
+| **0.3B-q4-gguf** | GGUF | CPU (Máy yếu) | Tốc độ xử lý nhanh nhất (Extreme Speed) |
+
+---
+
+## 6. 🐋 Triển khai với Docker
+
+Sử dụng Docker để triển khai nhanh chóng mà không cần cài đặt môi trường phức tạp.
+
+```bash
+# Chạy với CPU
+docker compose --profile cpu up
+
+# Chạy với GPU (Yêu cầu NVIDIA Container Toolkit)
+docker compose --profile gpu up
+```
+Xem thêm chi tiết tại [docs/Deploy.md](docs/Deploy.md).
+
+---
+
+## 🤝 7. Hỗ trợ & Liên hệ
+
+- **Tác giả:** Phạm Nguyễn Ngọc Bảo
+- **Hugging Face:** [pnnbao-ump](https://huggingface.co/pnnbao-ump)
+- **Discord:** [Tham gia cộng đồng](https://discord.gg/yJt8kzjzWZ)
+- **Facebook:** [Pham Nguyen Ngoc Bao](https://www.facebook.com/bao.phamnguyenngoc.5)
+- **Giấy phép:** 
+  - **VieNeu-TTS (0.5B):** Apache 2.0 (Sử dụng tự do).
+  - **VieNeu-TTS-0.3B:** CC BY-NC 4.0 (Phi thương mại).
+    - ✅ **Miễn phí:** Dành cho học sinh, sinh viên, nhà nghiên cứu hoặc các mục đích phi lợi nhuận.
+    - ⚠️ **Thương mại/Doanh nghiệp:** Cần liên hệ tác giả để cấp phép (License) theo năm (Dự kiến: **5,000 USD/năm** - có thể thương lượng).
+
+---
+
+## 🙏 Lời cảm ơn (Acknowledgements)
+
+Dự án này được xây dựng dựa trên các kiến trúc [NeuTTS Air](https://huggingface.co/neuphonic/neutts-air) và [NeuCodec](https://huggingface.co/neuphonic/neucodec). Cụ thể, mô hình **VieNeu-TTS (0.5B)** được fine-tune từ NeuTTS Air, trong khi mô hình **VieNeu-TTS-0.3B** là kiến trúc tùy chỉnh được huấn luyện từ đầu (trained from scratch) bằng bộ dữ liệu [VieNeu-TTS-1000h](https://huggingface.co/datasets/pnnbao-ump/VieNeu-TTS-1000h).
+
+---
+
+**Made with ❤️ for the Vietnamese TTS community**

@@ -142,7 +142,8 @@ def cleanup_gpu_memory():
     gc.collect()
 
 def load_model(backbone_choice: str, codec_choice: str, device_choice: str, 
-               force_lmdeploy: bool):
+               force_lmdeploy: bool, custom_model_id: str = "", custom_base_model: str = "", 
+               custom_hf_token: str = ""):
     """Load model with optimizations and max batch size control"""
     global tts, current_backbone, current_codec, model_loaded, using_lmdeploy
     lmdeploy_error_reason = None
@@ -160,10 +161,62 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
             del tts
             cleanup_gpu_memory()
         
-        backbone_config = BACKBONE_CONFIGS[backbone_choice]
+        # Prepare Backbone Config/Repo
+        custom_loading = False
+        is_merged_lora = False
+
+        if backbone_choice == "Custom Model":
+            custom_loading = True
+            if not custom_model_id or not custom_model_id.strip():
+                yield (
+                    "❌ Lỗi: Vui lòng nhập Model ID cho Custom Model.",
+                    gr.update(interactive=False), gr.update(interactive=True), gr.update(interactive=False)
+                )
+                return
+
+            # Check if it is a LoRA to merge
+            if "lora" in custom_model_id.lower():
+                # Merging mode
+                print(f"🔄 Detected LoRA in name. preparing merge with base: {custom_base_model}")
+                if custom_base_model not in BACKBONE_CONFIGS:
+                    yield (
+                        f"❌ Lỗi: Base Model '{custom_base_model}' không hợp lệ.",
+                        gr.update(interactive=False), gr.update(interactive=True), gr.update(interactive=False)
+                    )
+                    return
+                
+                base_config = BACKBONE_CONFIGS[custom_base_model]
+                backbone_config = {
+                    "repo": base_config["repo"], # Load base first
+                    "supports_streaming": base_config["supports_streaming"],
+                    "description": f"Custom Merged: {custom_model_id} + {custom_base_model}"
+                }
+                is_merged_lora = True
+            else:
+                # Normal custom model
+                backbone_config = {
+                    "repo": custom_model_id.strip(),
+                    "supports_streaming": False, # Assume false for unknown
+                    "description": f"Custom Model: {custom_model_id}"
+                }
+        else:
+            backbone_config = BACKBONE_CONFIGS[backbone_choice]
+            
         codec_config = CODEC_CONFIGS[codec_choice]
         
-        use_lmdeploy = force_lmdeploy and should_use_lmdeploy(backbone_choice, device_choice)
+        # Override LMDeploy if custom
+        if custom_loading:
+             if "gguf" in backbone_config['repo'].lower():
+                 # GGUF must use Standard backend (llama-cpp)
+                 use_lmdeploy = False
+             elif is_merged_lora:
+                 # LoRA can use LMDeploy if we merge first (checked logic below) or Standard
+                 use_lmdeploy = force_lmdeploy and should_use_lmdeploy(custom_base_model, device_choice)
+             else:
+                 # Full custom model (e.g. finetune)
+                 use_lmdeploy = force_lmdeploy and should_use_lmdeploy("VieNeu-TTS (GPU)", device_choice) # Assume GPU compatible?
+        else:
+             use_lmdeploy = force_lmdeploy and should_use_lmdeploy(backbone_choice, device_choice)
         
         if use_lmdeploy:
             lmdeploy_error_reason = None
@@ -176,14 +229,80 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
             else:
                 codec_device = "cuda" if torch.cuda.is_available() else "cpu"
             
+            # Special handling for Custom LoRA + LMDeploy -> Merge & Save
+            target_backbone_repo = backbone_config["repo"]
+            
+            if custom_loading and is_merged_lora:
+                safe_name = custom_model_id.strip().replace("/", "_").replace("\\", "_").replace(":", "")
+                cache_dir = os.path.join("merged_models_cache", safe_name)
+                target_backbone_repo = os.path.abspath(cache_dir)
+                
+                # Check if already merged
+                if not os.path.exists(cache_dir) or not os.path.exists(os.path.join(cache_dir, "vocab.json")):
+                    print(f"🔄 Merging LoRA for LMDeploy optimization: {cache_dir}")
+                    if os.path.exists(cache_dir):
+                        print("   ⚠️ Detected incomplete cache, rebuilding...")
+                    yield (
+                         f"⏳ Đang merge và lưu model LoRA để tối ưu cho LMDeploy (thao tác này chỉ chạy một lần)...",
+                         gr.update(interactive=False),
+                         gr.update(interactive=False),
+                         gr.update(interactive=False)
+                    )
+                    
+                    try:
+                        # Use GPU for merging if available for speed
+                        # We use the Base Model specified
+                        base_repo = BACKBONE_CONFIGS[custom_base_model]["repo"]
+                        merge_device = "cuda" if torch.cuda.is_available() else "cpu"
+                        
+                        print(f"   • Loading base: {base_repo} ({merge_device})")
+                        temp_tts = VieNeuTTS(
+                            backbone_repo=base_repo,
+                            backbone_device=merge_device, 
+                            codec_repo=codec_config["repo"],
+                            codec_device="cpu", # Codec unused for merging, keep on CPU
+                            hf_token=custom_hf_token
+                        )
+                        
+                        print(f"   • Loading Adapter: {custom_model_id}")
+                        temp_tts.load_lora_adapter(custom_model_id.strip(), hf_token=custom_hf_token)
+                        
+                        print(f"   • Merging...")
+                        if hasattr(temp_tts.backbone, "merge_and_unload"):
+                            temp_tts.backbone = temp_tts.backbone.merge_and_unload()
+                        
+                        print(f"   • Saving to cache: {cache_dir}")
+                        temp_tts.backbone.save_pretrained(cache_dir)
+                        temp_tts.tokenizer.save_pretrained(cache_dir)
+                        
+                        # Fix for LMDeploy: Explicitly save legacy tokenizer files (vocab.json, merges.txt)
+                        # because LMDeploy/Transformers might default to slow tokenizer if fast one has issues,
+                        # and save_pretrained on fast tokenizer sometimes omits legacy files.
+                        try:
+                            print("   • Ensuring legacy tokenizer files...")
+                            from transformers import AutoTokenizer
+                            slow_tokenizer = AutoTokenizer.from_pretrained(base_repo, use_fast=False)
+                            slow_tokenizer.save_pretrained(cache_dir)
+                        except Exception as e:
+                            print(f"   ⚠️ Warning: Could not save slow tokenizer files: {e}")
+
+                        del temp_tts
+                        cleanup_gpu_memory()
+                        print("   ✅ Merge & Save successfully!")
+                        
+                    except Exception as e:
+                        import traceback
+                        traceback.print_exc()
+                        raise RuntimeError(f"Failed to merge & save LoRA for LMDeploy: {e}")
+
             print(f"📦 Loading optimized model...")
-            print(f"   Backbone: {backbone_config['repo']} on {backbone_device}")
+            print(f"   Backbone: {target_backbone_repo} on {backbone_device}")
             print(f"   Codec: {codec_config['repo']} on {codec_device}")
             print(f"   Triton: Enabled")
             
             try:
                 tts = FastVieNeuTTS(
-                    backbone_repo=backbone_config["repo"],
+                    backbone_repo=target_backbone_repo,
                     backbone_device=backbone_device,
                     codec_repo=codec_config["repo"],
                     codec_device=codec_device,
@@ -191,6 +310,7 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
                     tp=1,
                     enable_prefix_caching=True,
                     enable_triton=True,
+                    hf_token=custom_hf_token
                 )
                 using_lmdeploy = True
                 
@@ -217,6 +337,7 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
                 yield (
                     f"⚠️ LMDeploy Init Error: {lmdeploy_error_reason}. Đang loading model với backend mặc định - tốc độ chậm hơn so với lmdeploy...",
                     gr.update(interactive=False),
+                    gr.update(interactive=False),
                     gr.update(interactive=False)
                 )
                 time.sleep(1)
@@ -227,7 +348,7 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
             print(f"📦 Using original backend")
 
             if device_choice == "Auto":
-                if "gguf" in backbone_choice.lower():
+                if "gguf" in backbone_config['repo'].lower():
                     # GGUF: uses Metal on Mac, CUDA on Windows/Linux
                     if sys.platform == "darwin":
                         backbone_device = "gpu"  # llama-cpp-python uses Metal
@@ -259,7 +380,7 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
                 if "ONNX" in codec_choice:
                     codec_device = "cpu"
 
-            if "gguf" in backbone_choice.lower() and backbone_device == "cuda":
+            if "gguf" in backbone_config['repo'].lower() and backbone_device == "cuda":
                 backbone_device = "gpu"
             
             print(f"📦 Loading model...")
@@ -270,8 +391,37 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
                 backbone_repo=backbone_config["repo"],
                 backbone_device=backbone_device,
                 codec_repo=codec_config["repo"],
-                codec_device=codec_device
+                codec_device=codec_device,
+                hf_token=custom_hf_token
             )
+
+            # Perform LoRA Merge if needed (ONLY for Standard Backend)
+            # For LMDeploy, we handled it above by saving to disk
+            if is_merged_lora and custom_loading and not using_lmdeploy:
+                yield (
+                    f"🔄 Đang tải và merge LoRA adapter: {custom_model_id}...",
+                    gr.update(interactive=False), gr.update(interactive=False), gr.update(interactive=False)
+                )
+                try:
+                    # 1. Load Adapter
+                    tts.load_lora_adapter(custom_model_id.strip(), hf_token=custom_hf_token)
+                    
+                    # 2. Merge and Unload
+                    # Check if backbone matches expected type for merge
+                    if hasattr(tts, 'backbone') and hasattr(tts.backbone, 'merge_and_unload'):
+                        print("   🔄 Merging LoRA into backbone...")
+                        tts.backbone = tts.backbone.merge_and_unload()
+                        
+                        # Reset LoRA state so it behaves like a normal model
+                        tts._lora_loaded = False 
+                        tts._current_lora_repo = None
+                        print("   ✅ Merged successfully!")
+                    else:
+                        print("   ⚠️ Warning: Model does not support merge_and_unload, keeping adapter active.")
+                        
+                except Exception as e:
+                     raise RuntimeError(f"Failed to merge LoRA: {e}")
+
             using_lmdeploy = False
         
         current_backbone = backbone_choice
@@ -349,7 +499,8 @@ GGUF_ALLOWED_VOICES = [
 
 def get_voice_options(backbone_choice: str):
     """Filter voice options: GGUF only shows the 4 allowed voices."""
-    if "gguf" in backbone_choice.lower():
+    # Assuming 'gguf' in choice string implies GGUF model
+    if backbone_choice and "gguf" in backbone_choice.lower():
         return [v for v in GGUF_ALLOWED_VOICES if v in VOICE_SAMPLES]
     return list(VOICE_SAMPLES.keys())
 
@@ -376,9 +527,9 @@ def load_reference_info(voice_choice: str) -> Tuple[Optional[str], str]:
 
 def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: str, 
                      mode_tab: str, generation_mode: str, use_batch: bool, max_batch_size_run: int,
-                     lora_repo_id: str, lora_hf_token: str, lora_audio, lora_text: str,
+                     custom_voice_audio, custom_voice_text: str,
                      temperature: float, max_chars_chunk: int):
-    """Synthesis with optimization support, max batch size control, and LoRA adapter support"""
+    """Synthesis with optimization support and max batch size control"""
     global tts, current_backbone, current_codec, model_loaded, using_lmdeploy
     
     if not model_loaded or tts is None:
@@ -394,83 +545,19 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
     codec_config = CODEC_CONFIGS[current_codec]
     use_preencoded = codec_config['use_preencoded']
     
-    # Handle LoRA mode
-    lora_loaded = False
-    if hasattr(tts, '_lora_loaded') and tts._lora_loaded:
-        lora_loaded = True
-
-    # If not in LoRA mode but a LoRA is loaded, unload it now to prevent conflicts
-    if mode_tab != "lora_mode" and lora_loaded:
-        yield None, "🔄 Đang dọn dẹp LoRA adapter để quay về model gốc..."
-        try:
-            tts.unload_lora_adapter()
-            lora_loaded = False
-        except Exception as e:
-            print(f"Error unloading LoRA: {e}")
-
-    if mode_tab == "lora_mode":
-        # Check if using LMDeploy backend
-        if using_lmdeploy:
-            yield None, (
-                "❌ LoRA adapter không hỗ trợ LMDeploy backend!\n\n"
-                "💡 Giải pháp:\n"
-                "1. Bỏ tick '🚀 Optimize with LMDeploy' ở phần cấu hình\n"
-                "2. Click '🔄 Tải Model' lại\n"
-                "3. Quay lại tab LoRA và thử lại\n\n"
-                "📝 Lưu ý: Khi dùng LoRA, tốc độ sẽ chậm hơn LMDeploy. Hoặc bạn có thể cân nhắc merge LoRA vào model gốc rồi dùng LMDeploy để tối ưu tốc độ."
-            )
+    
+    # Setup Reference based on mode
+    if mode_tab == "custom_voice_mode":
+        # Custom voice for custom model
+        if custom_voice_audio is None:
+            yield None, "⚠️ Vui lòng upload file Audio mẫu!"
             return
-        
-        if not lora_repo_id or not lora_repo_id.strip():
-            yield None, "⚠️ Vui lòng nhập HuggingFace Repo ID của LoRA adapter!"
+        if not custom_voice_text or not custom_voice_text.strip():
+            yield None, "⚠️ Vui lòng nhập nội dung văn bản của Audio mẫu!"
             return
-        
-        if not lora_audio or not lora_text or not lora_text.strip():
-            yield None, "⚠️ Thiếu Audio hoặc Text reference từ tập train của LoRA!"
-            return
-        
-        # Only load if not already loaded or if repo changed
-        current_lora = getattr(tts, '_current_lora_repo', None)
-        if not lora_loaded or current_lora != lora_repo_id:
-            yield None, f"📦 Đang tải LoRA adapter từ {lora_repo_id}..."
-            try:
-                # Use the new load_lora_adapter method from VieNeuTTS class
-                hf_token = lora_hf_token.strip() if lora_hf_token and lora_hf_token.strip() else None
-                tts.load_lora_adapter(lora_repo_id, hf_token=hf_token)
-                lora_loaded = True
-                yield None, "✅ LoRA adapter loaded! Đang xử lý..."
-            except NotImplementedError as e:
-                yield None, f"❌ {str(e)}\n\nVui lòng chọn backbone PyTorch (VieNeu-TTS hoặc VieNeu-TTS-0.3B GPU), không dùng GGUF."
-                return
-            except RuntimeError as e:
-                error_msg = str(e)
-                # Detect backbone mismatch
-                suggestion = ""
-                if "size mismatch" in error_msg.lower() or "shape" in error_msg.lower():
-                    current_backbone_name = BACKBONE_CONFIGS[current_backbone]['repo']
-                    suggestion = (
-                        f"\n\n💡 **Có thể do backbone không khớp!**\n"
-                        f"- Backbone hiện tại: `{current_backbone_name}`\n"
-                        f"- Hãy kiểm tra LoRA repo của bạn được train trên model nào\n"
-                        f"- Nếu train trên VieNeu-TTS-0.3B → Chọn **VieNeu-TTS-0.3B (GPU)**\n"
-                        f"- Nếu train trên VieNeu-TTS (0.5B) → Chọn **VieNeu-TTS (GPU)**"
-                    )
-                yield None, f"❌ Lỗi khi tải LoRA adapter: {error_msg}{suggestion}"
-                return
-            except Exception as e:
-                import traceback
-                traceback.print_exc()
-                yield None, f"❌ Lỗi khi tải LoRA adapter: {str(e)}\n\nKiểm tra:\n- Repo ID có đúng không?\n- Token có hợp lệ không (nếu private)?"
-                return
-        else:
-            yield None, f"✅ Sử dụng LoRA đã load: {lora_repo_id}"
-        
-        # Use LoRA reference audio/text
-        ref_audio_path = lora_audio
-        ref_text_raw = lora_text
+        ref_audio_path = custom_voice_audio
+        ref_text_raw = custom_voice_text
         ref_codes_path = None
-        
-    # Setup Reference (non-LoRA modes)
     elif mode_tab == "custom_mode":
         if custom_audio is None:
             yield None, "⚠️ Vui lòng upload file Audio mẫu (Reference Audio)!"
@@ -583,10 +670,8 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
             backend_info = f" (Backend: {'LMDeploy 🚀' if using_lmdeploy else 'Standard 📦'})"
             speed_info = f", Tốc độ: {len(final_wav)/sr/process_time:.2f}x realtime" if process_time > 0 else ""
             
-            # LoRA info
-            lora_info = f" [LoRA: {lora_repo_id}]" if lora_loaded else ""
             
-            yield output_path, f"✅ Hoàn tất! (Thời gian: {process_time:.2f}s{speed_info}){backend_info}{lora_info}"
+            yield output_path, f"✅ Hoàn tất! (Thời gian: {process_time:.2f}s{speed_info}){backend_info}"
             
             # Cleanup memory
             if using_lmdeploy and hasattr(tts, 'cleanup_memory'):
@@ -896,12 +981,35 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS") as demo:
         with gr.Group():
             with gr.Row():
                 backbone_select = gr.Dropdown(
-                    list(BACKBONE_CONFIGS.keys()), 
+                    list(BACKBONE_CONFIGS.keys()) + ["Custom Model"], 
                     value="VieNeu-TTS (GPU)", 
                     label="🦜 Backbone"
                 )
                 codec_select = gr.Dropdown(list(CODEC_CONFIGS.keys()), value="NeuCodec (Distill)", label="🎵 Codec")
                 device_choice = gr.Radio(get_available_devices(), value="Auto", label="🖥️ Device")
+            
+            with gr.Row(visible=False) as custom_model_group:
+                custom_backbone_model_id = gr.Textbox(
+                    label="📦 Custom Model ID",
+                    placeholder="pnnbao-ump/VieNeu-TTS-0.3B-lora-ngoc-huyen",
+                    info="Nhập HuggingFace Repo ID hoặc đường dẫn local",
+                    scale=2
+                )
+                custom_backbone_hf_token = gr.Textbox(
+                    label="🔑 HF Token (nếu private)",
+                    placeholder="Để trống nếu repo public",
+                    type="password",
+                    info="Token để truy cập repo private",
+                    scale=1
+                )
+                custom_backbone_base_model = gr.Dropdown(
+                    [k for k in BACKBONE_CONFIGS.keys() if "gguf" not in k.lower()],
+                    label="🔗 Base Model (cho LoRA)",
+                    value="VieNeu-TTS-0.3B (GPU)",
+                    visible=False,
+                    info="Model gốc để merge với LoRA",
+                    scale=1
+                )
             
             with gr.Row():
                 use_lmdeploy_cb = gr.Checkbox(
@@ -909,6 +1017,11 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS") as demo:
                     label="🚀 Optimize with LMDeploy (Khuyên dùng cho NVIDIA GPU)",
                     info="Tick nếu bạn dùng GPU để tăng tốc độ tổng hợp đáng kể."
                 )
+            
+            
+            gr.Markdown("""
+            💡 **Sử dụng Custom Model:** Chọn "Custom Model" để tải LoRA adapter hoặc bất kỳ model nào được finetune từ **VieNeu-TTS** hoặc **VieNeu-TTS-0.3B**.
+            """)
             
             gr.HTML("""
             <div class="warning-banner">
@@ -970,62 +1083,17 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS") as demo:
                         Hướng dẫn chi tiết có tại file: `finetune/README.md` hoặc xem trên [GitHub](https://github.com/pnnbao97/VieNeu-TTS/tree/main/finetune).
                         """)
                     
-                    with gr.TabItem("🎯 LoRA Adapter", id="lora_mode") as tab_lora:
-                        gr.Markdown("""
-                        ### 🎓 Sử dụng LoRA Adapter đã fine-tune
-                        
-                        Tải LoRA adapter từ HuggingFace để sử dụng giọng nói đã được fine-tune.
-                        
-                        ⚠️ **QUAN TRỌNG - Yêu cầu:**
-                        
-                        **1. Backbone phải khớp:**
-                        - Nếu train LoRA trên **VieNeu-TTS-0.3B** → Phải chọn backbone **VieNeu-TTS-0.3B (GPU)** ở trên
-                        - Nếu train LoRA trên **VieNeu-TTS** (0.5B) → Phải chọn backbone **VieNeu-TTS (GPU)** ở trên
-                        
-                        **2. KHÔNG dùng với:**
-                        - ❌ GGUF models (chỉ hỗ trợ PyTorch backbone)
-                        - ❌ LMDeploy optimization (bỏ tick "🚀 Optimize with LMDeploy")
-                        
-                        💡 Kiểm tra model base trong file `adapter_config.json` của LoRA repo để biết model nào được dùng.
-                        """)
-                        
-                        with gr.Row():
-                            lora_repo_id = gr.Textbox(
-                                label="🤗 HuggingFace Repo ID",
-                                placeholder="vd: pnnbao-ump/VieNeu-TTS-0.3B-lora-ngoc-huyen",
-                                value="pnnbao-ump/VieNeu-TTS-0.3B-lora-ngoc-huyen",
-                                info="Nhập repo ID của LoRA adapter trên HuggingFace"
-                            )
-                            lora_hf_token = gr.Textbox(
-                                label="🔑 HF Token (nếu repo private)",
-                                placeholder="Để trống nếu repo public",
-                                type="password",
-                                info="Token để truy cập repo private"
-                            )
-                        
-                        gr.Markdown("**📤 Upload Audio mẫu từ tập train của LoRA**")
-                        lora_audio = gr.Audio(
-                            label="Audio reference (phải là audio từ tập train của LoRA)",
+                    # Custom Voice tab (for Custom Model only)
+                    with gr.TabItem("🦜 Custom Voice", id="custom_voice_mode", visible=False) as tab_custom_voice:
+                        custom_voice_audio = gr.Audio(
+                            label="Audio giọng mẫu (3-5 giây) (.wav)", 
                             type="filepath",
-                            value=os.path.join("examples", "audio_ref", "example_ngoc_huyen.wav")
+                            value=None
                         )
-                        lora_text = gr.Textbox(
-                            label="Text tương ứng với audio reference",
-                            placeholder="Nhập chính xác nội dung của audio reference...",
-                            value="Tác phẩm dự thi bảo đảm tính khoa học, tính đảng, tính chiến đấu, tính định hướng."
-                        )
-
-                        gr.Examples(
-                            examples=[
-                                [
-                                    "pnnbao-ump/VieNeu-TTS-0.3B-lora-ngoc-huyen",
-                                    "", # hf token
-                                    os.path.join("examples", "audio_ref", "example_ngoc_huyen.wav"),
-                                    "Tác phẩm dự thi bảo đảm tính khoa học, tính đảng, tính chiến đấu, tính định hướng."
-                                ]
-                            ],
-                            inputs=[lora_repo_id, lora_hf_token, lora_audio, lora_text],
-                            label="Ví dụ mẫu LoRA Ngọc Huyền"
+                        custom_voice_text = gr.Textbox(
+                            label="Nội dung audio mẫu",
+                            placeholder="Nhập chính xác nội dung của audio mẫu...",
+                            value=""
                         )
 
                 
@@ -1107,19 +1175,74 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS") as demo:
         # Bind tab events to update state
         tab_preset.select(lambda: "preset_mode", outputs=current_mode_state)
         tab_custom.select(lambda: "custom_mode", outputs=current_mode_state)
-        tab_lora.select(lambda: "lora_mode", outputs=current_mode_state)
+        tab_custom_voice.select(lambda: "custom_voice_mode", outputs=current_mode_state)
         
+        
+        # --- Custom Model Event Handlers ---
+        def on_backbone_change(choice):
+            is_custom = (choice == "Custom Model")
+            # Hide/show tabs based on custom model choice
+            return (
+                gr.update(visible=is_custom),  # custom_model_group
+                gr.update(visible=not is_custom),  # tab_preset
+                gr.update(visible=not is_custom),  # tab_custom
+                gr.update(visible=is_custom),  # tab_custom_voice
+                gr.update(selected="custom_voice_mode" if is_custom else "preset_mode"),  # tabs
+            )
+
+        backbone_select.change(
+            on_backbone_change,
+            inputs=[backbone_select],
+            outputs=[custom_model_group, tab_preset, tab_custom, tab_custom_voice, tabs]
+        )
+        
+        def on_custom_id_change(model_id):
+            # Auto detect LoRA and base model
+            if model_id and "lora" in model_id.lower():
+                # Detect base model: if "0.3" in name -> 0.3B, else VieNeu-TTS
+                if "0.3" in model_id:
+                    base_model = "VieNeu-TTS-0.3B (GPU)"
+                else:
+                    base_model = "VieNeu-TTS (GPU)"
+                
+                # Auto-fill example for pnnbao-ump/VieNeu-TTS-0.3B-lora-ngoc-huyen
+                if "pnnbao-ump/VieNeu-TTS-0.3B-lora-ngoc-huyen" in model_id:
+                    return (
+                        gr.update(visible=True, value=base_model),  # base_model dropdown
+                        gr.update(value=os.path.join("examples", "audio_ref", "example_ngoc_huyen.wav")),  # custom_voice_audio
+                        gr.update(value="Tác phẩm dự thi bảo đảm tính khoa học, tính đảng, tính chiến đấu, tính định hướng.")  # custom_voice_text
+                    )
+                else:
+                    return (
+                        gr.update(visible=True, value=base_model),
+                        gr.update(),  # no change to audio
+                        gr.update()   # no change to text
+                    )
+            return (
+                gr.update(visible=False),
+                gr.update(),
+                gr.update()
+            )
+            
+        custom_backbone_model_id.change(
+            on_custom_id_change,
+            inputs=[custom_backbone_model_id],
+            outputs=[custom_backbone_base_model, custom_voice_audio, custom_voice_text]
+        )
+
         btn_load.click(
             fn=load_model,
-            inputs=[backbone_select, codec_select, device_choice, use_lmdeploy_cb],
+            inputs=[backbone_select, codec_select, device_choice, use_lmdeploy_cb,
+                    custom_backbone_model_id, custom_backbone_base_model, custom_backbone_hf_token],
             outputs=[model_status, btn_generate, btn_load, btn_stop]
         )
+        
         
         generate_event = btn_generate.click(
             fn=synthesize_speech,
             inputs=[text_input, voice_select, custom_audio, custom_text, current_mode_state, 
                     generation_mode, use_batch, max_batch_size_run,
-                    lora_repo_id, lora_hf_token, lora_audio, lora_text,
+                    custom_voice_audio, custom_voice_text,
                     temperature_slider, max_chars_chunk_slider],
             outputs=[audio_output, status_output]
         )
