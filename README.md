@@ -200,7 +200,8 @@ docker run --gpus all \
   --model /workspace/models/merged_model
 ```
 
-For full implementation details, see: [main_remote.py](main_remote.py)
+*For full implementation details, see: [main_remote.py](main_remote.py)*
+
 ---
 
 ## 🎯 4. Custom Models (LoRA, GGUF, Finetune) <a name="custom-models"></a>
