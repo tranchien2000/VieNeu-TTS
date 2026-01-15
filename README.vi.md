@@ -137,20 +137,45 @@ pip install vieneu
 ### Bắt đầu nhanh (main.py)
 ```python
 from vieneu import Vieneu
+import os
 
-# 1. Khởi tạo (Mặc định: Tối ưu hóa cho CPU cục bộ)
-tts = Vieneu() 
+# Khởi tạo
+tts = Vieneu()
+os.makedirs("outputs", exist_ok=True)
 
-# Hoặc sử dụng Chế độ Remote để đạt tốc độ tối đa (xem phần Docker & Remote Server bên dưới):
-# tts = Vieneu(mode="remote", api_base="http://your-server-ip:23333/v1", model_name="pnnbao-ump/VieNeu-TTS")
+# Liệt kê các giọng nói có sẵn
+available_voices = tts.list_preset_voices()
+for desc, name in available_voices:
+    print(f"   - {desc} (ID: {name})")
 
-# 2. Tổng hợp
+# Sử dụng giọng cụ thể (tự động chọn giọng thứ hai)
+if available_voices:
+    _, my_voice_id = available_voices[1] if len(available_voices) > 1 else available_voices[0]
+    voice_data = tts.get_preset_voice(my_voice_id)
+    audio_spec = tts.infer(text="Chào bạn, tôi đang nói bằng giọng của bác sĩ Tuyên.", voice=voice_data)
+    tts.save(audio_spec, f"outputs/standard_{my_voice_id}.wav")
+    print(f"💾 Đã lưu tệp tổng hợp: outputs/standard_{my_voice_id}.wav")
+
+# Tổng hợp chuẩn (dùng giọng mặc định)
 text = "Xin chào, tôi là VieNeu. Tôi có thể giúp bạn đọc sách, làm chatbot thời gian thực, hoặc thậm chí clone giọng nói của bạn."
 audio = tts.infer(text=text)
+tts.save(audio, "outputs/standard_output.wav")
+print("💾 Đã lưu tệp tổng hợp: outputs/standard_output.wav")
 
-# 3. Lưu
-tts.save(audio, "output.wav")
+# Clone giọng nói
+if os.path.exists("examples/audio_ref/example_ngoc_huyen.wav"):
+    cloned_audio = tts.infer(
+        text="Đây là giọng nói đã được clone thành công từ file mẫu.",
+        ref_audio="examples/audio_ref/example_ngoc_huyen.wav",
+        ref_text="Tác phẩm dự thi bảo đảm tính khoa học, tính đảng, tính chiến đấu, tính định hướng."
+    )
+    tts.save(cloned_audio, "outputs/standard_cloned_output.wav")
+    print("💾 Đã lưu giọng đã clone: outputs/standard_cloned_output.wav")
+
+# Giải phóng tài nguyên
+tts.close()
 ```
+
 *Để biết hướng dẫn đầy đủ về cloning và giọng nói tùy chỉnh, hãy xem [main.py](main.py) và [main_remote.py](main_remote.py).*
 
 ---
@@ -177,18 +202,47 @@ Sau khi server đang chạy, bạn có thể kết nối từ bất cứ đâu (
 
 ```python
 from vieneu import Vieneu
+import os
 
-# Kết nối tới server
-tts = Vieneu(
-    mode='remote', 
-    api_base='http://your-server-ip:23333/v1', # Hoặc URL bore tunnel
-    model_name="pnnbao-ump/VieNeu-TTS"
-)
+# Cấu hình
+REMOTE_API_BASE = 'http://your-server-ip:23333/v1'  # Hoặc URL bore tunnel
+REMOTE_MODEL_ID = "pnnbao-ump/VieNeu-TTS"
 
-# Inference cực nhanh (độ trễ thấp)
-audio = tts.infer(text="Xin chào, tôi đang chạy trên một server Docker từ xa.")
-tts.save(audio, "output.wav")
+# Khởi tạo (CỰc kỳ NHẺ - chỉ tải codec nhỏ cục bộ)
+tts = Vieneu(mode='remote', api_base=REMOTE_API_BASE, model_name=REMOTE_MODEL_ID)
+os.makedirs("outputs", exist_ok=True)
+
+# Liệt kê giọng nói từ server
+available_voices = tts.list_preset_voices()
+for desc, name in available_voices:
+    print(f"   - {desc} (ID: {name})")
+
+# Sử dụng giọng cụ thể (tự động chọn giọng thứ hai)
+if available_voices:
+    _, my_voice_id = available_voices[1]
+    voice_data = tts.get_preset_voice(my_voice_id)
+    audio_spec = tts.infer(text="Chào bạn, tôi đang nói bằng giọng của bác sĩ Tuyên.", voice=voice_data)
+    tts.save(audio_spec, f"outputs/remote_{my_voice_id}.wav")
+    print(f"💾 Đã lưu tệp tổng hợp: outputs/remote_{my_voice_id}.wav")
+
+# Tổng hợp chuẩn (dùng giọng mặc định)
+text_input = "Chế độ remote giúp tích hợp VieNeu vào ứng dụng Web hoặc App cực nhanh mà không cần GPU tại máy khách."
+audio = tts.infer(text=text_input)
+tts.save(audio, "outputs/remote_output.wav")
+print("💾 Đã lưu tệp tổng hợp remote: outputs/remote_output.wav")
+
+# Clone giọng (encode âm thanh cục bộ, gửi mã lên server)
+if os.path.exists("examples/audio_ref/example_ngoc_huyen.wav"):
+    cloned_audio = tts.infer(
+        text="Đây là giọng nói được clone và xử lý thông qua VieNeu Server.",
+        ref_audio="examples/audio_ref/example_ngoc_huyen.wav",
+        ref_text="Tác phẩm dự thi bảo đảm tính khoa học, tính đảng, tính chiến đấu, tính định hướng."
+    )
+    tts.save(cloned_audio, "outputs/remote_cloned_output.wav")
+    print("💾 Đã lưu giọng đã clone remote: outputs/remote_cloned_output.wav")
 ```
+
+*Để biết chi tiết triển khai đầy đủ, hãy xem: [main_remote.py](main_remote.py)*
 
 ### 3. Cấu hình nâng cao
 
@@ -209,7 +263,6 @@ docker run --gpus all \
   --model /workspace/models/merged_model --tunnel
 ```
 
-*Để biết chi tiết triển khai đầy đủ, hãy xem: [main_remote.py](main_remote.py)*
 
 ---
 

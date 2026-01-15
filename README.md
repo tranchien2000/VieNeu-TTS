@@ -136,21 +136,46 @@ pip install vieneu
 ### Quick Start (main.py)
 ```python
 from vieneu import Vieneu
+import os
 
-# 1. Initialize (Default: Local CPU Optimized)
-tts = Vieneu() 
+# Initialization
+tts = Vieneu()
+os.makedirs("outputs", exist_ok=True)
 
-# Or use Remote Mode for max speed (see Docker & Remote Server section below):
-# tts = Vieneu(mode="remote", api_base="http://your-server-ip:23333/v1", model_name="pnnbao-ump/VieNeu-TTS")
+# List preset voices
+available_voices = tts.list_preset_voices()
+for desc, name in available_voices:
+    print(f"   - {desc} (ID: {name})")
 
-# 2. Synthesis
+# Use specific voice (dynamically select second voice)
+if available_voices:
+    _, my_voice_id = available_voices[1] if len(available_voices) > 1 else available_voices[0]
+    voice_data = tts.get_preset_voice(my_voice_id)
+    audio_spec = tts.infer(text="Chào bạn, tôi đang nói bằng giọng của bác sĩ Tuyên.", voice=voice_data)
+    tts.save(audio_spec, f"outputs/standard_{my_voice_id}.wav")
+    print(f"💾 Saved synthesis to: outputs/standard_{my_voice_id}.wav")
+
+# Standard synthesis (uses default voice)
 text = "Xin chào, tôi là VieNeu. Tôi có thể giúp bạn đọc sách, làm chatbot thời gian thực, hoặc thậm chí clone giọng nói của bạn."
 audio = tts.infer(text=text)
+tts.save(audio, "outputs/standard_output.wav")
+print("💾 Saved synthesis to: outputs/standard_output.wav")
 
-# 3. Save
-tts.save(audio, "output.wav")
+# Zero-shot voice cloning
+if os.path.exists("examples/audio_ref/example_ngoc_huyen.wav"):
+    cloned_audio = tts.infer(
+        text="Đây là giọng nói đã được clone thành công từ file mẫu.",
+        ref_audio="examples/audio_ref/example_ngoc_huyen.wav",
+        ref_text="Tác phẩm dự thi bảo đảm tính khoa học, tính đảng, tính chiến đấu, tính định hướng."
+    )
+    tts.save(cloned_audio, "outputs/standard_cloned_output.wav")
+    print("💾 Saved cloned voice to: outputs/standard_cloned_output.wav")
+
+# Cleanup
+tts.close()
 ```
-*For a full guide on cloning and custom voices, see [main.py](main.py) and [main_remote.py](main_remote.py).*
+
+*For full implementation details, see [main.py](main.py).*
 
 ---
 
@@ -176,18 +201,47 @@ Once the server is running, you can connect from anywhere (Colab, Web Apps, etc.
 
 ```python
 from vieneu import Vieneu
+import os
 
-# Connect to the server
-tts = Vieneu(
-    mode='remote', 
-    api_base='http://your-server-ip:23333/v1', # Or the bore tunnel URL
-    model_name="pnnbao-ump/VieNeu-TTS"
-)
+# Configuration
+REMOTE_API_BASE = 'http://your-server-ip:23333/v1'  # Or bore tunnel URL
+REMOTE_MODEL_ID = "pnnbao-ump/VieNeu-TTS"
 
-# Ultra-fast inference (low latency)
-audio = tts.infer(text="Xin chào, tôi là VieNeu. Tôi có thể giúp bạn đọc sách, làm chatbot thời gian thực, hoặc thậm chí clone giọng nói của bạn.")
-tts.save(audio, "output.wav")
+# Initialization (LIGHTWEIGHT - only loads small codec locally)
+tts = Vieneu(mode='remote', api_base=REMOTE_API_BASE, model_name=REMOTE_MODEL_ID)
+os.makedirs("outputs", exist_ok=True)
+
+# List remote voices
+available_voices = tts.list_preset_voices()
+for desc, name in available_voices:
+    print(f"   - {desc} (ID: {name})")
+
+# Use specific voice (dynamically select second voice)
+if available_voices:
+    _, my_voice_id = available_voices[1]
+    voice_data = tts.get_preset_voice(my_voice_id)
+    audio_spec = tts.infer(text="Chào bạn, tôi đang nói bằng giọng của bác sĩ Tuyên.", voice=voice_data)
+    tts.save(audio_spec, f"outputs/remote_{my_voice_id}.wav")
+    print(f"💾 Saved synthesis to: outputs/remote_{my_voice_id}.wav")
+
+# Standard synthesis (uses default voice)
+text_input = "Chế độ remote giúp tích hợp VieNeu vào ứng dụng Web hoặc App cực nhanh mà không cần GPU tại máy khách."
+audio = tts.infer(text=text_input)
+tts.save(audio, "outputs/remote_output.wav")
+print("💾 Saved remote synthesis to: outputs/remote_output.wav")
+
+# Zero-shot voice cloning (encodes audio locally, sends codes to server)
+if os.path.exists("examples/audio_ref/example_ngoc_huyen.wav"):
+    cloned_audio = tts.infer(
+        text="Đây là giọng nói được clone và xử lý thông qua VieNeu Server.",
+        ref_audio="examples/audio_ref/example_ngoc_huyen.wav",
+        ref_text="Tác phẩm dự thi bảo đảm tính khoa học, tính đảng, tính chiến đấu, tính định hướng."
+    )
+    tts.save(cloned_audio, "outputs/remote_cloned_output.wav")
+    print("💾 Saved remote cloned voice to: outputs/remote_cloned_output.wav")
 ```
+
+*For full implementation details, see: [main_remote.py](main_remote.py)*
 
 ### 3. Advanced Configuration
 
