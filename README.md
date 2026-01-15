@@ -53,7 +53,6 @@ VieNeu-TTS delivers production-ready speech synthesis fully offline.
 The fastest way to experience VieNeu-TTS is through the Web interface (Gradio).
 
 ### System Requirements
-- **Python:** 3.12
 - **eSpeak NG:** Required for phonemization.
   - **Windows:** Download the `.msi` from [eSpeak NG Releases](https://github.com/espeak-ng/espeak-ng/releases).
   - **macOS:** `brew install espeak`
