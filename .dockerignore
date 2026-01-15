@@ -50,6 +50,7 @@ Thumbs.db
 # Audio files (except samples)
 *.wav
 !sample/*.wav
+outputs/
 
 # Temporary files
 *.tmp

@@ -42,28 +42,3 @@ codec_configs:
     description: Tối ưu cho CPU, cần pre-encoded codes
     use_preencoded: true
 
-voice_samples:
-  "Tuyên (nam miền Bắc)":
-    audio: ./vieneu/assets/samples/Tuyên (nam miền Bắc).wav
-    text: ./vieneu/assets/samples/Tuyên (nam miền Bắc).txt
-    codes: ./vieneu/assets/samples/Tuyên (nam miền Bắc).pt
-  "Vĩnh (nam miền Nam)":
-    audio: ./vieneu/assets/samples/Vĩnh (nam miền Nam).wav
-    text: ./vieneu/assets/samples/Vĩnh (nam miền Nam).txt
-    codes: ./vieneu/assets/samples/Vĩnh (nam miền Nam).pt
-  "Bình (nam miền Bắc)":
-    audio: ./vieneu/assets/samples/Bình (nam miền Bắc).wav
-    text: ./vieneu/assets/samples/Bình (nam miền Bắc).txt
-    codes: ./vieneu/assets/samples/Bình (nam miền Bắc).pt
-  "Đoan (nữ miền Nam)":
-    audio: ./vieneu/assets/samples/Đoan (nữ miền Nam).wav
-    text: ./vieneu/assets/samples/Đoan (nữ miền Nam).txt
-    codes: ./vieneu/assets/samples/Đoan (nữ miền Nam).pt
-  "Ngọc (nữ miền Bắc)":
-    audio: ./vieneu/assets/samples/Ngọc (nữ miền Bắc).wav
-    text: ./vieneu/assets/samples/Ngọc (nữ miền Bắc).txt
-    codes: ./vieneu/assets/samples/Ngọc (nữ miền Bắc).pt
-  "Ly (nữ miền Bắc)":
-    audio: ./vieneu/assets/samples/Ly (nữ miền Bắc).wav
-    text: ./vieneu/assets/samples/Ly (nữ miền Bắc).txt
-    codes: ./vieneu/assets/samples/Ly (nữ miền Bắc).pt

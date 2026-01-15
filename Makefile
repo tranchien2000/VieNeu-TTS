@@ -132,6 +132,13 @@ docker-gpu:
 	fi; \
 	docker compose --profile gpu up
 
+# --- Docker Serve (Remote Mode) ---
+docker-build-serve:
+	docker build -t pnnbao97/vieneu-tts:serve -f docker/Dockerfile.serve .
+
+docker-push-serve:
+	docker push pnnbao97/vieneu-tts:serve
+
 # --- Environment/version checks ---
 check:
 	@set -euo pipefail; \

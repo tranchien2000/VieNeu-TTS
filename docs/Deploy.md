@@ -6,6 +6,7 @@
 - [Quick Start Guide (Dev)](#quick-start-guide-dev)
 - [Production Deployment](#production-deployment)
 - [Production Deployment Workflow](#production-deployment-workflow)
+- [Remote Server Deployment (One-Command)](#remote-server-deployment-one-command)
 - [Configuration](#configuration)
 - [Troubleshooting](#troubleshooting)
 
@@ -102,6 +103,41 @@ docker compose -f docker-compose.prod.yml --profile gpu pull
 # Start the service
 docker compose -f docker-compose.prod.yml --profile gpu up -d
 ```
+
+---
+
+## 🌐 Remote Server Deployment (One-Command) <a name="remote-server-deployment-one-command"></a>
+
+To enable the "One-Command" deployment experience for your users (where they just run `docker run ...` and it works purely from the cloud), you must build and push the special server image to Docker Hub.
+
+### 1. Build & Push Image
+
+We have prepared Makefile targets for this specific purpose:
+
+```bash
+# 1. Login to Docker Hub (if you haven't)
+docker login
+
+# 2. Build the server image
+make docker-build-serve
+
+# 3. Push to Docker Hub
+make docker-push-serve
+```
+
+*Note: The image is tagged `pnnbao97/vieneu-tts:serve` by default. Update the Makefile if you use a different registry.*
+
+### 2. User Experience
+
+Once pushed, ANY user with an NVIDIA GPU can run your server with a single command (no repo cloning needed):
+
+```bash
+docker run --runtime nvidia --gpus all \
+  -v ~/.cache/huggingface:/root/.cache/huggingface \
+  pnnbao97/vieneu-tts:serve
+```
+
+This image is optimized purely for serving the API (minimal size, pre-installed dependencies).
 
 ---
 

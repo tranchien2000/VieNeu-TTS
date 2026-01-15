@@ -39,11 +39,12 @@ VieNeu-TTS delivers production-ready speech synthesis fully offline.
 
 1. [🦜 Installation & Web UI](#installation)
 2. [📦 Using the Python SDK](#sdk)
-3. [🎯 Custom Models](#custom-models)
-4. [🛠️ Fine-tuning Guide](#finetuning)
-5. [🔬 Model Overview](#backbones)
-6. [🐋 Deployment with Docker](#docker)
-7. [🤝 Support & Contact](#support)
+3. [🐳 Docker & Remote Server](#docker-remote)
+4. [🎯 Custom Models](#custom-models)
+5. [🛠️ Fine-tuning Guide](#finetuning)
+6. [🔬 Model Overview](#backbones)
+7. [🐋 Deployment with Docker (Compose)](#docker)
+8. [🤝 Support & Contact](#support)
 
 ---
 
@@ -125,94 +126,85 @@ pip install vieneu --extra-index-url https://pnnbao97.github.io/llama-cpp-python
 pip install vieneu
 ```
 
-### Full Features Example (main.py)
+### Quick Start (main.py)
 ```python
-"""
-Demo VieNeuSDK v1.1.3 - Full Features Guide
-"""
-
-import time
-import soundfile as sf
 from vieneu import Vieneu
-from pathlib import Path
 
-def main():
-    print("🚀 Initializing VieNeu SDK (v1.1.3)...")
-    
-    # Initialize SDK
-    # Default: "pnnbao-ump/VieNeu-TTS-0.3B-q4-gguf" (Speed & CPU Optimized)
-    # Mode selection:
-    # - mode="standard" (Default): Runs locally using GGUF (CPU) or PyTorch
-    # - mode="remote": Connects to the LMDeploy server setup above for max speed
-    
-    tts = Vieneu()
-    # Or to use Remote mode (Must start 'lmdeploy serve api_server pnnbao-ump/VieNeu-TTS-0.3B' first):
-    # tts = Vieneu(model_name="pnnbao-ump/VieNeu-TTS-0.3B", mode="remote", api_base="http://localhost:23333/v1")
+# 1. Initialize (Default: Local CPU Optimized)
+tts = Vieneu() 
 
-    # ---------------------------------------------------------
-    # PART 1: PRESET VOICES
-    # ---------------------------------------------------------
-    print("\n--- 1. Available Preset Voices ---")
-    available_voices = tts.list_preset_voices()
-    print("📋 Voices:", available_voices)
-    
-    # Select a preset voice
-    current_voice = tts.get_preset_voice("Binh")
-    print("✅ Selected voice: Binh")
+# Or use Remote Mode for max speed (see Docker & Remote Server section below):
+# tts = Vieneu(mode="remote", api_base="http://your-server-ip:23333/v1", model_name="pnnbao-ump/VieNeu-TTS")
 
+# 2. Synthesis
+text = "Xin chào, tôi là VieNeu. Tôi có thể giúp bạn đọc sách, làm chatbot thời gian thực, hoặc thậm chí clone giọng nói của bạn."
+audio = tts.infer(text=text)
 
-    # ---------------------------------------------------------
-    # PART 2: CREATE & SAVE CUSTOM VOICE
-    # ---------------------------------------------------------
-    print("\n--- 2. Create Custom Voice ---")
-    
-    # Replace with your actual .wav file path and its exact transcript
-    sample_audio = Path(__file__).parent / "example.wav"
-    sample_text = "ví dụ 2. tính trung bình của dãy số."
-
-    if sample_audio.exists():
-        voice_name = "MyCustomVoice"
-        print(f"🎙️ Cloning voice from: {sample_audio.name}")
-        
-        # 'clone_voice' supports saving directly with 'name' argument
-        custom_voice = tts.clone_voice(
-            audio_path=sample_audio,
-            text=sample_text,
-            name=voice_name  # <-- Automatically saves voice to system
-        )
-        print(f"✅ Voice created and saved as: '{voice_name}'")
-        
-        # Switch to new voice
-        current_voice = custom_voice
-
-
-    # ---------------------------------------------------------
-    # PART 3: SYNTHESIS WITH ADVANCED PARAMETERS
-    # ---------------------------------------------------------
-    print("\n--- 3. Speech Synthesis ---")
-    text_input = "Xin chào, tôi là VieNeu-TTS. Tôi có thể giúp bạn đọc sách, hoặc clone giọng nói của bạn."
-    
-    print("🎧 Generating...")
-    audio = tts.infer(
-        text=text_input,
-        voice=current_voice,
-        temperature=1.0,  # Adjustable: 0.1 -> Stable, 1.0+ -> Expressive
-        top_k=50
-    )
-    sf.write("output.wav", audio, 24000)
-    print("💾 Saved: output.wav")
-
-    tts.close()
-    print("\n✅ Done!")
-
-if __name__ == "__main__":
-    main()
+# 3. Save
+tts.save(audio, "output.wav")
 ```
-*For more scripts, see [main.py](main.py) in the project root.*
+*For a full guide on cloning and custom voices, see [main.py](main.py) and [main_remote.py](main_remote.py).*
 
 ---
 
-## 🎯 3. Custom Models (LoRA, GGUF, Finetune) <a name="custom-models"></a>
+## 🐳 3. Docker & Remote Server <a name="docker-remote"></a>
+
+Deploy VieNeu-TTS as a high-performance API Server (powered by LMDeploy) with a single command.
+
+### 1. Run with Docker (Recommended)
+
+**Requirement**: [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) is required for GPU support.
+
+**Start the Server with a Public Tunnel (No port forwarding needed):**
+```bash
+docker run --gpus all -p 23333:23333 pnnbao/vieneu-tts:serve
+```
+
+*   **Default**: The server loads the `VieNeu-TTS` model for maximum quality.
+*   **Tunneling**: The Docker image includes a built-in `bore` tunnel. Check the container logs to find your public address (e.g., `bore.pub:31631`).
+
+### 2. Using the SDK (Remote Mode)
+
+Once the server is running, you can connect from anywhere (Colab, Web Apps, etc.) without loading heavy models locally:
+
+```python
+from vieneu import Vieneu
+
+# Connect to the server
+tts = Vieneu(
+    mode='remote', 
+    api_base='http://your-server-ip:23333/v1', # Or the bore tunnel URL
+    model_name="pnnbao-ump/VieNeu-TTS"
+)
+
+# Ultra-fast inference (low latency)
+audio = tts.infer(text="Xin chào, tôi là VieNeu. Tôi có thể giúp bạn đọc sách, làm chatbot thời gian thực, hoặc thậm chí clone giọng nói của bạn.")
+tts.save(audio, "output.wav")
+```
+
+### 3. Advanced Configuration
+
+Customize the server to run specific versions or your own fine-tuned models.
+
+**Run the 0.3B Model (Faster):**
+```bash
+docker run --gpus all pnnbao/vieneu-tts:serve --model pnnbao-ump/VieNeu-TTS-0.3B
+```
+
+**Serve a Local Fine-tuned Model:**
+If you have merged a LoRA adapter, mount your output directory to the container:
+```bash
+# Linux / macOS
+docker run --gpus all \
+  -v $(pwd)/finetune/output:/workspace/models \
+  pnnbao/vieneu-tts:serve \
+  --model /workspace/models/merged_model
+```
+
+For full implementation details, see: [main_remote.py](main_remote.py)
+---
+
+## 🎯 4. Custom Models (LoRA, GGUF, Finetune) <a name="custom-models"></a>
 
 VieNeu-TTS allows you to load custom models directly from HuggingFace or local paths via the Web UI.
 
@@ -225,7 +217,7 @@ VieNeu-TTS allows you to load custom models directly from HuggingFace or local p
 
 ---
 
-## 🛠️ 4. Fine-tuning Guide <a name="finetuning"></a>
+## 🛠️ 5. Fine-tuning Guide <a name="finetuning"></a>
 
 Train VieNeu-TTS on your own voice or custom datasets.
 
@@ -235,7 +227,7 @@ Train VieNeu-TTS on your own voice or custom datasets.
 
 ---
 
-## 🔬 5. Model Overview (Backbones) <a name="backbones"></a>
+## 🔬 6. Model Overview (Backbones) <a name="backbones"></a>
 
 | Model                   | Format  | Device  | Quality    | Speed                   |
 | ----------------------- | ------- | ------- | ---------- | ----------------------- |
@@ -255,7 +247,7 @@ Train VieNeu-TTS on your own voice or custom datasets.
 
 ---
 
-## 🐋 6. Deployment with Docker <a name="docker"></a>
+## 🐋 7. Deployment with Docker (Compose) <a name="docker"></a>
 
 Deploy quickly without manual environment setup.
 
@@ -270,6 +262,7 @@ Check [docs/Deploy.md](docs/Deploy.md) for more details.
 
 ---
 
+
 ## 📚 References
 
 - **Dataset:** [VieNeu-TTS-1000h (Hugging Face)](https://huggingface.co/datasets/pnnbao-ump/VieNeu-TTS-1000h)
@@ -279,7 +272,7 @@ Check [docs/Deploy.md](docs/Deploy.md) for more details.
 
 ---
 
-## 🤝 7. Support & Contact <a name="support"></a>
+## 🤝 8. Support & Contact <a name="support"></a>
 
 - **Hugging Face:** [pnnbao-ump](https://huggingface.co/pnnbao-ump)
 - **Discord:** [Join our community](https://discord.gg/yJt8kzjzWZ)

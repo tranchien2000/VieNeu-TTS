@@ -72,6 +72,110 @@ Sau khi huấn luyện xong, bạn sẽ có các file adapter (vd: `adapter_mode
 
 ---
 
+## 📦 Tạo `voices.json` cho Model của bạn (Khuyên dùng!)
+
+Khi upload model fine-tuned lên HuggingFace, bạn **nên kèm theo file `voices.json`** để người dùng có thể sử dụng model của bạn mà **không cần cung cấp reference audio**.
+
+### Tại sao cần `voices.json`?
+
+- ✅ Người dùng chỉ cần: `tts = Vieneu(backbone_repo="your-username/your-model")`
+- ✅ Không cần upload/chỉ định file audio mẫu nữa
+- ✅ Model "portable" - mang theo giọng của nó
+- ✅ Trải nghiệm tốt hơn cho người dùng cuối
+
+### Cách tạo `voices.json`:
+
+#### Bước 1: Chuẩn bị audio mẫu
+
+Chọn 1 file audio đại diện cho giọng nói đã fine-tune (3-10 giây, chất lượng tốt):
+
+```bash
+# Ví dụ: Chọn file từ dataset
+cp finetune/dataset/raw_audio/best_sample.wav reference.wav
+```
+
+#### Bước 2: Chạy script tạo `voices.json`
+
+```bash
+uv run python finetune/create_voices_json.py \
+  --audio reference.wav \
+  --text "Đây là văn bản chính xác của audio mẫu." \
+  --name my_voice \
+  --description "Giọng nữ miền Nam, trẻ trung"
+```
+
+**Lưu ý:** `--text` phải **khớp chính xác 100%** với nội dung audio (kể cả dấu câu).
+
+File `voices.json` sẽ được tạo ra với cấu trúc:
+```json
+{
+  "default_voice": "my_voice",
+  "presets": {
+    "my_voice": {
+      "codes": [234, 123, 456, ...],
+      "text": "Đây là văn bản chính xác của audio mẫu.",
+      "description": "Giọng nữ miền Nam, trẻ trung"
+    }
+  }
+}
+```
+
+#### Bước 3: Upload lên HuggingFace
+
+**Option A: Upload LoRA trực tiếp**
+
+```bash
+# Copy voices.json vào thư mục output LoRA
+cp voices.json finetune/output/your_run_name/
+
+# Upload toàn bộ lên HF
+huggingface-cli upload your-username/your-lora-model finetune/output/your_run_name
+```
+
+**Option B: Upload Merged Model (khuyên dùng cho production)**
+
+1. **Merge LoRA vào base model:**
+   ```bash
+   uv run python finetune/merge_lora.py \
+     --base_model pnnbao-ump/VieNeu-TTS-0.3B \
+     --adapter finetune/output/your_run_name \
+     --output finetune/output/merged_model
+   ```
+
+2. **Copy `voices.json` vào thư mục merged:**
+   ```bash
+   cp voices.json finetune/output/merged_model/
+   ```
+
+3. **Upload lên HF:**
+   ```bash
+   huggingface-cli upload your-username/your-model finetune/output/merged_model
+   ```
+
+#### Bước 4: Người dùng cuối sử dụng
+
+Giờ đây, người dùng chỉ cần:
+
+```python
+from vieneu import Vieneu
+
+# Khởi tạo với model của bạn
+tts = Vieneu(backbone_repo="your-username/your-model")
+
+# Tổng hợp ngay - KHÔNG CẦN truyền voice!
+audio = tts.infer("Xin chào, tôi là giọng nói custom!")
+
+tts.save(audio, "output.wav")
+```
+
+SDK sẽ tự động:
+1. Tải `voices.json` từ repo
+2. Sử dụng `default_voice` được chỉ định
+3. Người dùng không cần lo lắng về reference audio
+
+
+---
+
 ## 🦜 Bí kíp để giọng nói hay (Tips)
 
 1.  **Chất lượng Audio**: Đây là yếu tố quan trọng nhất. Audio phải sạch, không có tiếng vang (reverb), không có nhạc nền hoặc tiếng ồn.

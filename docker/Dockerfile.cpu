@@ -18,8 +18,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Cài đặt uv
-RUN pip install --no-cache-dir uv
+# Install uv directly
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
 # Thiết lập thư mục làm việc
 WORKDIR /workspace
@@ -38,11 +38,8 @@ CMD ["python", "gradio_app.py"]
 FROM base AS prod
 # Copy toàn bộ source code
 COPY . .
-# Copy CPU-specific config
-RUN rm -f pyproject.toml
-COPY pyproject.toml pyproject.toml
-RUN rm -f uv.lock
-COPY uv.lock uv.lock
+# Copy project definition
+COPY pyproject.toml uv.lock ./
 # Cài đặt dependencies (không bao gồm dev deps)
 RUN uv sync --no-dev --no-default-groups
 

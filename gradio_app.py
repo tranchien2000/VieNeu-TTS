@@ -26,7 +26,6 @@ except Exception as e:
 
 BACKBONE_CONFIGS = _config.get("backbone_configs", {})
 CODEC_CONFIGS = _config.get("codec_configs", {})
-VOICE_SAMPLES = _config.get("voice_samples", {})
 
 _text_settings = _config.get("text_settings", {})
 MAX_CHARS_PER_CHUNK = _text_settings.get("max_chars_per_chunk", 256)
@@ -34,8 +33,6 @@ MAX_TOTAL_CHARS_STREAMING = _text_settings.get("max_total_chars_streaming", 3000
 
 if not BACKBONE_CONFIGS or not CODEC_CONFIGS:
     raise ValueError("config.yaml thiếu backbone_configs hoặc codec_configs")
-if not VOICE_SAMPLES:
-    raise ValueError("config.yaml thiếu voice_samples")
 
 # --- 1. MODEL CONFIGURATION ---
 # Global model instance
@@ -152,7 +149,9 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
         "⏳ Đang tải model với tối ưu hóa... Lưu ý: Quá trình này sẽ tốn thời gian. Vui lòng kiên nhẫn.",
         gr.update(interactive=False),
         gr.update(interactive=False),
-        gr.update(interactive=False)
+        gr.update(interactive=False),
+        gr.update(),
+        gr.update(), gr.update(), gr.update(), gr.update()
     )
     
     try:
@@ -170,7 +169,8 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
             if not custom_model_id or not custom_model_id.strip():
                 yield (
                     "❌ Lỗi: Vui lòng nhập Model ID cho Custom Model.",
-                    gr.update(interactive=False), gr.update(interactive=True), gr.update(interactive=False)
+                    gr.update(interactive=False), gr.update(interactive=True), gr.update(interactive=False), gr.update(),
+                    gr.update(), gr.update(), gr.update(), gr.update()
                 )
                 return
 
@@ -181,7 +181,8 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
                 if custom_base_model not in BACKBONE_CONFIGS:
                     yield (
                         f"❌ Lỗi: Base Model '{custom_base_model}' không hợp lệ.",
-                        gr.update(interactive=False), gr.update(interactive=True), gr.update(interactive=False)
+                        gr.update(interactive=False), gr.update(interactive=True), gr.update(interactive=False),
+                        gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
                     )
                     return
                 
@@ -237,7 +238,7 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
                 cache_dir = os.path.join("merged_models_cache", safe_name)
                 target_backbone_repo = os.path.abspath(cache_dir)
                 
-                # Check if already merged
+                # Check if already merged (and voices.json exists)
                 if not os.path.exists(cache_dir) or not os.path.exists(os.path.join(cache_dir, "vocab.json")):
                     print(f"🔄 Merging LoRA for LMDeploy optimization: {cache_dir}")
                     if os.path.exists(cache_dir):
@@ -246,7 +247,9 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
                          f"⏳ Đang merge và lưu model LoRA để tối ưu cho LMDeploy (thao tác này chỉ chạy một lần)...",
                          gr.update(interactive=False),
                          gr.update(interactive=False),
-                         gr.update(interactive=False)
+                         gr.update(interactive=False),
+                         gr.update(),
+                         gr.update(), gr.update(), gr.update(), gr.update()
                     )
                     
                     try:
@@ -286,6 +289,18 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
                         except Exception as e:
                             print(f"   ⚠️ Warning: Could not save slow tokenizer files: {e}")
 
+                        # Save voices.json to cache directory so FastVieNeuTTS can find it
+                        print(f"   • Saving voices definition...")
+                        import json
+                        voices_json_path = os.path.join(cache_dir, "voices.json")
+                        voices_content = {
+                             "meta": { "note": "Automatically generated during LoRA merge" },
+                             "default_voice": temp_tts._default_voice,
+                             "presets": temp_tts._preset_voices
+                        }
+                        with open(voices_json_path, 'w', encoding='utf-8') as f:
+                             json.dump(voices_content, f, ensure_ascii=False, indent=2)
+
                         del temp_tts
                         cleanup_gpu_memory()
                         print("   ✅ Merge & Save successfully!")
@@ -314,15 +329,8 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
                 )
                 using_lmdeploy = True
                 
-                # Pre-cache voice references
-                print("📝 Pre-caching voice references...")
-                for voice_name, voice_info in VOICE_SAMPLES.items():
-                    audio_path = voice_info["audio"]
-                    text_path = voice_info["text"]
-                    if os.path.exists(audio_path) and os.path.exists(text_path):
-                        ref_text = get_ref_text_cached(text_path)
-                        tts.get_cached_reference(voice_name, audio_path, ref_text)
-                print(f"   ✅ Cached {len(VOICE_SAMPLES)} voices")
+                # Legacy caching removed
+                print(f"   ✅ Optimized backend initialized")
                 
             except Exception as e:
                 import traceback
@@ -338,7 +346,9 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
                     f"⚠️ LMDeploy Init Error: {lmdeploy_error_reason}. Đang loading model với backend mặc định - tốc độ chậm hơn so với lmdeploy...",
                     gr.update(interactive=False),
                     gr.update(interactive=False),
-                    gr.update(interactive=False)
+                    gr.update(interactive=False),
+                    gr.update(),
+                    gr.update(), gr.update(), gr.update(), gr.update()
                 )
                 time.sleep(1)
                 use_lmdeploy = False
@@ -400,7 +410,8 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
             if is_merged_lora and custom_loading and not using_lmdeploy:
                 yield (
                     f"🔄 Đang tải và merge LoRA adapter: {custom_model_id}...",
-                    gr.update(interactive=False), gr.update(interactive=False), gr.update(interactive=False)
+                    gr.update(interactive=False), gr.update(interactive=False), gr.update(interactive=False), gr.update(),
+                    gr.update(), gr.update(), gr.update(), gr.update()
                 )
                 try:
                     # 1. Load Adapter
@@ -458,11 +469,56 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
         if warning_msg:
             success_msg += warning_msg
             
+        # Prepare voice update
+        try:
+            # Get voices with descriptions for UI from SDK
+            voices = tts.list_preset_voices()
+        except Exception:
+            voices = []
+
+        has_voices = len(voices) > 0
+        
+        if has_voices:
+            default_v = tts._default_voice
+            
+            # Helper to get values list
+            is_tuple = (len(voices) > 0 and isinstance(voices[0], tuple))
+            voice_values = [v[1] for v in voices] if is_tuple else voices
+            
+            if not default_v and voice_values:
+                 default_v = voice_values[0]
+
+            if default_v and default_v not in voice_values:
+                if is_tuple:
+                    voices.append((default_v, default_v))
+                else:
+                    voices.append(default_v)
+                    
+            voice_update = gr.update(choices=voices, value=default_v, interactive=True)
+            
+            # Show Standard Tabs
+            tab_p = gr.update(visible=True)
+            tab_c = gr.update(visible=True)
+            tab_sel = gr.update(selected="preset_mode")
+            mode_state = "preset_mode"
+        else:
+            # Missing voices.json case
+            msg = "⚠️ Không tìm thấy file voices.json. Vui lòng dùng Tab Voice Cloning."
+            voice_update = gr.update(choices=[msg], value=msg, interactive=False)
+            
+            # Show Preset Tab (to see message) and Custom Tab
+            tab_p = gr.update(visible=True)
+            tab_c = gr.update(visible=True)
+            tab_sel = gr.update(selected="preset_mode")
+            mode_state = "preset_mode"
+
         yield (
             success_msg,
             gr.update(interactive=True), # btn_generate
             gr.update(interactive=True), # btn_load
-            gr.update(interactive=False) # btn_stop
+            gr.update(interactive=False), # btn_stop
+            voice_update,
+            tab_p, tab_c, tab_sel, mode_state
         )
         
     except Exception as e:
@@ -476,59 +532,26 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
                 "❌ Lỗi khi tải model: Không tìm thấy biến môi trường CUDA_PATH. Vui lòng cài đặt NVIDIA GPU Computing Toolkit (https://developer.nvidia.com/cuda/toolkit)",
                 gr.update(interactive=False),
                 gr.update(interactive=True),
-                gr.update(interactive=False)
+                gr.update(interactive=False),
+                gr.update(),
+                gr.update(), gr.update(), gr.update(), gr.update()
             )
         else: 
             yield (
                 f"❌ Lỗi khi tải model: {str(e)}",
                 gr.update(interactive=False),
                 gr.update(interactive=True),
-                gr.update(interactive=False)
+                gr.update(interactive=False),
+                gr.update(),
+                gr.update(), gr.update(), gr.update(), gr.update()
             )
 
 
 # --- 2. DATA & HELPERS ---
-GGUF_ALLOWED_VOICES = [
-    "Bình (nam miền Bắc)",
-    "Tuyên (nam miền Bắc)",
-    "Vĩnh (nam miền Nam)",
-    "Đoan (nữ miền Nam)",
-    "Ly (nữ miền Bắc)",
-    "Ngọc (nữ miền Bắc)",
-]
-
-def get_voice_options(backbone_choice: str):
-    """Filter voice options: GGUF only shows the 4 allowed voices."""
-    # Assuming 'gguf' in choice string implies GGUF model
-    if backbone_choice and "gguf" in backbone_choice.lower():
-        return [v for v in GGUF_ALLOWED_VOICES if v in VOICE_SAMPLES]
-    return list(VOICE_SAMPLES.keys())
-
-def update_voice_dropdown(backbone_choice: str, current_voice: str):
-    options = get_voice_options(backbone_choice)
-    new_value = current_voice if current_voice in options else (options[0] if options else None)
-    return gr.update(choices=options, value=new_value)
-
-# --- 3. CORE LOGIC FUNCTIONS ---
-def load_reference_info(voice_choice: str) -> Tuple[Optional[str], str]:
-    """Load reference audio and text with caching"""
-    if voice_choice in VOICE_SAMPLES:
-        audio_path = VOICE_SAMPLES[voice_choice]["audio"]
-        text_path = VOICE_SAMPLES[voice_choice]["text"]
-        try:
-            if os.path.exists(text_path):
-                ref_text = get_ref_text_cached(text_path)
-                return audio_path, ref_text
-            else:
-                return audio_path, "⚠️ Không tìm thấy file text mẫu."
-        except Exception as e:
-            return None, f"❌ Lỗi: {str(e)}"
-    return None, ""
 
 def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: str, 
-                     mode_tab: str, generation_mode: str, use_batch: bool, max_batch_size_run: int,
-                     custom_voice_audio, custom_voice_text: str,
-                     temperature: float, max_chars_chunk: int):
+                      mode_tab: str, generation_mode: str, use_batch: bool, max_batch_size_run: int,
+                      temperature: float, max_chars_chunk: int):
     """Synthesis with optimization support and max batch size control"""
     global tts, current_backbone, current_codec, model_loaded, using_lmdeploy
     
@@ -546,57 +569,41 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
     use_preencoded = codec_config['use_preencoded']
     
     
-    # Setup Reference based on mode
-    if mode_tab == "custom_voice_mode":
-        # Custom voice for custom model
-        if custom_voice_audio is None:
-            yield None, "⚠️ Vui lòng upload file Audio mẫu!"
-            return
-        if not custom_voice_text or not custom_voice_text.strip():
-            yield None, "⚠️ Vui lòng nhập nội dung văn bản của Audio mẫu!"
-            return
-        ref_audio_path = custom_voice_audio
-        ref_text_raw = custom_voice_text
-        ref_codes_path = None
-    elif mode_tab == "custom_mode":
-        if custom_audio is None:
-            yield None, "⚠️ Vui lòng upload file Audio mẫu (Reference Audio)!"
-            return
-        if not custom_text or not custom_text.strip():
-            yield None, "⚠️ Vui lòng nhập nội dung văn bản của Audio mẫu (Reference Text)!"
-            return
-        ref_audio_path = custom_audio
-        ref_text_raw = custom_text
-        ref_codes_path = None
-    else:
-        if voice_choice not in VOICE_SAMPLES:
-            yield None, "⚠️ Vui lòng chọn giọng mẫu."
-            return
-        ref_audio_path = VOICE_SAMPLES[voice_choice]["audio"]
-        text_path = VOICE_SAMPLES[voice_choice]["text"]
-        ref_codes_path = VOICE_SAMPLES[voice_choice]["codes"]
-        
-        if not os.path.exists(ref_audio_path):
-            yield None, "❌ Không tìm thấy file audio mẫu."
-            return
-        
-        ref_text_raw = get_ref_text_cached(text_path)
-    
+    # Setup Reference
     yield None, "📄 Đang xử lý Reference..."
     
-    # Encode or get cached reference
     try:
-        if use_preencoded and ref_codes_path and os.path.exists(ref_codes_path):
-            ref_codes = torch.load(ref_codes_path, map_location="cpu", weights_only=True)
-        else:
-            # Use cached reference if available (LMDeploy only)
-            if using_lmdeploy and hasattr(tts, 'get_cached_reference') and mode_tab == "preset_mode":
-                ref_codes = tts.get_cached_reference(voice_choice, ref_audio_path, ref_text_raw)
-            else:
-                ref_codes = tts.encode_reference(ref_audio_path)
+        ref_codes = None
+        ref_text_raw = ""
         
+        if mode_tab == "preset_mode":
+            if not voice_choice:
+                raise ValueError("Vui lòng chọn giọng mẫu.")
+            if "⚠️" in voice_choice:
+                raise ValueError("Không có giọng mẫu khả dụng. Vui lòng chuyển sang Tab Voice Cloning.")
+            
+            # Use SDK method - handles caching and JSON internally
+            voice_data = tts.get_preset_voice(voice_choice)
+            ref_codes = voice_data['codes']
+            ref_text_raw = voice_data['text']
+            
+        elif mode_tab == "custom_mode":
+            # Reference from Custom Cloning UI
+            if custom_audio is None:
+                 raise ValueError("Vui lòng upload file Audio mẫu (Reference Audio)!")
+            if not custom_text or not custom_text.strip():
+                 raise ValueError("Vui lòng nhập nội dung văn bản của Audio mẫu (Reference Text)!")
+            
+            ref_text_raw = custom_text.strip()
+            ref_codes = tts.encode_reference(custom_audio)
+            
+        else:
+            raise ValueError(f"Unknown mode: {mode_tab}")
+
+        # Ensure numpy for inference
         if isinstance(ref_codes, torch.Tensor):
             ref_codes = ref_codes.cpu().numpy()
+
     except Exception as e:
         yield None, f"❌ Lỗi xử lý Reference Audio: {str(e)}"
         return
@@ -1060,9 +1067,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS") as demo:
                 
                 with gr.Tabs() as tabs:
                     with gr.TabItem("👤 Preset", id="preset_mode") as tab_preset:
-                        initial_voices = get_voice_options("VieNeu-TTS (GPU)")
-                        default_voice = initial_voices[0] if initial_voices else None
-                        voice_select = gr.Dropdown(initial_voices, value=default_voice, label="Giọng mẫu")
+                        voice_select = gr.Dropdown(choices=[], value=None, label="Giọng mẫu")
                     
                     with gr.TabItem("🦜 Voice Cloning", id="custom_mode") as tab_custom:
                         custom_audio = gr.Audio(label="Audio giọng mẫu (3-5 giây) (.wav)", type="filepath")
@@ -1081,21 +1086,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS") as demo:
                         gr.Markdown("""
                         **💡 Mẹo nhỏ:** Nếu kết quả Zero-shot Voice Cloning chưa như ý, bạn hãy cân nhắc **Finetune (LoRA)** để đạt chất lượng tốt nhất. 
                         Hướng dẫn chi tiết có tại file: `finetune/README.md` hoặc xem trên [GitHub](https://github.com/pnnbao97/VieNeu-TTS/tree/main/finetune).
-                        """)
-                    
-                    # Custom Voice tab (for Custom Model only)
-                    with gr.TabItem("🦜 Custom Voice", id="custom_voice_mode", visible=False) as tab_custom_voice:
-                        custom_voice_audio = gr.Audio(
-                            label="Audio giọng mẫu (3-5 giây) (.wav)", 
-                            type="filepath",
-                            value=None
-                        )
-                        custom_voice_text = gr.Textbox(
-                            label="Nội dung audio mẫu",
-                            placeholder="Nhập chính xác nội dung của audio mẫu...",
-                            value=""
-                        )
-
+                        """)              
                 
                 generation_mode = gr.Radio(
                     ["Standard (Một lần)"],
@@ -1158,7 +1149,6 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS") as demo:
         #     return f"Streaming: {'✅' if BACKBONE_CONFIGS[backbone]['supports_streaming'] else '❌'}"
         
         # backbone_select.change(update_info, backbone_select, model_status)
-        backbone_select.change(update_voice_dropdown, [backbone_select, voice_select], voice_select)
         
         # Handler to show/hide Voice Cloning tab
         def on_codec_change(codec: str, current_mode: str):
@@ -1177,27 +1167,17 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS") as demo:
         # Bind tab events to update state
         tab_preset.select(lambda: "preset_mode", outputs=current_mode_state)
         tab_custom.select(lambda: "custom_mode", outputs=current_mode_state)
-        tab_custom_voice.select(lambda: "custom_voice_mode", outputs=current_mode_state)
         
         
         # --- Custom Model Event Handlers ---
         def on_backbone_change(choice):
             is_custom = (choice == "Custom Model")
-            new_tab = "custom_voice_mode" if is_custom else "preset_mode"
-            # Hide/show tabs based on custom model choice
-            return (
-                gr.update(visible=is_custom),  # custom_model_group
-                gr.update(visible=not is_custom),  # tab_preset
-                gr.update(visible=not is_custom),  # tab_custom
-                gr.update(visible=is_custom),  # tab_custom_voice
-                gr.update(selected=new_tab),  # tabs
-                new_tab,  # current_mode_state
-            )
+            return gr.update(visible=is_custom)
 
         backbone_select.change(
             on_backbone_change,
             inputs=[backbone_select],
-            outputs=[custom_model_group, tab_preset, tab_custom, tab_custom_voice, tabs, current_mode_state]
+            outputs=[custom_model_group]
         )
         
         def on_custom_id_change(model_id):
@@ -1209,19 +1189,11 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS") as demo:
                 else:
                     base_model = "VieNeu-TTS (GPU)"
                 
-                # Auto-fill example for pnnbao-ump/VieNeu-TTS-0.3B-lora-ngoc-huyen
-                if "pnnbao-ump/VieNeu-TTS-0.3B-lora-ngoc-huyen" in model_id:
-                    return (
-                        gr.update(visible=True, value=base_model),  # base_model dropdown
-                        gr.update(value=os.path.join("examples", "audio_ref", "example_ngoc_huyen.wav")),  # custom_voice_audio
-                        gr.update(value="Tác phẩm dự thi bảo đảm tính khoa học, tính đảng, tính chiến đấu, tính định hướng.")  # custom_voice_text
-                    )
-                else:
-                    return (
-                        gr.update(visible=True, value=base_model),
-                        gr.update(),  # no change to audio
-                        gr.update()   # no change to text
-                    )
+                return (
+                    gr.update(visible=True, value=base_model),
+                    gr.update(), gr.update()
+                )
+            
             return (
                 gr.update(visible=False),
                 gr.update(),
@@ -1231,14 +1203,14 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS") as demo:
         custom_backbone_model_id.change(
             on_custom_id_change,
             inputs=[custom_backbone_model_id],
-            outputs=[custom_backbone_base_model, custom_voice_audio, custom_voice_text]
+            outputs=[custom_backbone_base_model, custom_audio, custom_text]
         )
 
         btn_load.click(
             fn=load_model,
             inputs=[backbone_select, codec_select, device_choice, use_lmdeploy_cb,
                     custom_backbone_model_id, custom_backbone_base_model, custom_backbone_hf_token],
-            outputs=[model_status, btn_generate, btn_load, btn_stop]
+            outputs=[model_status, btn_generate, btn_load, btn_stop, voice_select, tab_preset, tab_custom, tabs, current_mode_state]
         )
         
         
@@ -1246,7 +1218,6 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS") as demo:
             fn=synthesize_speech,
             inputs=[text_input, voice_select, custom_audio, custom_text, current_mode_state, 
                     generation_mode, use_batch, max_batch_size_run,
-                    custom_voice_audio, custom_voice_text,
                     temperature_slider, max_chars_chunk_slider],
             outputs=[audio_output, status_output]
         )

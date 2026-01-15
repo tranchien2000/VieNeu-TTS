@@ -22,7 +22,7 @@ url = "https://pypi.org/simple"
 
 [project]
 name = "vieneu"
-version = "1.1.4"
+version = "1.1.5"
 description = "Advanced on-device Vietnamese TTS with instant voice cloning"
 readme = "README.md"
 authors = [
