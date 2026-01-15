@@ -79,31 +79,25 @@ The fastest way to experience VieNeu-TTS is through the Web interface (Gradio).
     ```
 
   - **Step B: Install dependencies**
-  
-  **Option 1: GPU Support (Default)**
+
+    **Option 1: GPU Support (Default)**
     ```bash
     uv sync
     ```
     *(Optional: See [GGUF GPU Acceleration](#gguf-gpu) if you want to use GGUF models on GPU)*
 
-  **Option 2: CPU-ONLY (Lightweight, no CUDA)**
+    **Option 2: CPU-ONLY (Lightweight, no CUDA)**
     ```bash
     # Linux/macOS:
     cp pyproject.toml pyproject.toml.gpu
     cp pyproject.toml.cpu pyproject.toml
     uv sync
-    
+
     # Windows (PowerShell/CMD):
     copy pyproject.toml pyproject.toml.gpu
     copy pyproject.toml.cpu pyproject.toml
     uv sync
     ```
-    *This installs PyTorch CPU version (~500MB lighter). To switch back to GPU:*
-    ```bash
-    # Linux/macOS: cp pyproject.toml.gpu pyproject.toml && uv sync
-    # Windows: copy pyproject.toml.gpu pyproject.toml && uv sync
-    ```
-
 
 3. **Start the Web UI:**
    ```bash

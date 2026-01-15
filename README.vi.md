@@ -80,29 +80,24 @@ Cách nhanh nhất để trải nghiệm VieNeu-TTS là thông qua giao diện W
     ```
 
   - **Bước B: Cài đặt các phụ thuộc**
-  
-  **Lựa chọn 1: Hỗ trợ GPU (Mặc định)**
+
+    **Lựa chọn 1: Hỗ trợ GPU (Mặc định)**
     ```bash
     uv sync
     ```
     *(Tùy chọn: Xem [Tăng tốc GGUF GPU](#gguf-gpu) nếu bạn muốn chạy mô hình GGUF trên GPU)*
 
-  **Lựa chọn 2: Chỉ CPU (Nhẹ, không CUDA)**
+    **Lựa chọn 2: Chỉ CPU (Nhẹ, không CUDA)**
     ```bash
     # Linux/macOS:
     cp pyproject.toml pyproject.toml.gpu
     cp pyproject.toml.cpu pyproject.toml
     uv sync
-    
+
     # Windows (PowerShell/CMD):
     copy pyproject.toml pyproject.toml.gpu
     copy pyproject.toml.cpu pyproject.toml
     uv sync
-    ```
-    *Điều này sẽ cài đặt phiên bản PyTorch CPU (nhẹ hơn ~500MB). Để chuyển lại GPU:*
-    ```bash
-    # Linux/macOS: cp pyproject.toml.gpu pyproject.toml && uv sync
-    # Windows: copy pyproject.toml.gpu pyproject.toml && uv sync
     ```
 
 3. **Khởi chạy Giao diện Web:**
