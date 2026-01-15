@@ -155,9 +155,7 @@ Deploy VieNeu-TTS as a high-performance API Server (powered by LMDeploy) with a 
 **Requirement**: [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) is required for GPU support.
 
 **Start the Server with a Public Tunnel (No port forwarding needed):**
-```bash
-docker run --gpus all -p 23333:23333 pnnbao/vieneu-tts:serve
-```
+docker run --gpus all -p 23333:23333 pnnbao/vieneu-tts:serve --tunnel
 
 *   **Default**: The server loads the `VieNeu-TTS` model for maximum quality.
 *   **Tunneling**: The Docker image includes a built-in `bore` tunnel. Check the container logs to find your public address (e.g., `bore.pub:31631`).
@@ -187,7 +185,7 @@ Customize the server to run specific versions or your own fine-tuned models.
 
 **Run the 0.3B Model (Faster):**
 ```bash
-docker run --gpus all pnnbao/vieneu-tts:serve --model pnnbao-ump/VieNeu-TTS-0.3B
+docker run --gpus all pnnbao/vieneu-tts:serve --model pnnbao-ump/VieNeu-TTS-0.3B --tunnel
 ```
 
 **Serve a Local Fine-tuned Model:**
@@ -197,7 +195,7 @@ If you have merged a LoRA adapter, mount your output directory to the container:
 docker run --gpus all \
   -v $(pwd)/finetune/output:/workspace/models \
   pnnbao/vieneu-tts:serve \
-  --model /workspace/models/merged_model
+  --model /workspace/models/merged_model --tunnel
 ```
 
 *For full implementation details, see: [main_remote.py](main_remote.py)*

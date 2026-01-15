@@ -155,9 +155,7 @@ Triển khai VieNeu-TTS dưới dạng API Server hiệu suất cao (được h�
 **Yêu cầu**: [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html) là cần thiết để hỗ trợ GPU.
 
 **Khởi chạy Server với Public Tunnel (Không cần mở port):**
-```bash
-docker run --gpus all -p 23333:23333 pnnbao/vieneu-tts:serve
-```
+docker run --gpus all -p 23333:23333 pnnbao/vieneu-tts:serve --tunnel
 
 *   **Mặc định**: Server tải mô hình `VieNeu-TTS` để có chất lượng tối đa.
 *   **Tunneling**: Image Docker bao gồm một tunnel `bore` tích hợp sẵn. Kiểm tra log container để tìm địa chỉ public của bạn (ví dụ: `bore.pub:31631`).
@@ -187,7 +185,7 @@ Tùy chỉnh server để chạy các phiên bản cụ thể hoặc các mô h�
 
 **Chạy mô hình 0.3B (Nhanh hơn):**
 ```bash
-docker run --gpus all pnnbao/vieneu-tts:serve --model pnnbao-ump/VieNeu-TTS-0.3B
+docker run --gpus all pnnbao/vieneu-tts:serve --model pnnbao-ump/VieNeu-TTS-0.3B --tunnel
 ```
 
 **Phục vụ Mô hình Fine-tuned cục bộ:**
@@ -197,10 +195,10 @@ Nếu bạn đã merge LoRA adapter, hãy mount thư mục đầu ra của bạn
 docker run --gpus all \
   -v $(pwd)/finetune/output:/workspace/models \
   pnnbao/vieneu-tts:serve \
-  --model /workspace/models/merged_model
+  --model /workspace/models/merged_model --tunnel
 ```
 
-Để biết chi tiết triển khai đầy đủ, hãy xem: [main_remote.py](main_remote.py)
+*Để biết chi tiết triển khai đầy đủ, hãy xem: [main_remote.py](main_remote.py)*
 
 ---
 
