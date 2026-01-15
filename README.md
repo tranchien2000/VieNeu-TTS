@@ -243,6 +243,10 @@ if os.path.exists("examples/audio_ref/example_ngoc_huyen.wav"):
 
 *For full implementation details, see: [main_remote.py](main_remote.py)*
 
+### Voice Preset Specification (v1.0)
+VieNeu-TTS uses the official `vieneu.voice.presets` specification to define reusable voice assets.
+Only `voices.json` files following this spec are guaranteed to be compatible with VieNeu-TTS SDK ≥ v1.x.
+
 ### 3. Advanced Configuration
 
 Customize the server to run specific versions or your own fine-tuned models.

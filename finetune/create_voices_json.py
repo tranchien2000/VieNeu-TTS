@@ -43,9 +43,11 @@ def create_voices_json(audio_path, text, voice_name, output_path="voices.json", 
     else:
         voices_data = {
             "meta": {
+                "spec": "vieneu.voice.presets",
+                "spec_version": "1.0",
+                "engine": "VieNeu-TTS",
                 "author": "Phạm Nguyễn Ngọc Bảo (pnnbao-ump)",
                 "license": "CC BY-NC 4.0",
-                "version": "1.0",
                 "homepage": "https://github.com/pnnbao97/VieNeu-TTS",
                 "notice": "Model and voices are for non-commercial use only. Mention pnnbao-ump when using."
             },
