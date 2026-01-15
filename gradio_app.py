@@ -144,6 +144,7 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
     """Load model with optimizations and max batch size control"""
     global tts, current_backbone, current_codec, model_loaded, using_lmdeploy
     lmdeploy_error_reason = None
+    model_loaded = False # Ensure we don't try to use a half-loaded model
     
     yield (
         "⏳ Đang tải model với tối ưu hóa... Lưu ý: Quá trình này sẽ tốn thời gian. Vui lòng kiên nhẫn.",
@@ -156,8 +157,8 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
     
     try:
         # Cleanup before loading new model
-        if model_loaded and tts is not None:
-            del tts
+        if tts is not None:
+            tts = None # Reset instead of del to avoid NameError if load fails
             cleanup_gpu_memory()
         
         # Prepare Backbone Config/Repo
@@ -488,12 +489,20 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
             if not default_v and voice_values:
                  default_v = voice_values[0]
 
+            # Ensure default_v is in the list and selected correctly
             if default_v and default_v not in voice_values:
                 if is_tuple:
+                    # Try to find a nice description if possible, else use ID
                     voices.append((default_v, default_v))
                 else:
                     voices.append(default_v)
-                    
+            
+            # Sort voices by name/label for better UX
+            if is_tuple:
+                voices.sort(key=lambda x: str(x[0]))
+            else:
+                voices.sort()
+
             voice_update = gr.update(choices=voices, value=default_v, interactive=True)
             
             # Show Standard Tabs
@@ -637,7 +646,9 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                 yield None, f"⚡ Xử lý {num_batches} mini-batch(es) (max {max_batch_size_run} đoạn/batch)..."
                 
                 chunk_wavs = tts.infer_batch(
-                    text_chunks, ref_codes, ref_text_raw, 
+                    text_chunks, 
+                    ref_codes=ref_codes, 
+                    ref_text=ref_text_raw,
                     max_batch_size=max_batch_size_run,
                     temperature=temperature
                 )
@@ -652,7 +663,9 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                     yield None, f"⏳ Đang xử lý đoạn {i+1}/{total_chunks}..."
                     
                     chunk_wav = tts.infer(
-                        chunk, ref_codes, ref_text_raw,
+                        chunk, 
+                        ref_codes=ref_codes, 
+                        ref_text=ref_text_raw,
                         temperature=temperature
                     )
                     
@@ -721,7 +734,9 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                 
                 for i, chunk_text in enumerate(text_chunks):
                     stream_gen = tts.infer_stream(
-                        chunk_text, ref_codes, ref_text_raw,
+                        chunk_text, 
+                        ref_codes=ref_codes, 
+                        ref_text=ref_text_raw,
                         temperature=temperature
                     )
                     
@@ -813,8 +828,7 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
             with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
                 sf.write(tmp.name, final_wav, sr)
                 
-                lora_info = f" [LoRA: {lora_repo_id}]" if lora_loaded else ""
-                yield tmp.name, f"✅ Hoàn tất Streaming! ({backend_info}){lora_info}"
+                yield tmp.name, f"✅ Hoàn tất Streaming! ({backend_info})"
             
             # Cleanup memory
             if using_lmdeploy and hasattr(tts, 'cleanup_memory'):
