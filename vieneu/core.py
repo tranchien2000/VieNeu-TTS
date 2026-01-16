@@ -11,14 +11,16 @@ import re
 import gc
 import json
 import requests
+import asyncio
 from huggingface_hub import hf_hub_download
+from concurrent.futures import ThreadPoolExecutor
 
 # ============================================================================
 # Shared Utilities
 # ============================================================================
 
 def _linear_overlap_add(frames: list[np.ndarray], stride: int) -> np.ndarray:
-    """Linear overlap-add for smooth audio concatenation"""
+    # original impl --> https://github.com/facebookresearch/encodec/blob/main/encodec/utils.py
     assert len(frames)
     dtype = frames[0].dtype
     shape = frames[0].shape[:-1]
@@ -108,8 +110,8 @@ class VieNeuTTS:
         self.hop_length = 480
         self.streaming_overlap_frames = 1
         self.streaming_frames_per_chunk = 25
-        self.streaming_lookforward = 5
-        self.streaming_lookback = 50
+        self.streaming_lookforward = 10
+        self.streaming_lookback = 100
         self.streaming_stride_samples = self.streaming_frames_per_chunk * self.hop_length
 
         # Flags
@@ -719,6 +721,10 @@ class VieNeuTTS:
                 )
                 curr_codes = token_cache[tokens_start:tokens_end]
                 recon = self._decode("".join(curr_codes))
+                # Apply watermark if available
+                if self.watermarker:
+                    recon = self.watermarker.apply_watermark(recon, sample_rate=self.sample_rate)
+                
                 recon = recon[sample_start:sample_end]
                 audio_cache.append(recon)
 
@@ -750,6 +756,10 @@ class VieNeuTTS:
             ) * self.hop_length
             curr_codes = token_cache[tokens_start:]
             recon = self._decode("".join(curr_codes))
+            # Apply watermark if available
+            if self.watermarker:
+                recon = self.watermarker.apply_watermark(recon, sample_rate=self.sample_rate)
+
             recon = recon[sample_start:]
             audio_cache.append(recon)
 
@@ -1447,14 +1457,17 @@ class RemoteVieNeuTTS(VieNeuTTS):
             hf_token=hf_token
         )
         
-        # Auto-load voices from the remote model repo
-        # This allows client to use 'voice=...' with server's custom voices
+        self.streaming_frames_per_chunk = 10   
+        self.streaming_lookforward = 5         
+        self.streaming_lookback = 50           
+        self.streaming_stride_samples = self.streaming_frames_per_chunk * self.hop_length
+        
         self._load_voices_from_repo(model_name, hf_token)
         
         print(f"📡 RemoteVieNeuTTS ready! Using backend: {self.api_base}")
 
     def _load_backbone(self, backbone_repo, backbone_device):
-        pass # Explicitly skip
+        pass 
 
     def _format_prompt(self, ref_codes: list[int], ref_text: str, input_text: str) -> str:
         """Format prompt for remote LMDeploy server"""
@@ -1556,6 +1569,260 @@ class RemoteVieNeuTTS(VieNeuTTS):
             final_wav = self.watermarker.apply_watermark(final_wav, sample_rate=self.sample_rate)
             
         return final_wav    
+
+    def infer_stream(self, text: str, ref_audio: str | Path = None, ref_codes: np.ndarray | torch.Tensor = None, ref_text: str = None, max_chars: int = 256, voice: dict = None, temperature: float = 1.0, top_k: int = 50) -> Generator[np.ndarray, None, None]:
+        """
+        Stream output audio (generator).
+        """
+        if voice is not None:
+            ref_codes = voice.get('codes', ref_codes)
+            ref_text = voice.get('text', ref_text)
+        
+        # Auto-encode ref_audio locally if provided
+        if ref_audio is not None and ref_codes is None:
+            ref_codes = self.encode_reference(ref_audio)
+        elif self._default_voice and (ref_codes is None or ref_text is None):
+            try:
+                voice_data = self.get_preset_voice(None)
+                ref_codes = voice_data['codes']
+                ref_text = voice_data['text']
+            except Exception:
+                pass
+
+        if ref_codes is None or ref_text is None:
+             raise ValueError("Must provide either 'voice' dict or both 'ref_codes' and 'ref_text'.")
+
+        chunks = split_text_into_chunks(text, max_chars=max_chars)
+        for chunk in chunks:
+            yield from self._infer_stream_chunk(chunk, ref_codes, ref_text, temperature, top_k)
+
+    def _infer_stream_chunk(self, chunk, ref_codes, ref_text, temperature, top_k):
+        """Internal helper to stream a single text chunk"""
+        if isinstance(ref_codes, torch.Tensor):
+            ref_codes_list = ref_codes.cpu().numpy().flatten().tolist()
+        elif isinstance(ref_codes, np.ndarray):
+            ref_codes_list = ref_codes.flatten().tolist()
+        else:
+            ref_codes_list = ref_codes
+
+        prompt = self._format_prompt(ref_codes_list, ref_text, chunk)
+        
+        payload = {
+            "model": self.model_name,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 2048,
+            "temperature": temperature,
+            "top_k": top_k,
+            "stop": ["<|SPEECH_GENERATION_END|>"],
+            "stream": True # Enable streaming
+        }
+
+        # Streaming window state
+        audio_cache: list[np.ndarray] = []
+        token_cache: list[str] = [f"<|speech_{idx}|>" for idx in ref_codes_list]
+        n_decoded_samples: int = 0
+        n_decoded_tokens: int = len(ref_codes_list)
+
+        try:
+             with requests.post(f"{self.api_base}/chat/completions", json=payload, stream=True, timeout=60) as r:
+                r.raise_for_status()
+                # Iterate over SSE lines
+                for line in r.iter_lines():
+                    if not line:
+                        continue
+                    
+                    line_str = line.decode('utf-8')
+                    if not line_str.startswith('data: '):
+                        continue
+                        
+                    data_str = line_str[6:] # Strip 'data: '
+                    if data_str == '[DONE]':
+                        break
+                        
+                    try:
+                        content = json.loads(data_str)["choices"][0]["delta"].get("content", "")
+                        if content:
+                             token_cache.append(content)
+                             
+                             # --- Windowed Decoding Logic (Shared) ---
+                             if len(token_cache[n_decoded_tokens:]) >= self.streaming_frames_per_chunk + self.streaming_lookforward:
+                                tokens_start = max(n_decoded_tokens - self.streaming_lookback - self.streaming_overlap_frames, 0)
+                                tokens_end = n_decoded_tokens + self.streaming_frames_per_chunk + self.streaming_lookforward + self.streaming_overlap_frames
+                                
+                                sample_start = (n_decoded_tokens - tokens_start) * self.hop_length
+                                sample_end = sample_start + (self.streaming_frames_per_chunk + 2 * self.streaming_overlap_frames) * self.hop_length
+                                
+                                curr_codes = token_cache[tokens_start:tokens_end]
+                                recon = self._decode("".join(curr_codes))
+                                
+                                # Apply watermark if available
+                                if self.watermarker:
+                                    recon = self.watermarker.apply_watermark(recon, sample_rate=self.sample_rate)
+                                
+                                recon = recon[sample_start:sample_end]
+                                audio_cache.append(recon)
+                                
+                                processed_recon = _linear_overlap_add(audio_cache, stride=self.streaming_stride_samples)
+                                new_samples_end = len(audio_cache) * self.streaming_stride_samples
+                                processed_recon = processed_recon[n_decoded_samples:new_samples_end]
+                                n_decoded_samples = new_samples_end
+                                n_decoded_tokens += self.streaming_frames_per_chunk
+                                yield processed_recon
+                                
+                    except json.JSONDecodeError:
+                        continue
+
+        except Exception as e:
+            print(f"Error streaming chunk: {e}")
+            return
+
+        # Final decoding (Flush remaining tokens)
+        remaining_tokens = len(token_cache) - n_decoded_tokens
+        if remaining_tokens > 0:
+            tokens_start = max(len(token_cache) - (self.streaming_lookback + self.streaming_overlap_frames + remaining_tokens), 0)
+            sample_start = (len(token_cache) - tokens_start - remaining_tokens - self.streaming_overlap_frames) * self.hop_length
+            
+            curr_codes = token_cache[tokens_start:]
+            recon = self._decode("".join(curr_codes))
+            recon = recon[sample_start:]
+            audio_cache.append(recon)
+            
+            processed_recon = _linear_overlap_add(audio_cache, stride=self.streaming_stride_samples)
+            processed_recon = processed_recon[n_decoded_samples:]
+            yield processed_recon
+
+    async def infer_async(self, text: str, ref_audio: str | Path = None, ref_codes: np.ndarray | torch.Tensor = None, ref_text: str = None, max_chars: int = 256, silence_p: float = 0.15, crossfade_p: float = 0.0, voice: dict = None, temperature: float = 1.0, top_k: int = 50, session=None) -> np.ndarray:
+        """
+        Asynchronous inference (Non-blocking I/O).
+        """
+        try:
+            import aiohttp
+        except ImportError:
+            raise ImportError("Async requires 'aiohttp'. Install with: pip install aiohttp")
+
+        if voice is not None:
+            ref_codes = voice.get('codes', ref_codes)
+            ref_text = voice.get('text', ref_text)
+        
+        # Auto-encode ref_audio locally if provided
+        if ref_audio is not None and ref_codes is None:
+            ref_codes = self.encode_reference(ref_audio)
+        elif self._default_voice and (ref_codes is None or ref_text is None):
+            try:
+                voice_data = self.get_preset_voice(None)
+                ref_codes = voice_data['codes']
+                ref_text = voice_data['text']
+            except Exception:
+                pass
+
+        if ref_codes is None or ref_text is None:
+             raise ValueError("Must provide either 'voice' dict or both 'ref_codes' and 'ref_text'.")
+
+        chunks = split_text_into_chunks(text, max_chars=max_chars)
+        if not chunks:
+            return np.array([], dtype=np.float32)
+
+        # Handle Session: Use provided or create new one
+        should_close_session = False
+        if session is None:
+            session = aiohttp.ClientSession()
+            should_close_session = True
+
+        try:
+            tasks = []
+            for chunk in chunks:
+                tasks.append(self._infer_chunk_async(session, chunk, ref_codes, ref_text, temperature, top_k))
+            
+            # Process chunks in parallel
+            wavs = await asyncio.gather(*tasks)
+            
+            # Join chunks
+            final_wav = join_audio_chunks(wavs, self.sample_rate, silence_p, crossfade_p)
+            
+            if self.watermarker:
+                final_wav = self.watermarker.apply_watermark(final_wav, sample_rate=self.sample_rate)
+                
+            return final_wav
+            
+        finally:
+            if should_close_session:
+                await session.close()
+    
+    async def _infer_chunk_async(self, session, chunk, ref_codes, ref_text, temperature, top_k):
+        """Internal async helper for a single chunk"""
+        if isinstance(ref_codes, torch.Tensor):
+            ref_codes_list = ref_codes.cpu().numpy().flatten().tolist()
+        elif isinstance(ref_codes, np.ndarray):
+            ref_codes_list = ref_codes.flatten().tolist()
+        else:
+            ref_codes_list = ref_codes
+
+        prompt = self._format_prompt(ref_codes_list, ref_text, chunk)
+        
+        payload = {
+            "model": self.model_name,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 2048,
+            "temperature": temperature,
+            "top_k": top_k,
+            "stop": ["<|SPEECH_GENERATION_END|>"],
+            "stream": False
+        }
+        
+        try:
+            async with session.post(f"{self.api_base}/chat/completions", json=payload, timeout=60) as resp:
+                resp.raise_for_status()
+                data = await resp.json()
+                output_str = data["choices"][0]["message"]["content"]
+                return self._decode(output_str)
+        except Exception as e:
+            print(f"Error in async chunk: {e}")
+            return np.array([], dtype=np.float32)
+
+    async def infer_batch_async(self, texts: list[str], ref_audio: str | Path = None, ref_codes: np.ndarray | torch.Tensor = None, ref_text: str = None, max_chars: int = 256, silence_p: float = 0.15, crossfade_p: float = 0.0, voice: dict = None, temperature: float = 1.0, top_k: int = 50, concurrency_limit: int = 50) -> list[np.ndarray]:
+        """
+        High-performance Asynchronous Batch Inference.
+        """
+        try:
+            import aiohttp
+        except ImportError:
+            raise ImportError("Async requires 'aiohttp'. Install with: pip install aiohttp")
+            
+        # Pre-resolve voice refs once
+        if voice is not None:
+            ref_codes = voice.get('codes', ref_codes)
+            ref_text = voice.get('text', ref_text)
+            
+        if ref_audio is not None and ref_codes is None:
+            ref_codes = self.encode_reference(ref_audio)
+        elif self._default_voice and (ref_codes is None or ref_text is None):
+            try:
+                voice_data = self.get_preset_voice(None)
+                ref_codes = voice_data['codes']
+                ref_text = voice_data['text']
+            except Exception:
+                pass
+                
+        if ref_codes is None or ref_text is None:
+             raise ValueError("Must provide either 'voice' dict or both 'ref_codes' and 'ref_text'.")
+
+        # Use Semaphore to control concurrency
+        sem = asyncio.Semaphore(concurrency_limit)
+        
+        async with aiohttp.ClientSession() as session:
+            async def bounded_infer(text):
+                async with sem:
+                    return await self.infer_async(
+                        text, ref_codes=ref_codes, ref_text=ref_text,
+                        max_chars=max_chars, silence_p=silence_p, crossfade_p=crossfade_p,
+                        temperature=temperature, top_k=top_k, 
+                        session=session # Reuse session
+                    )
+            
+            tasks = [bounded_infer(text) for text in texts]
+            results = await asyncio.gather(*tasks)
+            
+        return results
 
 
 def Vieneu(mode="standard", **kwargs):

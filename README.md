@@ -105,6 +105,19 @@ The fastest way to experience VieNeu-TTS is through the Web interface (Gradio).
    ```
    Access the UI at `http://127.0.0.1:7860`.
 
+### ⚡ Real-time Streaming (CPU Optimized)
+VieNeu-TTS supports **ultra-low latency streaming**, allowing audio playback to start before the entire sentence is finished. This is specifically optimized for **CPU-only** devices using the GGUF backend.
+
+*   **Latency:** <300ms for the first chunk on modern i3/i5 CPUs.
+*   **Efficiency:** Uses Q4/Q8 quantization and ONNX-based lightweight codecs.
+*   **Usage:** Perfect for real-time interactive AI assistants.
+
+**Start the dedicated CPU streaming demo:**
+```bash
+uv run web_stream_gguf.py
+```
+Then open `http://localhost:8001` in your browser.
+
 ### 🚀 GGUF GPU Acceleration (Optional) <a name="gguf-gpu"></a>
 If you want to use GGUF models with GPU acceleration (llama-cpp-python), follow these steps:
 

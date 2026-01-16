@@ -17,7 +17,7 @@ def main():
     
     # Replace with your actual LMDeploy server URL
     # Example: 'http://localhost:23333/v1' or a public tunnel URL
-    REMOTE_API_BASE = 'http://bore.pub:31631/v1' # Replace with your actual LMDeploy server URL
+    REMOTE_API_BASE = 'http://bore.pub:34939/v1' # Replace with your actual LMDeploy server URL
     REMOTE_MODEL_ID = "pnnbao-ump/VieNeu-TTS"
 
     # ---------------------------------------------------------
@@ -53,18 +53,21 @@ def main():
     # ---------------------------------------------------------
     if available_voices:
         print("\n--- PART 3: Using Specific Voice ID ---")
-        # Select a voice by its ID (the second element in the tuple)
-        _, my_voice_id = available_voices[1] if len(available_voices) > 1 else available_voices[0]
-        print(f"👤 Selecting voice: {my_voice_id}")
+        # Select a demonstration voice (Index 1 preferred for variety)
+        voice_info = available_voices[1] if len(available_voices) > 1 else available_voices[0]
+        desc, voice_id = voice_info
+        
+        print(f"👤 Synthesis voice: {desc} (ID: {voice_id})")
         
         # Get reference data for this specific voice
-        voice_data = tts.get_preset_voice(my_voice_id)
+        voice_data = tts.get_preset_voice(voice_id)
         
-        test_text = f"Chào bạn, tôi đang nói bằng giọng của bác sĩ Tuyên."
+        test_text = f"Chào bạn, tôi đang nói bằng giọng của {desc}."
         audio_spec = tts.infer(text=test_text, voice=voice_data)
         
-        tts.save(audio_spec, f"outputs/remote_{my_voice_id}.wav")
-        print(f"💾 Saved {my_voice_id} synthesis to: outputs/remote_{my_voice_id}.wav")
+        save_path = f"outputs/remote_{voice_id}.wav"
+        tts.save(audio_spec, save_path)
+        print(f"💾 Saved synthesis to: {save_path}")
 
     # ---------------------------------------------------------
     # PART 4: REMOTE SPEECH SYNTHESIS (DEFAULT)
@@ -99,9 +102,59 @@ def main():
         print("💾 Saved remote cloned voice to: outputs/remote_cloned_output.wav")
 
     # ---------------------------------------------------------
-    # PART 6: DONE
+    # PART 6: NATIVE ASYNC INFERENCE (High Performance)
     # ---------------------------------------------------------
-    print("\n✅ Remote tasks completed!")
+    print("\n📌 PART 6: Native Async Processing")
+    print("=" * 60)
+    
+    # Define voice for async tasks (Using index 0 as default)
+    if available_voices:
+        _, batch_voice_id = available_voices[0]
+        voice_data_batch = tts.get_preset_voice(batch_voice_id)
+    else:
+        voice_data_batch = None
+
+    try:
+        import asyncio
+        import time
+        
+        async def run_async_examples():
+            print("🚀 Testing Native Async API...")
+            async_batch_texts = [
+                "Sài Gòn trong mắt tôi là những buổi sáng sớm tinh mơ, khi nắng vừa lên và thành phố bắt đầu nhộn nhịp tiếng còi xe, tiếng rao hàng rong âm vang khắp các con hẻm nhỏ.",
+                "Nhắc đến Sài Gòn, người ta không thể quên được hương vị cà phê sữa đá lề đường hay bát hủ tiếu gõ thơm phức, những nét ẩm thực đã trở thành linh hồn của mảnh đất này.",
+                "Dù là một đô thị sầm uất với những tòa cao ốc chọc trời, Sài Gòn vẫn giữ cho mình những góc phố rêu phong, những mái chùa cổ kính thầm lặng chứng kiến dòng thời gian trôi.",
+                "Người Sài Gòn nổi tiếng bao dung và hiếu khách, sẵn sàng dang tay đón nhận những người con từ khắp mọi miền tổ quốc về đây để cùng nhau xây dựng ước mơ và tương lai."
+            ]
+            
+            start_async = time.time()
+            # infer_batch_async maintains order and manages concurrency internally
+            batch_results = await tts.infer_batch_async(
+                async_batch_texts, 
+                voice=voice_data_batch,
+                concurrency_limit=10
+            )
+            
+            elapsed_async = time.time() - start_async
+            print(f"✅ Async Batch completed in {elapsed_async:.2f}s")
+            
+            for i, wav in enumerate(batch_results):
+                tts.save(wav, f"outputs/remote_native_batch_async_{i}.wav")
+            print(f"💾 Saved {len(batch_results)} async batch files.")
+
+        # Run the async loop
+        asyncio.run(run_async_examples())
+        
+    except ImportError:
+        print("⚠️  aiohttp not installed. Please run: pip install aiohttp")
+    except Exception as e:
+        print(f"⚠️  Async example error: {e}")
+
+    # ---------------------------------------------------------
+    # PART 7: DONE
+    # ---------------------------------------------------------
+    print("\n✅ All remote tasks completed!")
+    print("📁 Check the 'outputs/' folder for generated files.")
 
 if __name__ == "__main__":
     main()
