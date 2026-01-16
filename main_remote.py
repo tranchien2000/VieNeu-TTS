@@ -1,5 +1,5 @@
 """
-VieNeu-TTS SDK Example: Remote Mode (Fast API Client)
+VieNeu-TTS SDK Example: Remote Mode
 Version: 1.1.3
 """
 
@@ -54,7 +54,7 @@ def main():
     if available_voices:
         print("\n--- PART 3: Using Specific Voice ID ---")
         # Select a voice by its ID (the second element in the tuple)
-        _, my_voice_id = available_voices[1] 
+        _, my_voice_id = available_voices[1] if len(available_voices) > 1 else available_voices[0]
         print(f"👤 Selecting voice: {my_voice_id}")
         
         # Get reference data for this specific voice
