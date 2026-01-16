@@ -1,6 +1,6 @@
 """
 VieNeu-TTS SDK Example: Remote Mode
-Version: 1.1.3
+Version: 1.1.6
 """
 
 from vieneu import Vieneu
