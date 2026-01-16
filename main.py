@@ -11,7 +11,6 @@ import os
 def main():
     print("🚀 Initializing local VieNeu engine...")
     
-    # Ensuring output directory exists
     os.makedirs("outputs", exist_ok=True)
     
     # ---------------------------------------------------------
@@ -23,7 +22,7 @@ def main():
     tts = Vieneu()
     
     # Optional: If you want to force use a specific PyTorch model:
-    # tts = Vieneu(backbone_repo="pnnbao-ump/VieNeu-TTS-0.3B", codec_repo="neuphonic/distill-neucodec", backbone_device="cuda")
+    # tts = Vieneu(backbone_repo="pnnbao-ump/VieNeu-TTS-0.3B", codec_repo="neuphonic/distill-neucodec", backbone_device="cuda", codec_device="cuda")
 
     # ---------------------------------------------------------
     # PART 2: LIST PRESET VOICES
@@ -43,7 +42,6 @@ def main():
     if available_voices:
         print("\n--- PART 3: Using Specific Voice ID ---")
         # Example: Select Tuyên (nam miền Bắc) - usually ID is 'Tuyen'
-        # We index [1] based on your Remote Example
         _, my_voice_id = available_voices[1] if len(available_voices) > 1 else available_voices[0]
         print(f"👤 Selecting voice: {my_voice_id}")
         
@@ -71,7 +69,7 @@ def main():
     # ---------------------------------------------------------
     # PART 5: ZERO-SHOT VOICE CLONING (LOCAL)
     # ---------------------------------------------------------
-    # You can clone any voice using a short audio sample (5-10s) and its transcript
+    # You can clone any voice using a short audio sample (3-5s) and its transcript
     ref_audio = "examples/audio_ref/example_ngoc_huyen.wav"
     ref_text = "Tác phẩm dự thi bảo đảm tính khoa học, tính đảng, tính chiến đấu, tính định hướng."
     
