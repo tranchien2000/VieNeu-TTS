@@ -76,6 +76,7 @@ VieNeu-TTS delivers production-ready speech synthesis fully offline.
   - **Windows:** Download the `.msi` from [eSpeak NG Releases](https://github.com/espeak-ng/espeak-ng/releases).
   - **macOS:** `brew install espeak`
   - **Ubuntu/Debian:** `sudo apt install espeak-ng`
+  - **Amazon Linux: Fedora**: `sudo dnf install espeak`
 - **NVIDIA GPU (Optional):** For maximum speed via LMDeploy or GGUF GPU acceleration.
   - Requires **NVIDIA Driver >= 570.65** (CUDA 12.8+) or higher.
   - For **LMDeploy**, it is recommended to have the [NVIDIA GPU Computing Toolkit](https://developer.nvidia.com/cuda-downloads) installed.
