@@ -259,7 +259,8 @@ docker run --gpus all \
 ## 🎯 4. Custom Models (LoRA, GGUF, Finetune) <a name="custom-models"></a>
 
 VieNeu-TTS allows you to load custom models directly from HuggingFace or local paths via the Web UI.
-👉 See the detailed guide at: **[docs/CUSTOM_MODEL_USAGE.md](docs/CUSTOM_MODEL_USAGE.md)**
+
+*👉 See the detailed guide at: **[docs/CUSTOM_MODEL_USAGE.md](docs/CUSTOM_MODEL_USAGE.md)***
 
 ---
 
