@@ -50,12 +50,9 @@ VieNeu-TTS delivers production-ready speech synthesis fully offline.
 
 ## 🦜 1. Installation & Web UI <a name="installation"></a>
 
-> ⚡ **Quick Start (Choose One)**
->
+> ⚡ **Quick Start**  
 > ℹ️ This is the fastest way to get started.  
-> For **full installation options, system requirements, and advanced setups**, see the sections below.
->
-> **Option A — Run Locally (3 minutes)**
+> For **streaming inference, SDK integration, Docker deployment, and advanced setups**, see the sections below.
 > ```bash
 > git clone https://github.com/pnnbao97/VieNeu-TTS.git
 > cd VieNeu-TTS
@@ -63,12 +60,6 @@ VieNeu-TTS delivers production-ready speech synthesis fully offline.
 > uv run gradio_app.py
 > ```
 > Open `http://127.0.0.1:7860` and start generating speech.
->
-> ---
->
-> **Option B — Google Colab (No Setup · ~2 minutes)**
->
-> 👉 **[Open in Google Colab](https://colab.research.google.com/drive/1V1DjG-KdmurCAhvXrxxTLsa9tteDxSVO?usp=sharing)**
 
 
 ### System Requirements
