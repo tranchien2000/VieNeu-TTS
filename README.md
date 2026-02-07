@@ -49,6 +49,7 @@ VieNeu-TTS delivers production-ready speech synthesis fully offline.
 ---
 
 ## 🦜 1. Installation & Web UI <a name="installation"></a>
+> **Intel Arc GPU installation (Optional):** Using PyTorch 2.11 with XPU support. Read the Intel Arc GPU section below. Tested on Arc B580 and A770 on window.
 
 > ⚡ **Quick Start**  
 > ℹ️ This is the fastest way to get started.  
@@ -115,6 +116,18 @@ VieNeu-TTS delivers production-ready speech synthesis fully offline.
    uv run gradio_app.py
    ```
    Access the UI at `http://127.0.0.1:7860`.
+
+### Installation for Intel Arc GPU: 
+1. **Clone the Repo:**
+   ```bash
+   git clone https://github.com/pnnbao97/VieNeu-TTS.git
+   cd VieNeu-TTS
+   ```
+2. **Environment and dependencies setup with `uv` (Recommended):**
+  - run setup_xpu_uv.bat
+3. **Start the Web UI:**
+  - run run_xpu.bat
+  Access the UI at `http://127.0.0.1:7860`.
 
 ### ⚡ Real-time Streaming (CPU Optimized)
 VieNeu-TTS supports **ultra-low latency streaming**, allowing audio playback to start before the entire sentence is finished. This is specifically optimized for **CPU-only** devices using the GGUF backend.
