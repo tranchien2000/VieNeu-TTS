@@ -8,6 +8,7 @@ wheels/
 
 # Virtual environments
 .venv
+.xpu_venv
 outputs/
 .env
 
