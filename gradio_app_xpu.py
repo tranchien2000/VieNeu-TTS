@@ -109,7 +109,7 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
     model_loaded = False 
     
     yield (
-        "⏳ Đang tải model lên Intel XPU... Lưu ý: Lần đầu tải model XPU sẽ cần vài phút để biên dịch (warmup).",
+        "⏳ Đang tải model lên Intel XPU... Vui lòng chờ trong giây lát...",
         gr.update(interactive=False), gr.update(interactive=False), gr.update(interactive=False),
         gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
     )
@@ -666,8 +666,8 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS (XPU)", head=head_html) a
                     ⚡ Chế độ tối ưu hóa cho Intel Arc GPU (XPU)
                 </div>
                 <div class="warning-banner-content">
-                    Ứng dụng đang chạy trên engine tối ưu hóa riêng cho card đồ họa Intel (PyTorch XPU).<br>
-                    Lần tạo giọng nói <b>đầu tiên</b> (hoặc sau khi tải model mới) sẽ mất 1-2 phút để PyTorch compile kernel. Các lần tiếp theo tốc độ sẽ được tối ưu hoàn toàn.
+                    Ứng dụng đang chạy trên pytorch nightly tối ưu hóa riêng cho card đồ họa Intel (PyTorch XPU).<br>
+                    Lần tạo giọng nói <b>đầu tiên</b> (hoặc sau khi tải model mới) sẽ lâu hơn 1 chút. Các lần tiếp theo tốc độ sẽ được tối ưu.
                 </div>
             </div>
             """)

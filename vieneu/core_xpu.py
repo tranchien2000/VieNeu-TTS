@@ -4,7 +4,7 @@ import librosa
 import numpy as np
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from neucodec import NeuCodec, DistillNeuCodec
-from core import VieNeuTTS
+from .core import VieNeuTTS
 
 
 class XPUVieNeuTTS(VieNeuTTS):
