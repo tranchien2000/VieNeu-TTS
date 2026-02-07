@@ -273,6 +273,7 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
 
 def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: str, 
                       mode_tab: str, generation_mode: str,
+                      use_batch: bool, max_batch_size_run: int, # Added as decoys
                       temperature: float, max_chars_chunk: int):
     """Synthesis using XPU logic (Sequential generation with autocast)"""
     global tts, current_backbone, current_codec, model_loaded
@@ -325,6 +326,7 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
     
     # === STANDARD MODE ===
     if generation_mode == "Standard (Một lần)":
+        # Note: use_batch and max_batch_size_run are available here but currently ignored/decoy
         yield None, f"🚀 Bắt đầu tổng hợp trên Intel XPU ({total_chunks} đoạn)..."
         
         all_wavs = []
@@ -712,6 +714,21 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS (XPU)", head=head_html) a
                     value="Standard (Một lần)",
                     label="Chế độ sinh"
                 )
+
+                with gr.Row():
+                    use_batch = gr.Checkbox(
+                        value=True, 
+                        label="⚡ Batch Processing",
+                        info="Xử lý nhiều đoạn cùng lúc (Hiện tại là Decoy trên XPU - chưa hoạt động)"
+                    )
+                    max_batch_size_run = gr.Slider(
+                        minimum=1, 
+                        maximum=16, 
+                        value=4, 
+                        step=1, 
+                        label="📊 Batch Size (Generation)",
+                        info="Số lượng đoạn văn bản xử lý cùng lúc (Decoy)."
+                    )
                 
                 with gr.Accordion("⚙️ Cài đặt nâng cao (Generation)", open=False):
                     with gr.Row():
@@ -799,7 +816,8 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS (XPU)", head=head_html) a
         generate_event = btn_generate.click(
             fn=synthesize_speech,
             inputs=[text_input, voice_select, custom_audio, custom_text, current_mode_state, 
-                    generation_mode, temperature_slider, max_chars_chunk_slider],
+                    generation_mode, use_batch, max_batch_size_run,
+                    temperature_slider, max_chars_chunk_slider],
             outputs=[audio_output, status_output]
         )
         
