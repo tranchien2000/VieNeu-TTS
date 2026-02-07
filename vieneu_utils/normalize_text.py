@@ -48,7 +48,7 @@ class VietnameseTTSNormalizer:
         """Main normalization pipeline with EN tag protection."""
         # Step 1: Extract and protect EN tags
         en_contents = []
-        placeholder_pattern = "___EN_PLACEHOLDER_{}___ "
+        placeholder_pattern = "___EN_PLACEHOLDER_{}___"
         
         def extract_en(match):
             en_contents.append(match.group(0))
