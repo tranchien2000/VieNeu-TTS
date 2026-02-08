@@ -774,7 +774,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS (XPU)", head=head_html) a
                     use_batch = gr.Checkbox(
                         value=True, 
                         label="⚡ Batch Processing",
-                        info="Xử lý nhiều đoạn cùng lúc (Hiện tại là Decoy trên XPU - chưa hoạt động)"
+                        info="Xử lý nhiều đoạn cùng lúc. Nên luôn chọn bật để tăng tốc độ."
                     )
                     max_batch_size_run = gr.Slider(
                         minimum=1, 
@@ -782,7 +782,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS (XPU)", head=head_html) a
                         value=128, 
                         step=1, 
                         label="📊 Batch Size (Generation)",
-                        info="Số lượng đoạn văn bản xử lý cùng lúc (Decoy)."
+                        info="Số lượng đoạn văn bản xử lý cùng lúc. Càng lớn thì xử lý càng nhanh. Thông thường 128 chunks với 64 chars hết 7gb vram."
                     )
                 
                 with gr.Accordion("⚙️ Cài đặt nâng cao (Generation)", open=False):
@@ -795,7 +795,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS (XPU)", head=head_html) a
                         max_chars_chunk_slider = gr.Slider(
                             minimum=64, maximum=512, value=128, step=16,
                             label="📝 Max Chars per Chunk",
-                            info="Độ dài tối đa mỗi đoạn xử lý."
+                            info="Độ dài tối đa mỗi đoạn xử lý. Càng nhỏ thì xử lý càng nhanh nếu tăng số Batch Size lên."
                         )
                 
                 current_mode_state = gr.State("preset_mode")
