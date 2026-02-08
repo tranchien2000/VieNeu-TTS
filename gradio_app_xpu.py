@@ -1,6 +1,15 @@
 import os
 import sys
 import subprocess
+
+# --- Add XPU dll path ---
+intel_dll_path = os.path.join(sys.prefix, 'Library', 'bin')
+
+if os.path.exists(intel_dll_path):
+    os.environ['PATH'] = intel_dll_path + os.pathsep + os.environ['PATH']
+else:
+    print(f"⚠️ Không tìm thấy thư mục DLL Intel XPU: {intel_dll_path}")
+    
 import torch
 import gradio as gr
 import soundfile as sf
