@@ -346,7 +346,7 @@ Check [docs/Deploy.md](docs/Deploy.md) for more details.
 
 - **Hugging Face:** [pnnbao-ump](https://huggingface.co/pnnbao-ump)
 - **Discord:** [Join our community](https://discord.gg/yJt8kzjzWZ)
-- **Facebook:** [Pham Nguyen Ngoc Bao](https://www.facebook.com/bao.phamnguyenngoc.5)
+- **Facebook:** [Pham Nguyen Ngoc Bao](https://www.facebook.com/pnnbao97)
 - **Licensing:** 
   - **VieNeu-TTS (0.5B):** Apache 2.0 (Free to use).
   - **VieNeu-TTS-0.3B:** CC BY-NC 4.0 (Non-commercial).
