@@ -623,7 +623,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS (XPU)", head=head_html) a
         </div>
         <div class="model-card-item">
             <strong>Tác giả:</strong>
-            <a href="https://www.facebook.com/bao.phamnguyenngoc.5" target="_blank" class="model-card-link">Phạm Nguyễn Ngọc Bảo</a>
+            <a href="https://www.facebook.com/pnnbao97" target="_blank" class="model-card-link">Phạm Nguyễn Ngọc Bảo</a>
         </div>
         <div class="model-card-item">
             <strong>Discord:</strong>
