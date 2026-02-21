@@ -21,7 +21,7 @@ _measurement_key_vi = {
 }
 
 _currency_key = {
-    "usd": "đô la", "vnd": "đồng", "đ": "đồng", "euro": "ơ rô", "%": "phần trăm"
+    "usd": "đô la Mỹ", "vnd": "đồng", "đ": "đồng", "euro": "ơ rô", "%": "phần trăm"
 }
 
 _letter_key_vi = {
@@ -51,29 +51,35 @@ def _strip_dot_sep(num_str):
     return num_str
 
 def expand_measurement(text):
+    magnitude_p = r"\s*(tỷ|triệu|nghìn|ngàn)?\s*"
     def _repl(m, full):
         num = _strip_dot_sep(m.group(1))
-        return f"{n2w(num)} {full}"
+        mag = m.group(2) if m.group(2) else ""
+        return f"{n2w(num)} {mag} {full}".replace("  ", " ").strip()
     
     for unit, full in _measurement_key_vi.items():
         if len(unit) == 1:
-            pattern = rf"((?:\d+\.)*\d+)\s*{unit}\b"
+            pattern = rf"\b((?:\d+\.)*\d+){magnitude_p}{unit}\b"
             text = re.sub(pattern, lambda m, f=full: _repl(m, f), text)
         else:
-            pattern = rf"((?:\d+\.)*\d+)\s*{unit}\b"
+            pattern = rf"\b((?:\d+\.)*\d+){magnitude_p}{unit}\b"
             text = re.sub(pattern, lambda m, f=full: _repl(m, f), text, flags=re.IGNORECASE)
     return text
 
 def expand_currency(text):
+    magnitude_p = r"\s*(tỷ|triệu|nghìn|ngàn)?\s*"
     def _repl(m, full):
         num = _strip_dot_sep(m.group(1))
-        return f"{n2w(num)} {full}"
-    text = re.sub(r"\$\s*((\d+\.)*\d+)", lambda m: f"{n2w(_strip_dot_sep(m.group(1)))} đô la", text)
-    text = re.sub(r"((\d+\.)*\d+)\s*\$", lambda m: f"{n2w(_strip_dot_sep(m.group(1)))} đô la", text)
-    text = re.sub(r"((\d+\.)*\d+)\s*%", lambda m: f"{n2w(_strip_dot_sep(m.group(1)))} phần trăm", text)
+        mag = m.group(2) if m.group(2) else ""
+        return f"{n2w(num)} {mag} {full}".replace("  ", " ").strip()
+        
+    text = re.sub(rf"\$\s*((?:\d+\.)*\d+){magnitude_p}", lambda m: f"{n2w(_strip_dot_sep(m.group(1)))} {m.group(2) if m.group(2) else ''} đô la Mỹ".replace("  ", " ").strip(), text)
+    text = re.sub(rf"((?:\d+\.)*\d+){magnitude_p}\$", lambda m: f"{n2w(_strip_dot_sep(m.group(1)))} {m.group(2) if m.group(2) else ''} đô la Mỹ".replace("  ", " ").strip(), text)
+    text = re.sub(r"((?:\d+\.)*\d+)\s*%", lambda m: f"{n2w(_strip_dot_sep(m.group(1)))} phần trăm", text)
+    
     for unit, full in _currency_key.items():
         if unit == "%": continue
-        text = re.sub(rf"\b((\d+\.)*\d+)\s*{unit}\b", lambda m, f=full: _repl(m, f), text, flags=re.IGNORECASE)
+        text = re.sub(rf"\b((?:\d+\.)*\d+){magnitude_p}{unit}\b", lambda m, f=full: _repl(m, f), text, flags=re.IGNORECASE)
     return text
 
 def expand_compound_units(text):

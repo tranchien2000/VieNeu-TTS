@@ -96,6 +96,8 @@ def n2w_large_number(numbers: str):
 def n2w(number: str):
     clean_number = pre_process_n2w(number)
     if not clean_number: return str(number)
+    if len(clean_number) == 2 and clean_number[0] == '0':
+        return f"không {units[clean_number[1]]}"
     return n2w_large_number(clean_number)
 
 def n2w_single(number: str):

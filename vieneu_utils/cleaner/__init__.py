@@ -20,8 +20,11 @@ def clean_vietnamese_text(text):
     def _expand_float(m):
         int_part = n2w(m.group(1))
         dec_part = n2w(m.group(2))
-        return f"{int_part} phẩy {dec_part}"
-    text = re.sub(r'\b(\d+),(\d+)\b', _expand_float, text)
+        res = f"{int_part} phẩy {dec_part}"
+        if m.group(3):
+            res += " phần trăm"
+        return res
+    text = re.sub(r'\b(\d+),(\d+)(%)?', _expand_float, text)
     
     def _strip_dot_sep(m):
         return m.group(0).replace('.', '')

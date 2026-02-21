@@ -78,28 +78,34 @@ test_groups = {
     ],
 
     "Ngày tháng không hợp lệ (phải giữ nguyên)": [
-        ("32/01", "ba mươi hai lẻ một"),
-        ("01/13", "lẻ một mười ba"),
+        ("32/01", "ba mươi hai không một"),
+        ("01/13", "không một mười ba"),
     ],
 
     # ─── 7. THỜI GIAN ─────────────────────────────────────────────────────────
     "Thời gian": [
         ("14h30",   "mười bốn giờ ba mươi phút"),
-        ("8h05",    "tám giờ lẻ năm phút"),
+        ("8h05",    "tám giờ không năm phút"),
         ("0h00",    "không giờ không phút"),
         ("23:59",   "hai mươi ba giờ năm mươi chín phút"),
         ("12:00:00","mười hai giờ không phút không giây"),
+        ("10:20 phút", "mười giờ hai mươi phút"),
+        ("12:00:00 giây", "mười hai giờ không phút không giây"),
     ],
 
     # ─── 8. TIỀN TỆ ──────────────────────────────────────────────────────────
     "Tiền tệ": [
-        ("100$",   "một trăm đô la"),
-        ("$50",    "năm mươi đô la"),
-        ("200 USD","hai trăm đô la"),
+        ("100$",   "một trăm đô la Mỹ"),
+        ("$50",    "năm mươi đô la Mỹ"),
+        ("200 USD","hai trăm đô la Mỹ"),
         ("500 VND","năm trăm đồng"),
         ("50 euro","năm mươi ơ rô"),
         ("1000đ",  "một nghìn đồng"),
         ("75%",    "bảy mươi lăm phần trăm"),
+        ("15,4% xuống còn 8,3%", "mười lăm phẩy bốn phần trăm xuống còn tám phẩy ba phần trăm"),
+        ("370 tỷ USD", "ba trăm bảy mươi tỷ đô la Mỹ"),
+        ("5 triệu VND", "năm triệu đồng"),
+        ("10 nghìn USD", "mười nghìn đô la Mỹ"),
     ],
 
     # ─── 9. ĐƠN VỊ ĐO LƯỜNG ─────────────────────────────────────────────────
@@ -116,6 +122,7 @@ test_groups = {
         ("50m2",  "năm mươi mét vuông"),
         ("20m3",  "hai mươi mét khối"),
         ("300.000km", "ba trăm nghìn ki lô mét"),
+        ("5 triệu km", "năm triệu ki lô mét"),
     ],
 
     # ─── 10. SỐ LA MÃ ────────────────────────────────────────────────────────
@@ -181,9 +188,10 @@ test_groups = {
     # ─── 16. TRƯỜNG HỢP HỖN HỢP ──────────────────────────────────────────────
     "Hỗn hợp": [
         ("Ngày 21/02/2025 lúc 14h30, giá vàng đạt 100$ tại TPHCM",
-         "ngày hai mươi mốt tháng hai năm hai nghìn không trăm hai mươi lăm lúc mười bốn giờ ba mươi phút, giá vàng đạt một trăm đô la tại thành phố hồ chí minh"),
+         "ngày hai mươi mốt tháng hai năm hai nghìn không trăm hai mươi lăm lúc mười bốn giờ ba mươi phút, giá vàng đạt một trăm đô la Mỹ tại thành phố hồ chí minh"),
         ("Thế kỷ XXI chứng kiến sự phát triển của <en>AI</en> và vũ trụ học",
          "thế kỷ hai mươi mốt chứng kiến sự phát triển của <en>AI</en> và vũ trụ học"),
+        ("Đề án 06 và Chỉ thị 04", "đề án không sáu và chỉ thị không bốn"),
     ],
 }
 

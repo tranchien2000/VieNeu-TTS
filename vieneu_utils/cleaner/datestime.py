@@ -9,8 +9,8 @@ _full_date_pattern = r"\b(\d{1,2})" + _date_seperator + r"(\d{1,2})" + _date_sep
 _day_month_pattern = r"\b(\d{1,2})" + _date_seperator + r"(\d{1,2})\b"
 _month_year_pattern = r"\b(\d{1,2})" + _date_seperator + r"(\d{4})\b"
 
-_full_time_pattern = r"\b(\d{1,2})(g|:|h)(\d{1,2})(p|:|m)(\d{1,2})(s|g)?\b"
-_time_pattern = r"\b(\d{1,2})(g|:|h)(\d{1,2})(p|m)?\b"
+_full_time_pattern = r"\b(\d{1,2})(g|:|h)(\d{1,2})(p|:|m)(\d{1,2})(?:\s*(giây|s|g))?\b"
+_time_pattern = r"\b(\d{1,2})(g|:|h)(\d{1,2})(?:\s*(phút|p|m))?\b"
 
 def _is_valid_date(day, month):
     try:
