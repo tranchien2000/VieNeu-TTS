@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [tool.uv]
 index-strategy = "unsafe-best-match"
 required-environments = [
@@ -22,7 +26,7 @@ url = "https://pypi.org/simple"
 
 [project]
 name = "vieneu"
-version = "1.1.7"
+version = "1.1.9"
 description = "Advanced on-device Vietnamese TTS with instant voice cloning"
 readme = "README_PYPI.md"
 license = { file = "LICENSE" }
@@ -92,8 +96,8 @@ gpu = [
     "accelerate; sys_platform == 'darwin'",
 ]
 
-[tool.setuptools]
-packages = ["vieneu", "vieneu_utils"]
+[tool.setuptools.packages.find]
+include = ["vieneu*", "vieneu_utils*"]
 
 [tool.setuptools.package-data]
 vieneu_utils = ["*.json"]
