@@ -24,6 +24,16 @@ explicit = true
 name = "pypi"
 url = "https://pypi.org/simple"
 
+[[tool.uv.index]]
+name = "llama-cpp-metal"
+url = "https://abetlen.github.io/llama-cpp-python/whl/metal/"
+explicit = true
+
+[[tool.uv.index]]
+name = "llama-cpp-win-cpu"
+url = "https://pnnbao97.github.io/llama-cpp-python-v0.3.16/cpu/"
+explicit = true
+
 [project]
 name = "vieneu"
 version = "1.2.1"
@@ -122,6 +132,7 @@ lmdeploy = [
 ]
 
 llama-cpp-python = [
-    { url = "https://github.com/pnnbao97/VieNeu-TTS/releases/download/wheels-v0.3.16/llama_cpp_python-0.3.16-cp312-cp312-win_amd64.whl", marker = "sys_platform == 'win32' and python_version == '3.12'" },
-    { index = "pypi", marker = "sys_platform != 'win32'" }
+    { index = "llama-cpp-win-cpu", marker = "sys_platform == 'win32'" },
+    { index = "llama-cpp-metal", marker = "sys_platform == 'darwin'" },
+    { index = "pypi", marker = "sys_platform != 'win32' and sys_platform != 'darwin'" }
 ]

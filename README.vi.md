@@ -127,10 +127,17 @@ Tích hợp VieNeu-TTS vào các dự án phần mềm của riêng bạn.
 
 ### Cài đặt nhanh
 ```bash
-# Windows (Tránh lỗi build llama-cpp)
+# Cách 1: Khuyến nghị (Tự động xử lý tăng tốc phần cứng)
+uv pip install vieneu
+
+# Cách 2: Dùng pip truyền thống (Phải chỉ định index thủ công)
+# Cho Windows (Tối ưu CPU):
 pip install vieneu --extra-index-url https://pnnbao97.github.io/llama-cpp-python-v0.3.16/cpu/
 
-# Linux / MacOS
+# Cho macOS (Tối ưu Metal GPU):
+pip install vieneu --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/metal/
+
+# Cho Linux / Phổ thông:
 pip install vieneu
 ```
 
