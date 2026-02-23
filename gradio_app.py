@@ -656,7 +656,8 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                     ref_codes=ref_codes, 
                     ref_text=ref_text_raw,
                     max_batch_size=max_batch_size_run,
-                    temperature=temperature
+                    temperature=temperature,
+                    skip_normalize=True
                 )
                 
                 for chunk_wav in chunk_wavs:

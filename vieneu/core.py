@@ -1225,7 +1225,7 @@ class FastVieNeuTTS:
             wav = self._decode(responses[0].text)
         else:
             # Multiple chunks: use batching for parallel generation
-            all_wavs = self.infer_batch(chunks, ref_codes, ref_text, voice=voice, temperature=temperature, top_k=top_k)
+            all_wavs = self.infer_batch(chunks, ref_codes, ref_text, voice=voice, temperature=temperature, top_k=top_k, skip_normalize=True)
             wav = join_audio_chunks(all_wavs, self.sample_rate, silence_p, crossfade_p)
 
         # Apply watermark if available
@@ -1234,10 +1234,13 @@ class FastVieNeuTTS:
             
         return wav
     
-    def infer_batch(self, texts: list[str], ref_codes: np.ndarray | torch.Tensor = None, ref_text: str = None, max_batch_size: int = None, voice: dict = None, temperature: float = 1.0, top_k: int = 50) -> list[np.ndarray]:
+    def infer_batch(self, texts: list[str], ref_codes: np.ndarray | torch.Tensor = None, ref_text: str = None, max_batch_size: int = None, voice: dict = None, temperature: float = 1.0, top_k: int = 50, skip_normalize: bool = False) -> list[np.ndarray]:
         """
         Batch inference for multiple texts.
         """
+        if not skip_normalize:
+            texts = [self.normalizer.normalize(t) for t in texts]
+
         if max_batch_size is None:
             max_batch_size = self.max_batch_size
 
@@ -1728,7 +1731,7 @@ class RemoteVieNeuTTS(VieNeuTTS):
             processed_recon = processed_recon[n_decoded_samples:]
             yield processed_recon
 
-    async def infer_async(self, text: str, ref_audio: str | Path = None, ref_codes: np.ndarray | torch.Tensor = None, ref_text: str = None, max_chars: int = 256, silence_p: float = 0.15, crossfade_p: float = 0.0, voice: dict = None, temperature: float = 1.0, top_k: int = 50, session=None) -> np.ndarray:
+    async def infer_async(self, text: str, ref_audio: str | Path = None, ref_codes: np.ndarray | torch.Tensor = None, ref_text: str = None, max_chars: int = 256, silence_p: float = 0.15, crossfade_p: float = 0.0, voice: dict = None, temperature: float = 1.0, top_k: int = 50, session=None, skip_normalize: bool = False) -> np.ndarray:
         """
         Asynchronous inference (Non-blocking I/O).
         """
@@ -1754,6 +1757,10 @@ class RemoteVieNeuTTS(VieNeuTTS):
 
         if ref_codes is None or ref_text is None:
              raise ValueError("Must provide either 'voice' dict or both 'ref_codes' and 'ref_text'.")
+
+        # Normalize text BEFORE chunking (skip if caller already normalized)
+        if not skip_normalize:
+            text = self.normalizer.normalize(text)
 
         chunks = split_text_into_chunks(text, max_chars=max_chars)
         if not chunks:
@@ -1816,7 +1823,7 @@ class RemoteVieNeuTTS(VieNeuTTS):
             print(f"Error in async chunk: {e}")
             return np.array([], dtype=np.float32)
 
-    async def infer_batch_async(self, texts: list[str], ref_audio: str | Path = None, ref_codes: np.ndarray | torch.Tensor = None, ref_text: str = None, max_chars: int = 256, silence_p: float = 0.15, crossfade_p: float = 0.0, voice: dict = None, temperature: float = 1.0, top_k: int = 50, concurrency_limit: int = 50) -> list[np.ndarray]:
+    async def infer_batch_async(self, texts: list[str], ref_audio: str | Path = None, ref_codes: np.ndarray | torch.Tensor = None, ref_text: str = None, max_chars: int = 256, silence_p: float = 0.15, crossfade_p: float = 0.0, voice: dict = None, temperature: float = 1.0, top_k: int = 50, concurrency_limit: int = 50, skip_normalize: bool = False) -> list[np.ndarray]:
         """
         High-performance Asynchronous Batch Inference.
         """
@@ -1824,7 +1831,11 @@ class RemoteVieNeuTTS(VieNeuTTS):
             import aiohttp
         except ImportError:
             raise ImportError("Async requires 'aiohttp'. Install with: pip install aiohttp")
-            
+        
+        # Normalize batch
+        if not skip_normalize:
+            texts = [self.normalizer.normalize(t) for t in texts]
+
         # Pre-resolve voice refs once
         if voice is not None:
             ref_codes = voice.get('codes', ref_codes)
@@ -1853,7 +1864,8 @@ class RemoteVieNeuTTS(VieNeuTTS):
                         text, ref_codes=ref_codes, ref_text=ref_text,
                         max_chars=max_chars, silence_p=silence_p, crossfade_p=crossfade_p,
                         temperature=temperature, top_k=top_k, 
-                        session=session # Reuse session
+                        session=session, # Reuse session
+                        skip_normalize=True # Already normalized above
                     )
             
             tasks = [bounded_infer(text) for text in texts]
