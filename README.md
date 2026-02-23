@@ -97,7 +97,6 @@ VieNeu-TTS delivers production-ready speech synthesis fully offline.
     ```bash
     uv sync
     ```
-    *(Optional: See [GGUF GPU Acceleration](#gguf-gpu) if you want to use GGUF models on GPU)*
 
     **Option 2: CPU-ONLY (Lightweight, no CUDA)**
     ```bash
@@ -142,19 +141,6 @@ VieNeu-TTS supports **ultra-low latency streaming**, allowing audio playback to 
 uv run web_stream_gguf.py
 ```
 Then open `http://localhost:8001` in your browser.
-
-### 🚀 GGUF GPU Acceleration (Optional) <a name="gguf-gpu"></a>
-If you want to use GGUF models with GPU acceleration (llama-cpp-python), follow these steps:
-
-#### **Windows Users**
-Run the following command after `uv sync`:
-```bash
-uv pip install "https://github.com/pnnbao97/VieNeu-TTS/releases/download/llama-cpp-python-cu124/llama_cpp_python-0.3.16-cp312-cp312-win_amd64.whl"
-```
-*Note: Requires NVIDIA Driver version **551.61** (CUDA 12.4) or newer.*
-
-#### **Linux / macOS Users**
-Please refer to the official [llama-cpp-python documentation](https://llama-cpp-python.readthedocs.io/en/latest/) for installation instructions specific to your hardware (CUDA, Metal, ROCm).
 
 ---
 
