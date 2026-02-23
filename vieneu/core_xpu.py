@@ -141,7 +141,8 @@ class XPUVieNeuTTS(VieNeuTTS):
             ref_codes: torch.Tensor = None, 
             ref_text: str = None,
             temperature: float = 1.0, 
-            top_k: int = 50
+            top_k: int = 50,
+            skip_normalize: bool = False
             ) -> list[np.ndarray]:
         """
         Thực hiện inference theo batch trên XPU sử dụng thuần PyTorch.
@@ -152,6 +153,9 @@ class XPUVieNeuTTS(VieNeuTTS):
         
         if ref_codes is None or ref_text is None:
             raise ValueError("Phải cung cấp voice hoặc ref_codes và ref_text.")
+
+        if not skip_normalize:
+            texts = [self.normalizer.normalize(t) for t in texts]
 
         # Prepare prompt for each chunk in batch
         batch_prompt_ids = []

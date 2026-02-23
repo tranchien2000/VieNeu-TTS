@@ -362,7 +362,8 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                         texts = batch_chunks,  
                         ref_codes=ref_codes, 
                         ref_text=ref_text_raw,
-                        temperature=temperature
+                        temperature=temperature,
+                        skip_normalize=True
                     )
                     
                     if batch_results is not None and len(batch_results) > 0:
