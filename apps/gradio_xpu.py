@@ -896,7 +896,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS (XPU)", head=head_html) a
             outputs=[model_status, btn_generate, btn_stop]
         )
 
-if __name__ == "__main__":
+def main():
     server_name = os.getenv("GRADIO_SERVER_NAME", "127.0.0.1")
     server_port = int(os.getenv("GRADIO_SERVER_PORT", "7860"))
 
@@ -907,3 +907,6 @@ if __name__ == "__main__":
         share = False
 
     demo.queue().launch(server_name=server_name, server_port=server_port, share=share)
+
+if __name__ == "__main__":
+    main()

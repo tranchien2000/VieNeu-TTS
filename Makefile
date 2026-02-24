@@ -6,7 +6,8 @@ help:
 	@echo "Targets:"
 	@echo "  make check       - check toolchain (python>=3.12, uv, espeak, docker, gpu, .env...)"
 	@echo "  make setup      - setup environment (uv sync)"
-	@echo "  make demo       - run Gradio UI"
+	@echo "  make run        - run Gradio UI (alias for 'make demo')"
+	@echo "  make stream     - run Web Stream UI (CPU GGUF)"
 	@echo "  make docker-gpu - run docker compose --profile gpu (auto-create .env if needed)"
 	@echo "  make clean       - clean artifacts (.venv, cache, ...)"
 	@echo "  make uv          - install uv (standalone)"
@@ -112,7 +113,12 @@ setup-cpu: check-install-prereqs
 	uv sync --no-default-groups
 
 demo:
-	uv run python apps/gradio_main.py
+	uv run vieneu-web
+
+run: demo
+
+stream:
+	uv run vieneu-stream
 
 # --- Docker (auto-create .env if missing) ---
 docker-gpu:
@@ -125,10 +131,10 @@ docker-gpu:
 
 # --- Docker Serve (Remote Mode) ---
 docker-build-serve:
-	docker build -t pnnbao97/vieneu-tts:serve -f docker/Dockerfile.serve .
+	docker build -t pnnbao/vieneu-tts:serve -f docker/Dockerfile.serve .
 
 docker-push-serve:
-	docker push pnnbao97/vieneu-tts:serve
+	docker push pnnbao/vieneu-tts:serve
 
 # --- Environment/version checks ---
 check:

@@ -62,7 +62,7 @@ VieNeu-TTS delivers production-ready speech synthesis fully offline.
 > git clone https://github.com/pnnbao97/VieNeu-TTS.git
 > cd VieNeu-TTS
 > uv sync
-> uv run apps/gradio_main.py
+> uv run vieneu-web
 > ```
 > Open `http://127.0.0.1:7860` and start generating speech.
 
@@ -129,7 +129,7 @@ VieNeu-TTS supports **ultra-low latency streaming**, allowing audio playback to 
 
 **Start the dedicated CPU streaming demo:**
 ```bash
-uv run apps/web_stream.py
+uv run vieneu-stream
 ```
 Then open `http://localhost:8001` in your browser.
 

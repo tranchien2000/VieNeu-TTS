@@ -106,9 +106,16 @@ gpu = [
     "accelerate; sys_platform == 'darwin'",
 ]
 
+[project.scripts]
+vieneu-web = "apps.gradio_main:main"
+vieneu-stream = "apps.web_stream:main"
+
+[tool.setuptools]
+package-dir = {"" = "src", "apps" = "apps", "examples" = "examples"}
+
 [tool.setuptools.packages.find]
-where = ["src"]
-include = ["vieneu*", "vieneu_utils*"]
+where = ["src", "."]
+include = ["vieneu*", "vieneu_utils*", "apps*", "examples*"]
 
 [tool.setuptools.package-data]
 vieneu_utils = ["*.json"]

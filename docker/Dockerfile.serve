@@ -43,6 +43,6 @@ RUN uv sync --no-dev --group gpu
 EXPOSE 23333
 
 # Use Python to run the serve module directly
-ENTRYPOINT ["uv", "run", "python", "vieneu/serve.py"]
+ENTRYPOINT ["uv", "run", "python", "src/vieneu/serve.py"]
 # Default arguments
 CMD ["--model", "pnnbao-ump/VieNeu-TTS", "--tunnel"]

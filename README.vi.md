@@ -107,7 +107,7 @@ Cách nhanh nhất để trải nghiệm VieNeu-TTS là thông qua giao diện W
 
 3. **Khởi chạy Giao diện Web:**
    ```bash
-   uv run apps/gradio_main.py
+   uv run vieneu-web
    ```
    Truy cập giao diện tại `http://127.0.0.1:7860`.
 
@@ -120,7 +120,7 @@ VieNeu-TTS hỗ trợ **truyền phát với độ trễ cực thấp (ultra-low
 
 **Khởi chạy bản demo streaming dành riêng cho CPU:**
 ```bash
-uv run apps/web_stream.py
+uv run vieneu-stream
 ```
 Sau đó mở `http://localhost:8001` trong trình duyệt của bạn.
 

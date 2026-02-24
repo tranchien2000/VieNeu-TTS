@@ -183,6 +183,9 @@ async def stream_audio(text: str, voice_id: str = None):
 
     return StreamingResponse(audio_generator(), media_type="audio/wav")
 
-if __name__ == "__main__":
+def main():
     print("🌍 Open http://localhost:8001 to test GGUF Streaming")
     uvicorn.run(app, host="0.0.0.0", port=8001)
+
+if __name__ == "__main__":
+    main()
