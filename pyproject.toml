@@ -36,7 +36,7 @@ explicit = true
 
 [project]
 name = "vieneu"
-version = "1.2.2"
+version = "1.2.3"
 description = "Advanced on-device Vietnamese TTS with instant voice cloning"
 readme = "README_PYPI.md"
 license = { file = "LICENSE" }
@@ -107,6 +107,7 @@ gpu = [
 ]
 
 [tool.setuptools.packages.find]
+where = ["src"]
 include = ["vieneu*", "vieneu_utils*"]
 
 [tool.setuptools.package-data]

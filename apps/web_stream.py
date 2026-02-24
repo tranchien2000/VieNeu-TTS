@@ -84,7 +84,7 @@ except Exception:
 # UI SERVING
 # ==========================================
 try:
-    with open("client/client.html", "r", encoding="utf-8") as f:
+    with open(os.path.join(os.path.dirname(os.path.dirname(__file__)), "client", "client.html"), "r", encoding="utf-8") as f:
         HTML_CONTENT = f.read()
     HTML_CONTENT = HTML_CONTENT.replace("VieNeu Stream", "VieNeu GGUF (CPU)")
     HTML_CONTENT = HTML_CONTENT.replace("Server: LMDeploy (Remote)", "Server: Local GGUF (CPU)")

@@ -10,6 +10,9 @@ import io
 # Ensure the project root is in sys.path so we can import vieneu_utils
 current_dir = os.path.dirname(os.path.abspath(__file__))
 project_root = os.path.dirname(current_dir)
+src_dir = os.path.join(project_root, "src")
+if src_dir not in sys.path:
+    sys.path.insert(0, src_dir)
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 

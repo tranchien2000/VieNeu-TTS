@@ -31,7 +31,7 @@ try:
         print("⚠️ Không tìm thấy thiết bị Intel XPU (Intel Arc GPU).")
         print("🔄 Đang tự động chuyển hướng sang phiên bản CPU/CUDA (gradio_app.py)...")
         # Chạy file gradio_app.py và truyền tiếp các arguments (nếu có)
-        subprocess.run([sys.executable, "gradio_app.py"] + sys.argv[1:])
+        subprocess.run([sys.executable, os.path.join(os.path.dirname(__file__), "gradio_main.py")] + sys.argv[1:])
         sys.exit(0)
 except ImportError:
     pass
@@ -40,7 +40,7 @@ print("⏳ Đang khởi động VieNeu-TTS (Phiên bản tối ưu cho Intel XPU
 
 
 # --- CONSTANTS & CONFIG ---
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
+CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.yaml")
 try:
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         _config = yaml.safe_load(f) or {}
@@ -758,10 +758,10 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS (XPU)", head=head_html) a
                         custom_text = gr.Textbox(label="Nội dung audio mẫu - vui lòng gõ đúng nội dung của audio mẫu - kể cả dấu câu vì model rất nhạy cảm với dấu câu (.,?!)")
                         gr.Examples(
                             examples=[
-                                [os.path.join("examples", "audio_ref", "example.wav"), "Ví dụ 2. Tính trung bình của dãy số."],
-                                [os.path.join("examples", "audio_ref", "example_2.wav"), "Trên thực tế, các nghi ngờ đã bắt đầu xuất hiện."],
-                                [os.path.join("examples", "audio_ref", "example_3.wav"), "Cậu có nhìn thấy không?"],
-                                [os.path.join("examples", "audio_ref", "example_4.wav"), "Tết là dịp mọi người háo hức đón chào một năm mới với nhiều hy vọng và mong ước."]
+                                [os.path.join(os.path.dirname(os.path.dirname(__file__)), "examples", "audio_ref", "example.wav"), "Ví dụ 2. Tính trung bình của dãy số."],
+                                [os.path.join(os.path.dirname(os.path.dirname(__file__)), "examples", "audio_ref", "example_2.wav"), "Trên thực tế, các nghi ngờ đã bắt đầu xuất hiện."],
+                                [os.path.join(os.path.dirname(os.path.dirname(__file__)), "examples", "audio_ref", "example_3.wav"), "Cậu có nhìn thấy không?"],
+                                [os.path.join(os.path.dirname(os.path.dirname(__file__)), "examples", "audio_ref", "example_4.wav"), "Tết là dịp mọi người háo hức đón chào một năm mới với nhiều hy vọng và mong ước."]
                             ],
                             inputs=[custom_audio, custom_text],
                             label="Ví dụ mẫu để thử nghiệm clone giọng"

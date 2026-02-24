@@ -77,7 +77,7 @@ tts.save(audio, "standard_output.wav")
 print("💾 Saved synthesis to: standard_output.wav")
 ```
 
-*For full implementation details, see [main.py](main.py).*
+*For full implementation details, see [examples/main.py](examples/main.py).*
 
 ---
 
@@ -143,7 +143,7 @@ if os.path.exists("examples/audio_ref/example_ngoc_huyen.wav"):
     print("💾 Saved remote cloned voice to: outputs/remote_cloned_output.wav")
 ```
 
-*For full implementation details, see: [main_remote.py](main_remote.py)*
+*For full implementation details, see: [examples/main_remote.py](examples/main_remote.py)*
 
 ### Voice Preset Specification (v1.0)
 VieNeu-TTS uses the official `vieneu.voice.presets` specification to define reusable voice assets.

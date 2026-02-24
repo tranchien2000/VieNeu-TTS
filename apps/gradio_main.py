@@ -18,7 +18,7 @@ from functools import lru_cache
 import gc
 
 # --- CONSTANTS & CONFIG ---
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
+CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.yaml")
 try:
     with open(CONFIG_PATH, "r", encoding="utf-8") as f:
         _config = yaml.safe_load(f) or {}
@@ -240,7 +240,7 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
             
             if custom_loading and is_merged_lora:
                 safe_name = custom_model_id.strip().replace("/", "_").replace("\\", "_").replace(":", "")
-                cache_dir = os.path.join("merged_models_cache", safe_name)
+                cache_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "merged_models_cache", safe_name)
                 target_backbone_repo = os.path.abspath(cache_dir)
                 
                 # Check if already merged (and voices.json exists)
@@ -1109,10 +1109,10 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                         custom_text = gr.Textbox(label="Nội dung audio mẫu - vui lòng gõ đúng nội dung của audio mẫu - kể cả dấu câu vì model rất nhạy cảm với dấu câu (.,?!)")
                         gr.Examples(
                             examples=[
-                                [os.path.join("examples", "audio_ref", "example.wav"), "Ví dụ 2. Tính trung bình của dãy số."],
-                                [os.path.join("examples", "audio_ref", "example_2.wav"), "Trên thực tế, các nghi ngờ đã bắt đầu xuất hiện."],
-                                [os.path.join("examples", "audio_ref", "example_3.wav"), "Cậu có nhìn thấy không?"],
-                                [os.path.join("examples", "audio_ref", "example_4.wav"), "Tết là dịp mọi người háo hức đón chào một năm mới với nhiều hy vọng và mong ước."]
+                                [os.path.join(os.path.dirname(os.path.dirname(__file__)), "examples", "audio_ref", "example.wav"), "Ví dụ 2. Tính trung bình của dãy số."],
+                                [os.path.join(os.path.dirname(os.path.dirname(__file__)), "examples", "audio_ref", "example_2.wav"), "Trên thực tế, các nghi ngờ đã bắt đầu xuất hiện."],
+                                [os.path.join(os.path.dirname(os.path.dirname(__file__)), "examples", "audio_ref", "example_3.wav"), "Cậu có nhìn thấy không?"],
+                                [os.path.join(os.path.dirname(os.path.dirname(__file__)), "examples", "audio_ref", "example_4.wav"), "Tết là dịp mọi người háo hức đón chào một năm mới với nhiều hy vọng và mong ước."]
                             ],
                             inputs=[custom_audio, custom_text],
                             label="Ví dụ mẫu để thử nghiệm clone giọng"

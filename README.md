@@ -49,7 +49,10 @@ VieNeu-TTS delivers production-ready speech synthesis fully offline.
 ---
 
 ## 🦜 1. Installation & Web UI <a name="installation"></a>
-> **Intel Arc GPU installation (Optional):** Using PyTorch 2.11 with XPU support. Read the Intel Arc GPU section below. Tested on Arc B580 and A770 on window.
+> [!IMPORTANT]
+> **eSpeak NG Required:** You must install eSpeak NG on your system before running VieNeu-TTS. [Jump to eSpeak NG installation](#espeak).
+
+> **Intel Arc GPU installation (Optional):** Using PyTorch 2.11 with XPU support. [For Intel arc gpu user, read the Intel Arc GPU section below](#intel-arc). Tested on Arc B580 and A770 on window.
 > Recommend setting: Intel arc have high memory bandwidth so keep the batch size as high as possible and minimize the number of character per chunk.
 
 > ⚡ **Quick Start**  
@@ -59,13 +62,13 @@ VieNeu-TTS delivers production-ready speech synthesis fully offline.
 > git clone https://github.com/pnnbao97/VieNeu-TTS.git
 > cd VieNeu-TTS
 > uv sync
-> uv run gradio_app.py
+> uv run apps/gradio_main.py
 > ```
 > Open `http://127.0.0.1:7860` and start generating speech.
 
 
 ### System Requirements
-- **eSpeak NG:** Required for phonemization.
+- <a id="espeak"></a>**eSpeak NG:** Required for phonemization.
   - **Windows:** Download the `.msi` from [eSpeak NG Releases](https://github.com/espeak-ng/espeak-ng/releases).
   - **macOS:** `brew install espeak`
   - **Ubuntu/Debian:** `sudo apt install espeak-ng`
@@ -113,11 +116,24 @@ VieNeu-TTS delivers production-ready speech synthesis fully offline.
 
 3. **Start the Web UI:**
    ```bash
-   uv run gradio_app.py
+   uv run apps/gradio_main.py
    ```
    Access the UI at `http://127.0.0.1:7860`.
 
-### Installation for Intel Arc GPU: 
+### ⚡ Real-time Streaming (CPU Optimized)
+VieNeu-TTS supports **ultra-low latency streaming**, allowing audio playback to start before the entire sentence is finished. This is specifically optimized for **CPU-only** devices using the GGUF backend.
+
+*   **Latency:** <300ms for the first chunk on modern i3/i5 CPUs.
+*   **Efficiency:** Uses Q4/Q8 quantization and ONNX-based lightweight codecs.
+*   **Usage:** Perfect for real-time interactive AI assistants.
+
+**Start the dedicated CPU streaming demo:**
+```bash
+uv run apps/web_stream.py
+```
+Then open `http://localhost:8001` in your browser.
+
+### <a id="intel-arc"></a>Intel Arc GPU Users - Installation Guide: 
 1. **Clone the Repo:**
    ```bash
    git clone https://github.com/pnnbao97/VieNeu-TTS.git
@@ -129,18 +145,6 @@ VieNeu-TTS delivers production-ready speech synthesis fully offline.
   - run run_xpu.bat
   Access the UI at `http://127.0.0.1:7860`.
 
-### ⚡ Real-time Streaming (CPU Optimized)
-VieNeu-TTS supports **ultra-low latency streaming**, allowing audio playback to start before the entire sentence is finished. This is specifically optimized for **CPU-only** devices using the GGUF backend.
-
-*   **Latency:** <300ms for the first chunk on modern i3/i5 CPUs.
-*   **Efficiency:** Uses Q4/Q8 quantization and ONNX-based lightweight codecs.
-*   **Usage:** Perfect for real-time interactive AI assistants.
-
-**Start the dedicated CPU streaming demo:**
-```bash
-uv run web_stream_gguf.py
-```
-Then open `http://localhost:8001` in your browser.
 
 ---
 
@@ -179,7 +183,7 @@ tts.save(audio, "standard_output.wav")
 print("💾 Saved synthesis to: standard_output.wav")
 ```
 
-*For full implementation details, see [main.py](main.py).*
+*For full implementation details, see [examples/main.py](examples/main.py).*
 
 ---
 
@@ -245,7 +249,7 @@ if os.path.exists("examples/audio_ref/example_ngoc_huyen.wav"):
     print("💾 Saved remote cloned voice to: outputs/remote_cloned_output.wav")
 ```
 
-*For full implementation details, see: [main_remote.py](main_remote.py)*
+*For full implementation details, see: [examples/main_remote.py](examples/main_remote.py)*
 
 ### Voice Preset Specification (v1.0)
 VieNeu-TTS uses the official `vieneu.voice.presets` specification to define reusable voice assets.
@@ -270,7 +274,7 @@ docker run --gpus all \
   --model /workspace/models/merged_model --tunnel
 ```
 
-*For full implementation details, see: [main_remote.py](main_remote.py)*
+*For full implementation details, see: [examples/main_remote.py](examples/main_remote.py)*
 
 ---
 
@@ -320,7 +324,7 @@ Deploy quickly without manual environment setup.
 
 ```bash
 # Run with GPU (Requires NVIDIA Container Toolkit)
-docker compose --profile gpu up
+docker compose -f docker/docker-compose.yml --profile gpu up
 ```
 Check [docs/Deploy.md](docs/Deploy.md) for more details.
 

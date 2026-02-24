@@ -112,7 +112,7 @@ setup-cpu: check-install-prereqs
 	uv sync --no-default-groups
 
 demo:
-	uv run gradio_app.py
+	uv run python apps/gradio_main.py
 
 # --- Docker (auto-create .env if missing) ---
 docker-gpu:
@@ -121,7 +121,7 @@ docker-gpu:
 	  cp .env.example .env; \
 	  echo ">> Created .env from .env.example"; \
 	fi; \
-	docker compose --profile gpu up
+	docker compose -f docker/docker-compose.yml --profile gpu up
 
 # --- Docker Serve (Remote Mode) ---
 docker-build-serve:

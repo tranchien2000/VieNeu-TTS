@@ -1,4 +1,3 @@
-
 import os
 import sys
 import json
@@ -13,8 +12,10 @@ from transformers import (
 )
 from peft import get_peft_model
 
-# Thêm thư mục gốc vào path để import utils
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# Thêm thư mục gốc và src vào path để import các module nội bộ
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(project_root, "src"))
+sys.path.insert(0, project_root)
 
 from vieneu_utils.phonemize_text import phonemize_with_dict
 from finetune.configs.lora_config import lora_config, training_config, get_training_args

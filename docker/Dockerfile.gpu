@@ -47,5 +47,5 @@ COPY . .
 RUN uv sync --no-dev
 
 EXPOSE 7860
-CMD ["uv", "run", "gradio_app.py", "--server-name", "0.0.0.0", "--server-port", "7860"]
+CMD ["uv", "run", "apps/gradio_main.py", "--server-name", "0.0.0.0", "--server-port", "7860"]
 

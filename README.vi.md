@@ -50,11 +50,16 @@ VieNeu-TTS cung cấp khả năng tổng hợp giọng nói sẵn sàng cho môi
 
 ## 🦜 1. Cài đặt & Giao diện Web <a name="installation"></a>
 
+> [!IMPORTANT]
+> **Bắt buộc cài đặt eSpeak NG:** Bạn phải cài đặt eSpeak NG trước khi chạy VieNeu-TTS. [Xem hướng dẫn cài đặt eSpeak NG tại đây](#espeak).
+
+> **Cài đặt cho Intel Arc GPU (Tùy chọn):** Sử dụng PyTorch 2.11 hỗ trợ XPU. [Dành cho người dùng Intel Arc GPU, xem phần hướng dẫn bên dưới](#intel-arc). Đã thử nghiệm trên Arc B580 và A770 trên Windows.
+
 Cách nhanh nhất để trải nghiệm VieNeu-TTS là thông qua giao diện Web (Gradio).
 
 ### Yêu cầu hệ thống
 - **Python:** 3.12
-- **eSpeak NG:** Cần thiết để xử lý âm vị.
+- <a id="espeak"></a>**eSpeak NG:** Cần thiết để xử lý âm vị.
   - **Windows:** Tải file `.msi` từ [eSpeak NG Releases](https://github.com/espeak-ng/espeak-ng/releases).
   - **macOS:** `brew install espeak`
   - **Ubuntu/Debian:** `sudo apt install espeak-ng`
@@ -102,9 +107,34 @@ Cách nhanh nhất để trải nghiệm VieNeu-TTS là thông qua giao diện W
 
 3. **Khởi chạy Giao diện Web:**
    ```bash
-   uv run gradio_app.py
+   uv run apps/gradio_main.py
    ```
    Truy cập giao diện tại `http://127.0.0.1:7860`.
+
+### ⚡ Real-time Streaming (Tối ưu hóa cho CPU)
+VieNeu-TTS hỗ trợ **truyền phát với độ trễ cực thấp (ultra-low latency streaming)**, cho phép bắt đầu phát âm thanh trước khi toàn bộ câu được xử lý xong. Tính năng này được tối ưu hóa đặc biệt cho các thiết bị **chỉ có CPU** sử dụng backend GGUF.
+
+*   **Độ trễ:** <300ms cho đoạn âm thanh đầu tiên trên CPU i3/i5 hiện đại.
+*   **Hiệu quả:** Sử dụng lượng tử hóa Q4/Q8 và các codec nhẹ dựa trên ONNX.
+*   **Ứng dụng:** Hoàn hảo cho các trợ lý AI tương tác thời gian thực.
+
+**Khởi chạy bản demo streaming dành riêng cho CPU:**
+```bash
+uv run apps/web_stream.py
+```
+Sau đó mở `http://localhost:8001` trong trình duyệt của bạn.
+
+### <a id="intel-arc"></a>Dành cho người dùng Intel Arc GPU - Hướng dẫn cài đặt: 
+1. **Clone Repo:**
+   ```bash
+   git clone https://github.com/pnnbao97/VieNeu-TTS.git
+   cd VieNeu-TTS
+   ```
+2. **Thiết lập môi trường và phụ thuộc bằng `uv` (Khuyến nghị):**
+  - Chạy `setup_xpu_uv.bat`
+3. **Khởi chạy Giao diện Web:**
+  - Chạy `run_xpu.bat`
+  Truy cập giao diện tại `http://127.0.0.1:7860`.
 
 ### 🚀 Tăng tốc GGUF GPU (Tùy chọn) <a name="gguf-gpu"></a>
 Nếu bạn muốn sử dụng mô hình GGUF với tăng tốc GPU (llama-cpp-python), hãy làm theo các bước sau:
@@ -183,7 +213,7 @@ if os.path.exists("examples/audio_ref/example_ngoc_huyen.wav"):
 tts.close()
 ```
 
-*Để biết hướng dẫn đầy đủ về cloning và giọng nói tùy chỉnh, hãy xem [main.py](main.py) và [main_remote.py](main_remote.py).*
+*Để biết hướng dẫn đầy đủ về cloning và giọng nói tùy chỉnh, hãy xem [examples/main.py](examples/main.py) và [examples/main_remote.py](examples/main_remote.py).*
 
 ---
 
@@ -249,7 +279,7 @@ if os.path.exists("examples/audio_ref/example_ngoc_huyen.wav"):
     print("💾 Đã lưu giọng đã clone remote: outputs/remote_cloned_output.wav")
 ```
 
-*Để biết chi tiết triển khai đầy đủ, hãy xem: [main_remote.py](main_remote.py)*
+*Để biết chi tiết triển khai đầy đủ, hãy xem: [examples/main_remote.py](examples/main_remote.py)*
 
 ### 3. Cấu hình nâng cao
 
@@ -323,7 +353,7 @@ Triển khai nhanh chóng mà không cần thiết lập môi trường thủ c�
 
 ```bash
 # Chạy với GPU (Yêu cầu NVIDIA Container Toolkit)
-docker compose --profile gpu up
+docker compose -f docker/docker-compose.yml --profile gpu up
 ```
 Kiểm tra [docs/Deploy.md](docs/Deploy.md) để biết thêm chi tiết.
 

@@ -12,7 +12,7 @@ url = "https://pypi.org/simple"
 
 [project]
 name = "vieneu"
-version = "1.1.5"
+version = "1.2.3"
 description = "Advanced on-device Vietnamese TTS with instant voice cloning"
 readme = "README.md"
 authors = [
@@ -38,8 +38,9 @@ dependencies = [
 "Bug Tracker" = "https://github.com/pnnbao97/VieNeu-TTS/issues"
 "Documentation" = "https://github.com/pnnbao97/VieNeu-TTS/blob/main/README.md"
 
-[tool.setuptools]
-packages = ["vieneu", "vieneu_utils"]
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["vieneu*", "vieneu_utils*"]
 
 [tool.setuptools.package-data]
 vieneu_utils = ["*.json"]
