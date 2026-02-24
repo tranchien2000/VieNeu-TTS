@@ -7,11 +7,11 @@ import sys
 import os
 import io
 
-# Ensure the parent directory is in sys.path so we can import vieneu_utils
+# Ensure the project root is in sys.path so we can import vieneu_utils
 current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
+project_root = os.path.dirname(current_dir)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 from vieneu_utils.normalize_text import VietnameseTTSNormalizer
 
@@ -128,6 +128,7 @@ test_groups = {
         ("5 triệu km", "năm triệu ki lô mét"),
         ("1,5 ha", "một phẩy năm héc ta"),
         ("1.5 ha", "một chấm năm héc ta"),
+        ("AN/ASQ", "an trên asq"),
     ],
 
     # ─── 10. KHOẢNG / DÃY SỐ ──────────────────────────────────────────────────
@@ -196,6 +197,7 @@ test_groups = {
     # ─── 15. CẤU TRÚC VĂN BẢN ──────────────────────────────────────────────
     "Cấu trúc văn bản (Xuống dòng)": [
         ("Đoạn 1.\nĐoạn 2.", "đoạn một.\nđoạn hai."),
+        ("\n12 tiêm kích", "\nmười hai tiêm kích"),
     ],
 
     # ─── 16. VIẾT TẮT ĐƠN GIẢN ──────────────────────────────────────────────
@@ -252,9 +254,9 @@ def run_tests():
         print(f"\n{icon} [{group_name}] — Passed: {group_pass}/{group_pass+group_fail}")
         if fails:
             for input_text, expected, actual in fails:
-                print(f"   Input:    {input_text}")
-                print(f"   Expected: {expected}")
-                print(f"   Actual:   {actual}")
+                print(f"   Input:    {repr(input_text)}")
+                print(f"   Expected: {repr(expected)}")
+                print(f"   Actual:   {repr(actual)}")
 
     print("\n" + "=" * 60)
     print(f"TOTAL: {passed}/{total} passed")
@@ -265,9 +267,16 @@ def run_tests():
     print("=" * 60)
 
 if __name__ == "__main__":
-    results_path = os.path.join(parent_dir, 'test_results.txt')
+    # Results will be printed to stdout and saved to test_results.txt in the same directory
+    results_path = os.path.join(current_dir, 'test_results.txt')
+    
+    # Save a copy as well
     with io.open(results_path, 'w', encoding='utf-8') as f:
-        sys.stdout = f
-        run_tests()
-    sys.stdout = sys.__stdout__
-    print(f"Done. Results saved to {results_path}")
+        # Use a secondary string literal to capture output if needed, but for now just run
+        import contextlib
+        with contextlib.redirect_stdout(f):
+             run_tests()
+    
+    # Also run to console for convenience
+    run_tests()
+    print(f"\nDone. Detailed results also saved to {results_path}")

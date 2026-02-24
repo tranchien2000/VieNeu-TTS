@@ -118,7 +118,7 @@ def expand_compound_units(text):
         u2 = m.group(3).lower()
         full1 = _measurement_key_vi.get(u1, u1)
         full2 = _measurement_key_vi.get(u2, u2)
-        res = f"{full1} trên {full2}"
+        res = f" {full1} trên {full2} "
         if num:
             res = f"{num} {res}"
         return res

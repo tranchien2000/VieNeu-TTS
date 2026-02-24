@@ -24,7 +24,7 @@ _number_combined = (
     + r")"
 )
 
-_number_re    = r"(.)(-{1})?" + _number_combined
+_number_re    = r"(\D)(-{1})?" + _number_combined
 _number_re_start = r"^(-{1})?" + _number_combined
 
 _multiply_re     = r"(" + _normal_number_re + r")(x|\sx\s)(" + _normal_number_re + r")"
@@ -53,7 +53,7 @@ def _expand_number(match):
     return prefix_str + " " + word + " "
 
 def _expand_number_start(match):
-    negative_symbol, number = match.groups(0)
+    negative_symbol, number = match.groups()
     negative = (negative_symbol == "-")
     return _num_to_words(number, negative) + " "
 
@@ -74,6 +74,8 @@ def normalize_number_vi(text):
     text = re.sub(_ordinal_pattern, _expand_ordinal, text)
     text = re.sub(_multiply_re, _expand_multiply_number, text)
     text = re.sub(_phone_re, _expand_phone, text)
-    text = re.sub(_number_re_start, _expand_number_start, text)
+    # 1. Start of string OR start of line (handling newlines preserved by normalization)
+    text = re.sub(_number_re_start, _expand_number_start, text, flags=re.MULTILINE)
+    # 2. Anywhere else (preceded by a non-digit)
     text = re.sub(_number_re, _expand_number, text)
     return text
