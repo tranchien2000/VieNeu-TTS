@@ -24,6 +24,10 @@ def clean_vietnamese_text(text):
     text = normalize_time(text)
 
     text = re.sub(r'(\d+(?:,\d+)?)\s*[–\-—~]\s*(\d+(?:,\d+)?)', r'\1 đến \2', text)
+    
+    # 3. Replace standalone hyphens with commas (for better TTS prosody/pausing)
+    text = re.sub(r'(?<=\s)[–\-—](?=\s)', ',', text)
+    
     text = re.sub(r'\s*(?:->|=>)\s*', ' sang ', text)
 
     # Expand measurements and currencies BEFORE general floats
@@ -51,8 +55,8 @@ def clean_vietnamese_text(text):
     text = expand_standalone_letters(text)
 
     # Collapse redundant punctuation and whitespace
-    # 1. Collapse multiple spaces
-    text = re.sub(r'\s+', ' ', text)
+    # 1. Collapse multiple spaces BUT preserve newlines
+    text = re.sub(r'[ \t\xA0]+', ' ', text)
     # 2. Collapse consecutive commas and handle comma-punctuation pairs
     text = re.sub(r',\s*,', ',', text)
     text = re.sub(r',\s*([.!?;])', r'\1', text)

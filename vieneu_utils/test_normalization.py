@@ -190,9 +190,15 @@ test_groups = {
         ("hiệu lực từ 0h01 (giờ Mỹ), trong vòng", "hiệu lực từ không giờ không một phút, giờ mỹ, trong vòng"),
         ("hiệu lực từ 0h01 (giờ Mỹ) trong vòng", "hiệu lực từ không giờ không một phút, giờ mỹ, trong vòng"),
         ("kết thúc (0h01).", "kết thúc, không giờ không một phút."),
+        ("chỉ số là 7,05 - đường huyết là 1.8", "chỉ số là bảy phẩy không năm, đường huyết là một chấm tám"),
     ],
 
-    # ─── 15. VIẾT TẮT ĐƠN GIẢN ──────────────────────────────────────────────
+    # ─── 15. CẤU TRÚC VĂN BẢN ──────────────────────────────────────────────
+    "Cấu trúc văn bản (Xuống dòng)": [
+        ("Đoạn 1.\nĐoạn 2.", "đoạn một.\nđoạn hai."),
+    ],
+
+    # ─── 16. VIẾT TẮT ĐƠN GIẢN ──────────────────────────────────────────────
     "Viết tắt đơn giản": [
         ("v.v",  "vân vân"),
         ("v/v",  "về việc"),

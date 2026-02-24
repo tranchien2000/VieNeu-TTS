@@ -29,17 +29,17 @@ class VietnameseTTSNormalizer:
         # Step 2: Core Normalization
         text = clean_vietnamese_text(text)
         
-        # Final cleanup
+        # Final cleanup - preserve newlines
         text = text.lower()
-        text = re.sub(r'\s+', ' ', text).strip()
+        text = re.sub(r'[ \t\xA0]+', ' ', text).strip()
         
         # Step 3: Restore EN tags
         for idx, en_content in enumerate(en_contents):
             placeholder = placeholder_pattern.format(idx).lower()
             text = text.replace(placeholder, en_content + ' ')
         
-        # Final whitespace cleanup
-        text = re.sub(r'\s+', ' ', text).strip()
+        # Final whitespace cleanup - preserve newlines
+        text = re.sub(r'[ \t\xA0]+', ' ', text).strip()
         
         return text
 
