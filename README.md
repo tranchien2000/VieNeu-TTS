@@ -116,7 +116,7 @@ VieNeu-TTS delivers production-ready speech synthesis fully offline.
 
 3. **Start the Web UI:**
    ```bash
-   uv run apps/gradio_main.py
+   uv run vieneu-web
    ```
    Access the UI at `http://127.0.0.1:7860`.
 
