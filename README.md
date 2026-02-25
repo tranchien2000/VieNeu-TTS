@@ -363,6 +363,22 @@ Check [docs/Deploy.md](docs/Deploy.md) for more details.
 
 ---
 
+## 🌟 Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=pnnbao97/VieNeu-TTS&type=Date)](https://star-history.com/#pnnbao97/VieNeu-TTS&Date)
+
+---
+
+## 🤝 Contributors
+
+Thanks to all the amazing people who have contributed to this project!
+
+<a href="https://github.com/pnnbao97/VieNeu-TTS/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=pnnbao97/VieNeu-TTS" />
+</a>
+
+---
+
 ## 🙏 Acknowledgements
 
 This project builds upon the [NeuTTS Air](https://huggingface.co/neuphonic/neutts-air) and [NeuCodec](https://huggingface.co/neuphonic/neucodec) architectures. Specifically, the **VieNeu-TTS (0.5B)** model is fine-tuned from NeuTTS Air, while the **VieNeu-TTS-0.3B** model is a custom architecture trained from scratch using the [VieNeu-TTS-1000h](https://huggingface.co/datasets/pnnbao-ump/VieNeu-TTS-1000h) dataset.
