@@ -154,10 +154,6 @@ Integrate VieNeu-TTS into your own software projects.
 
 ### Quick Install
 ```bash
-# Option 1: Recommended (Automatically handles hardware acceleration)
-uv pip install vieneu
-
-# Option 2: Standard pip (Manual index required for optimization)
 # Windows (CPU optimized)
 pip install vieneu --extra-index-url https://pnnbao97.github.io/llama-cpp-python-v0.3.16/cpu/
 
