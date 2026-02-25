@@ -15,7 +15,7 @@ def check_command(cmd):
 def get_public_ip():
     try:
         return requests.get("https://api.ipify.org").text
-    except:
+    except Exception:
         return "your-server-ip"
 
 def run_server(args):

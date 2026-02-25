@@ -154,7 +154,7 @@ class VieNeuTTS:
         """Finalizer to ensure resources are released."""
         try:
             self.close()
-        except:
+        except Exception:
             pass
 
     def close(self):
@@ -172,7 +172,7 @@ class VieNeuTTS:
                         close_fn = getattr(self.backbone, "close", None)
                         if callable(close_fn):
                             close_fn()
-                    except:
+                    except Exception:
                         pass
                 self.backbone = None
             
@@ -188,7 +188,7 @@ class VieNeuTTS:
                     if callable(getattr(_torch.cuda, "is_available", None)) and _torch.cuda.is_available():
                         if callable(getattr(_torch.cuda, "empty_cache", None)):
                             _torch.cuda.empty_cache()
-        except:
+        except Exception:
             # Silence all exit errors as we are shutting down anyway
             pass
 
