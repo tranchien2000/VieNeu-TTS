@@ -17,7 +17,7 @@ def _is_valid_date(day, month):
     try:
         day, month = int(day), int(month)
         return 1 <= month <= 12 and 1 <= day <= day_in_month[month - 1]
-    except: return False
+    except (ValueError, IndexError): return False
 
 def _expand_full_date(match):
     day, sep1, month, sep2, year = match.groups()

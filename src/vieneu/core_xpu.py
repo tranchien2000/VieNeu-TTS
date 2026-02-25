@@ -131,7 +131,7 @@ class XPUVieNeuTTS(VieNeuTTS):
         try:
             if hasattr(torch, 'xpu') and torch.xpu.is_available():
                 torch.xpu.empty_cache()
-        except:
+        except Exception:
             pass
     
     def infer_batch(
