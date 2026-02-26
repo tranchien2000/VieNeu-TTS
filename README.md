@@ -115,7 +115,8 @@ VieNeu-TTS delivers production-ready speech synthesis fully offline.
     ```
 
 3. **Start the Web UI:**
-   ```bash
+
+```bash
    uv run vieneu-web
    ```
    Access the UI at `http://127.0.0.1:7860`.
@@ -165,6 +166,7 @@ pip install vieneu
 ```
 
 ### Quick Start (main.py)
+
 ```python
 from vieneu import Vieneu
 import os
