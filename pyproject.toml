@@ -110,6 +110,9 @@ gpu = [
     "accelerate; sys_platform == 'darwin'",
 ]
 
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+
 [project.scripts]
 vieneu-web = "apps.gradio_main:main"
 vieneu-stream = "apps.web_stream:main"
