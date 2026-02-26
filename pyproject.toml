@@ -98,6 +98,10 @@ gpu = [
 ]
 
 [dependency-groups]
+dev = [
+    "pytest",
+    "pytest-asyncio",
+]
 gpu = [
     "lmdeploy; sys_platform != 'darwin'",
     "triton-windows; sys_platform == 'win32'",

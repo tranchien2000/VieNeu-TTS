@@ -3,7 +3,7 @@ import os
 from typing import List
 import numpy as np
 
-def join_audio_chunks(chunks: list[np.ndarray], sr: int, silence_p: float = 0.0, crossfade_p: float = 0.0) -> np.ndarray:
+def join_audio_chunks(chunks: List[np.ndarray], sr: int, silence_p: float = 0.0, crossfade_p: float = 0.0) -> np.ndarray:
     """Join audio chunks with optional silence padding and crossfading."""
     if not chunks:
         return np.array([], dtype=np.float32)
