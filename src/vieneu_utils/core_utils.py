@@ -1,10 +1,26 @@
 import re
 import os
-from typing import List
+from typing import List, Optional
 import numpy as np
 
+# Pre-compile regex for splitting
+RE_NEWLINE = re.compile(r"[\r\n]+")
+RE_SENTENCE_END = re.compile(r"(?<=[\.\!\?\…])\s+")
+RE_MINOR_PUNCT = re.compile(r"(?<=[\,\;\:\-\–\—])\s+")
+
 def join_audio_chunks(chunks: List[np.ndarray], sr: int, silence_p: float = 0.0, crossfade_p: float = 0.0) -> np.ndarray:
-    """Join audio chunks with optional silence padding and crossfading."""
+    """
+    Join audio chunks with optional silence padding and crossfading.
+
+    Args:
+        chunks: List of audio waveforms as numpy arrays.
+        sr: Sample rate.
+        silence_p: Duration of silence to insert between chunks (seconds).
+        crossfade_p: Duration of crossfade between chunks (seconds).
+
+    Returns:
+        Joined audio waveform.
+    """
     if not chunks:
         return np.array([], dtype=np.float32)
     if len(chunks) == 1:
@@ -46,10 +62,20 @@ def join_audio_chunks(chunks: List[np.ndarray], sr: int, silence_p: float = 0.0,
 def split_text_into_chunks(text: str, max_chars: int = 256) -> List[str]:
     """
     Split raw text into chunks no longer than max_chars.
+
+    Args:
+        text: Input text to split.
+        max_chars: Maximum number of characters per chunk.
+
+    Returns:
+        List of text chunks.
     """
+    if not text:
+        return []
+
     # 1. First split by newlines - each line/paragraph is handled independently
-    paragraphs = re.split(r"[\r\n]+", text.strip())
-    final_chunks = []
+    paragraphs = RE_NEWLINE.split(text.strip())
+    final_chunks: List[str] = []
 
     for para in paragraphs:
         para = para.strip()
@@ -57,7 +83,7 @@ def split_text_into_chunks(text: str, max_chars: int = 256) -> List[str]:
             continue
             
         # 2. Split current paragraph into sentences
-        sentences = re.split(r"(?<=[\.\!\?\…])\s+", para)
+        sentences = RE_SENTENCE_END.split(para)
         
         buffer = ""
         for sentence in sentences:
@@ -73,7 +99,7 @@ def split_text_into_chunks(text: str, max_chars: int = 256) -> List[str]:
                     buffer = ""
                 
                 # Split giant sentence by minor punctuation (, ; : -)
-                sub_parts = re.split(r"(?<=[\,\;\:\-\–\—])\s+", sentence)
+                sub_parts = RE_MINOR_PUNCT.split(sentence)
                 for part in sub_parts:
                     part = part.strip()
                     if not part: continue
@@ -111,6 +137,7 @@ def split_text_into_chunks(text: str, max_chars: int = 256) -> List[str]:
     return [c.strip() for c in final_chunks if c.strip()]
 
 def env_bool(name: str, default: bool = False) -> bool:
+    """Get boolean value from environment variable."""
     v = os.getenv(name)
     if v is None:
         return default

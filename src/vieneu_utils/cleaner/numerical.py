@@ -24,15 +24,16 @@ _number_combined = (
     + r")"
 )
 
-_number_re    = r"(\D)(-{1})?" + _number_combined
-_number_re_start = r"^(-{1})?" + _number_combined
-
-_multiply_re     = r"(" + _normal_number_re + r")(x|\sx\s)(" + _normal_number_re + r")"
-_ordinal_pattern = r"(thứ|hạng)(\s)(1|4)"
-_phone_re        = r"((\+84|84|0|0084)(3|5|7|8|9)[0-9]{8})"
+# Compiled Regular Expressions
+RE_NUMBER = re.compile(r"(\D)(-{1})?" + _number_combined)
+RE_NUMBER_START = re.compile(r"^(-{1})?" + _number_combined, re.MULTILINE)
+RE_MULTIPLY = re.compile(r"(" + _normal_number_re + r")(x|\sx\s)(" + _normal_number_re + r")")
+RE_ORDINAL = re.compile(r"(thứ|hạng)(\s)(1|4)")
+RE_PHONE = re.compile(r"((\+84|84|0|0084)(3|5|7|8|9)[0-9]{8})")
+RE_DOT_SEP = re.compile(r"\d+(\.\d{3})+")
 
 def _normalize_dot_sep(number: str) -> str:
-    if re.fullmatch(r"\d+(\.\d{3})+", number):
+    if RE_DOT_SEP.fullmatch(number):
         return number.replace(".", "")
     return number
 
@@ -71,11 +72,11 @@ def _expand_multiply_number(match):
     return n2w(n1) + " nhân " + n2w(n2)
 
 def normalize_number_vi(text):
-    text = re.sub(_ordinal_pattern, _expand_ordinal, text)
-    text = re.sub(_multiply_re, _expand_multiply_number, text)
-    text = re.sub(_phone_re, _expand_phone, text)
+    text = RE_ORDINAL.sub(_expand_ordinal, text)
+    text = RE_MULTIPLY.sub(_expand_multiply_number, text)
+    text = RE_PHONE.sub(_expand_phone, text)
     # 1. Start of string OR start of line (handling newlines preserved by normalization)
-    text = re.sub(_number_re_start, _expand_number_start, text, flags=re.MULTILINE)
+    text = RE_NUMBER_START.sub(_expand_number_start, text)
     # 2. Anywhere else (preceded by a non-digit)
-    text = re.sub(_number_re, _expand_number, text)
+    text = RE_NUMBER.sub(_expand_number, text)
     return text

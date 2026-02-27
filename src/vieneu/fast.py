@@ -1,16 +1,17 @@
 from pathlib import Path
 from typing import Optional, Union, List, Generator, Any, Dict
-import re
 import numpy as np
 import torch
-import librosa
 import gc
+import logging
 from collections import defaultdict
 from .base import BaseVieneuTTS
 from .utils import _compile_codec_with_triton, extract_speech_ids, _linear_overlap_add
 from vieneu_utils.phonemize_text import phonemize_with_dict
 from vieneu_utils.core_utils import split_text_into_chunks, join_audio_chunks
 from neucodec import NeuCodec, DistillNeuCodec
+
+logger = logging.getLogger("Vieneu.Fast")
 
 class FastVieNeuTTS(BaseVieneuTTS):
     """
@@ -55,11 +56,11 @@ class FastVieNeuTTS(BaseVieneuTTS):
         self._load_voices(backbone_repo, hf_token)
         self._warmup_model()
 
-        print("✅ FastVieNeuTTS with optimizations loaded successfully!")
-        print(f"   Max batch size: {self.max_batch_size}")
+        logger.info("✅ FastVieNeuTTS with optimizations loaded successfully!")
+        logger.info(f"   Max batch size: {self.max_batch_size}")
 
     def _load_backbone_lmdeploy(self, repo, memory_util, tp, enable_prefix_caching, quant_policy, hf_token=None):
-        print(f"Loading backbone with LMDeploy from: {repo}")
+        logger.info(f"Loading backbone with LMDeploy from: {repo}")
         if hf_token:
             import os
             os.environ["HF_TOKEN"] = hf_token
@@ -85,7 +86,7 @@ class FastVieNeuTTS(BaseVieneuTTS):
         )
 
     def _load_codec(self, codec_repo, codec_device, enable_triton):
-        print(f"Loading codec from: {codec_repo} on {codec_device}")
+        logger.info(f"Loading codec from: {codec_repo} on {codec_device}")
         match codec_repo:
             case "neuphonic/neucodec":
                 self.codec = NeuCodec.from_pretrained(codec_repo)
@@ -109,14 +110,14 @@ class FastVieNeuTTS(BaseVieneuTTS):
             self._triton_enabled = _compile_codec_with_triton(self.codec)
 
     def _warmup_model(self):
-        print("🔥 Warming up model...")
+        logger.info("🔥 Warming up model...")
         try:
             dummy_codes = list(range(10))
             dummy_prompt = self._format_prompt(dummy_codes, "warmup", "test")
             _ = self.backbone([dummy_prompt], gen_config=self.gen_config, do_preprocess=False)
-            print("   ✅ Warmup complete")
+            logger.info("   ✅ Warmup complete")
         except Exception as e:
-            print(f"   ⚠️ Warmup failed: {e}")
+            logger.warning(f"   ⚠️ Warmup failed: {e}")
 
     def _decode(self, codes_str: str) -> np.ndarray:
         speech_ids = extract_speech_ids(codes_str)
@@ -137,31 +138,23 @@ class FastVieNeuTTS(BaseVieneuTTS):
                 recon = self.codec.decode_code(codes).cpu().numpy()
         return recon[0, 0, :]
 
-    def _format_prompt(self, ref_codes: List[int], ref_text: str, input_text: str) -> str:
+    def _format_prompt(self, ref_codes: Union[List[int], torch.Tensor, np.ndarray], ref_text: str, input_text: str) -> str:
+        if isinstance(ref_codes, (torch.Tensor, np.ndarray)):
+            ref_codes_list = ref_codes.flatten().tolist()
+        else:
+            ref_codes_list = ref_codes
+
         ref_text_phones = phonemize_with_dict(ref_text)
         input_text_phones = phonemize_with_dict(input_text, skip_normalize=True)
-        codes_str = "".join([f"<|speech_{idx}|>" for idx in ref_codes])
+        codes_str = "".join([f"<|speech_{idx}|>" for idx in ref_codes_list])
         return (
             f"user: Convert the text to speech:<|TEXT_PROMPT_START|>{ref_text_phones} {input_text_phones}"
             f"<|TEXT_PROMPT_END|>\nassistant:<|SPEECH_GENERATION_START|>{codes_str}"
         )
 
     def infer(self, text: str, ref_audio: Optional[Union[str, Path]] = None, ref_codes: Optional[Union[np.ndarray, torch.Tensor]] = None, ref_text: Optional[str] = None, max_chars: int = 256, silence_p: float = 0.15, crossfade_p: float = 0.0, voice: Optional[Dict[str, Any]] = None, temperature: float = 1.0, top_k: int = 50, skip_normalize: bool = False) -> np.ndarray:
-        if voice is not None:
-            ref_codes = voice.get('codes', ref_codes)
-            ref_text = voice.get('text', ref_text)
 
-        if ref_audio is not None and ref_codes is None:
-            ref_codes = self.encode_reference(ref_audio)
-        elif self._default_voice and (ref_codes is None or ref_text is None):
-             try:
-                 default = self.get_preset_voice(None)
-                 ref_codes = default['codes']
-                 ref_text = default['text']
-             except Exception: pass
-
-        if ref_codes is None or ref_text is None:
-             raise ValueError("Must provide either 'voice' dict or both 'ref_codes' and 'ref_text'.")
+        ref_codes, ref_text = self._resolve_ref_voice(voice, ref_audio, ref_codes, ref_text)
 
         if not skip_normalize:
             text = self.normalizer.normalize(text)
@@ -174,48 +167,27 @@ class FastVieNeuTTS(BaseVieneuTTS):
             return np.array([], dtype=np.float32)
 
         if len(chunks) == 1:
-            if isinstance(ref_codes, torch.Tensor):
-                ref_codes = ref_codes.cpu().numpy().flatten().tolist()
-            elif isinstance(ref_codes, np.ndarray):
-                ref_codes = ref_codes.flatten().tolist()
-
             prompt = self._format_prompt(ref_codes, ref_text, chunks[0])
             responses = self.backbone([prompt], gen_config=self.gen_config, do_preprocess=False)
             wav = self._decode(responses[0].text)
+            wav = self._apply_watermark(wav)
         else:
             all_wavs = self.infer_batch(chunks, ref_codes, ref_text, voice=voice, temperature=temperature, top_k=top_k, skip_normalize=True)
             wav = join_audio_chunks(all_wavs, self.sample_rate, silence_p, crossfade_p)
 
-        if self.watermarker:
-            wav = self.watermarker.apply_watermark(wav, sample_rate=self.sample_rate)
         return wav
 
     def infer_batch(self, texts: List[str], ref_codes: Optional[Union[np.ndarray, torch.Tensor]] = None, ref_text: Optional[str] = None, max_batch_size: Optional[int] = None, voice: Optional[Dict[str, Any]] = None, temperature: float = 1.0, top_k: int = 50, skip_normalize: bool = False) -> List[np.ndarray]:
+
         if not skip_normalize:
             texts = [self.normalizer.normalize(t) for t in texts]
 
         max_batch_size = max_batch_size or self.max_batch_size
 
-        if voice is not None:
-            ref_codes = voice.get('codes', ref_codes)
-            ref_text = voice.get('text', ref_text)
-        elif self._default_voice and (ref_codes is None or ref_text is None):
-             try:
-                 default = self.get_preset_voice(None)
-                 ref_codes = default['codes']
-                 ref_text = default['text']
-             except Exception: pass
-
-        if ref_codes is None or ref_text is None:
-             raise ValueError("Must provide reference voice.")
+        ref_codes, ref_text = self._resolve_ref_voice(voice, None, ref_codes, ref_text)
 
         self.gen_config.temperature = temperature
         self.gen_config.top_k = top_k
-
-        if isinstance(ref_codes, torch.Tensor):
-            ref_codes = ref_codes.cpu().numpy().flatten().tolist()
-        elif isinstance(ref_codes, np.ndarray):
-            ref_codes = ref_codes.flatten().tolist()
 
         all_wavs = []
         for i in range(0, len(texts), max_batch_size):
@@ -224,24 +196,13 @@ class FastVieNeuTTS(BaseVieneuTTS):
             responses = self.backbone(prompts, gen_config=self.gen_config, do_preprocess=False)
             batch_codes = [response.text for response in responses]
             batch_wavs = [self._decode(codes) for codes in batch_codes]
-            if self.watermarker:
-                batch_wavs = [self.watermarker.apply_watermark(w, sample_rate=self.sample_rate) for w in batch_wavs]
+            batch_wavs = [self._apply_watermark(w) for w in batch_wavs]
             all_wavs.extend(batch_wavs)
         return all_wavs
 
-    def infer_stream(self, text: str, ref_codes: Optional[Union[np.ndarray, torch.Tensor]] = None, ref_text: Optional[str] = None, max_chars: int = 256, voice: Optional[Dict[str, Any]] = None, temperature: float = 1.0, top_k: int = 50, skip_normalize: bool = False) -> Generator[np.ndarray, None, None]:
-        if voice is not None:
-            ref_codes = voice.get('codes', ref_codes)
-            ref_text = voice.get('text', ref_text)
-        elif self._default_voice and (ref_codes is None or ref_text is None):
-             try:
-                 default = self.get_preset_voice(None)
-                 ref_codes = default['codes']
-                 ref_text = default['text']
-             except Exception: pass
+    def infer_stream(self, text: str, ref_audio: Optional[Union[str, Path]] = None, ref_codes: Optional[Union[np.ndarray, torch.Tensor]] = None, ref_text: Optional[str] = None, max_chars: int = 256, voice: Optional[Dict[str, Any]] = None, temperature: float = 1.0, top_k: int = 50, skip_normalize: bool = False) -> Generator[np.ndarray, None, None]:
 
-        if ref_codes is None or ref_text is None:
-             raise ValueError("Must provide reference voice.")
+        ref_codes, ref_text = self._resolve_ref_voice(voice, ref_audio, ref_codes, ref_text)
 
         if not skip_normalize:
             text = self.normalizer.normalize(text)
@@ -253,10 +214,8 @@ class FastVieNeuTTS(BaseVieneuTTS):
         for chunk in chunks:
             yield from self._infer_stream_single(chunk, ref_codes, ref_text)
 
-    def _infer_stream_single(self, text: str, ref_codes: Union[np.ndarray, torch.Tensor], ref_text: str) -> Generator[np.ndarray, None, None]:
-        if isinstance(ref_codes, torch.Tensor):
-            ref_codes_list = ref_codes.cpu().numpy().flatten().tolist()
-        elif isinstance(ref_codes, np.ndarray):
+    def _infer_stream_single(self, text: str, ref_codes: Union[np.ndarray, torch.Tensor, List[int]], ref_text: str) -> Generator[np.ndarray, None, None]:
+        if isinstance(ref_codes, (torch.Tensor, np.ndarray)):
             ref_codes_list = ref_codes.flatten().tolist()
         else:
             ref_codes_list = ref_codes
@@ -280,6 +239,7 @@ class FastVieNeuTTS(BaseVieneuTTS):
                 sample_end = sample_start + (self.streaming_frames_per_chunk + 2 * self.streaming_overlap_frames) * self.hop_length
                 curr_codes = token_cache[tokens_start:tokens_end]
                 recon = self._decode("".join(curr_codes))
+                recon = self._apply_watermark(recon)
                 recon = recon[sample_start:sample_end]
                 audio_cache.append(recon)
 
@@ -296,6 +256,7 @@ class FastVieNeuTTS(BaseVieneuTTS):
             sample_start = (len(token_cache) - tokens_start - remaining_tokens - self.streaming_overlap_frames) * self.hop_length
             curr_codes = token_cache[tokens_start:]
             recon = self._decode("".join(curr_codes))
+            recon = self._apply_watermark(recon)
             recon = recon[sample_start:]
             audio_cache.append(recon)
             processed_recon = _linear_overlap_add(audio_cache, stride=self.streaming_stride_samples)

@@ -5,8 +5,13 @@ import json
 import torch
 import numpy as np
 import gc
+import logging
 from huggingface_hub import hf_hub_download
 from vieneu_utils.normalize_text import VietnameseTTSNormalizer
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("Vieneu")
 
 class BaseVieneuTTS(ABC):
     """
@@ -33,7 +38,7 @@ class BaseVieneuTTS(ABC):
         try:
             import perth
             self.watermarker = perth.PerthImplicitWatermarker()
-            print("   🔒 Audio watermarking initialized (Perth)")
+            logger.info("🔒 Audio watermarking initialized (Perth)")
         except (ImportError, AttributeError):
             self.watermarker = None
 
@@ -55,8 +60,8 @@ class BaseVieneuTTS(ABC):
             else:
                 if clear_existing:
                      self._preset_voices.clear()
-                print(f"   ⚠️ Validation Warning: Local path '{backbone_repo}' missing 'voices.json'.")
-                print(f"   ⚠️ Falling back to Custom Voice Cloning mode.")
+                logger.warning(f"Validation Warning: Local path '{backbone_repo}' missing 'voices.json'.")
+                logger.warning(f"Falling back to Custom Voice Cloning mode.")
         else:
             # Remote Repo
             if clear_existing:
@@ -65,8 +70,8 @@ class BaseVieneuTTS(ABC):
             try:
                 self._load_voices_from_repo(backbone_repo, hf_token)
             except Exception as e:
-                print(f"   ⚠️ Warning: Could not load voices from repo '{backbone_repo}': {e}")
-                print(f"   ⚠️ Falling back to Custom Voice Cloning mode.")
+                logger.warning(f"Could not load voices from repo '{backbone_repo}': {e}")
+                logger.warning(f"Falling back to Custom Voice Cloning mode.")
 
     def _load_voices_from_file(self, file_path: Path, clear_existing: bool = False):
         """Load voices from a local JSON file."""
@@ -77,18 +82,18 @@ class BaseVieneuTTS(ABC):
             if "presets" in data:
                 if clear_existing:
                     self._preset_voices.clear()
-                    print(f"   🧹 Cleared existing voices for replacement")
+                    logger.info("🧹 Cleared existing voices for replacement")
 
                 # Merge into existing presets
                 self._preset_voices.update(data["presets"])
-                print(f"   📢 Loaded {len(data['presets'])} voices from {file_path.name}")
+                logger.info(f"📢 Loaded {len(data['presets'])} voices from {file_path.name}")
 
             # Update default voice if provided
             if "default_voice" in data and data["default_voice"]:
                 self._default_voice = data["default_voice"]
 
         except Exception as e:
-            print(f"   ⚠️ Failed to load voices from {file_path}: {e}")
+            logger.error(f"Failed to load voices from {file_path}: {e}")
 
     def _load_voices_from_repo(self, repo_id: str, hf_token: Optional[str] = None):
         """Download and load voices.json from a HuggingFace repo."""
@@ -103,7 +108,7 @@ class BaseVieneuTTS(ABC):
             )
         except Exception:
             # 2. Network error? Try to use cached version if available
-            print(f"   ⚠️ Network check failed for voices.json. Trying local cache...")
+            logger.warning(f"Network check failed for voices.json. Trying local cache...")
             try:
                 voices_file = hf_hub_download(
                     repo_id=repo_id,
@@ -112,7 +117,7 @@ class BaseVieneuTTS(ABC):
                     repo_type="model",
                     local_files_only=True
                 )
-                print(f"   ✅ Using cached voices.json")
+                logger.info(f"✅ Using cached voices.json")
             except Exception:
                 # 3. No cache available either
                 pass
@@ -120,7 +125,7 @@ class BaseVieneuTTS(ABC):
         if voices_file:
             self._load_voices_from_file(Path(voices_file))
         else:
-            print(f"   ⚠️ Warning: Repository '{repo_id}' is missing 'voices.json'. Falling back to Custom Voice mode.")
+            logger.warning(f"Repository '{repo_id}' is missing 'voices.json'. Falling back to Custom Voice mode.")
 
     def list_preset_voices(self) -> List[tuple[str, str]]:
         """List available preset voices as (description, id)."""
@@ -208,6 +213,39 @@ class BaseVieneuTTS(ABC):
                 recon = self.codec.decode_code(codes).cpu().numpy()
 
         return recon[0, 0, :]
+
+    def _resolve_ref_voice(
+        self,
+        voice: Optional[Dict[str, Any]] = None,
+        ref_audio: Optional[Union[str, Path]] = None,
+        ref_codes: Optional[Union[np.ndarray, torch.Tensor]] = None,
+        ref_text: Optional[str] = None
+    ) -> tuple[Union[np.ndarray, torch.Tensor], str]:
+        """Resolve reference voice codes and text."""
+        if voice is not None:
+            ref_codes = voice.get('codes', ref_codes)
+            ref_text = voice.get('text', ref_text)
+
+        if ref_audio is not None and ref_codes is None:
+            ref_codes = self.encode_reference(ref_audio)
+        elif self._default_voice and (ref_codes is None or ref_text is None):
+            try:
+                voice_data = self.get_preset_voice(None)
+                ref_codes = voice_data['codes']
+                ref_text = voice_data['text']
+            except Exception:
+                pass
+
+        if ref_codes is None or ref_text is None:
+            raise ValueError("Must provide either 'voice' dict or both 'ref_codes' and 'ref_text'.")
+
+        return ref_codes, ref_text
+
+    def _apply_watermark(self, wav: np.ndarray) -> np.ndarray:
+        """Apply watermark to audio if enabled."""
+        if self.watermarker:
+            return self.watermarker.apply_watermark(wav, sample_rate=self.sample_rate)
+        return wav
 
     @abstractmethod
     def infer(self, text: str, **kwargs) -> np.ndarray:

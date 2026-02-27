@@ -5,10 +5,13 @@ import torch
 import requests
 import json
 import asyncio
+import logging
 from .standard import VieNeuTTS
 from .utils import _linear_overlap_add
 from vieneu_utils.phonemize_text import phonemize_with_dict
 from vieneu_utils.core_utils import split_text_into_chunks, join_audio_chunks
+
+logger = logging.getLogger("Vieneu.Remote")
 
 class RemoteVieNeuTTS(VieNeuTTS):
     """
@@ -42,31 +45,23 @@ class RemoteVieNeuTTS(VieNeuTTS):
     def _load_backbone(self, backbone_repo, backbone_device, hf_token=None):
         pass
 
-    def _format_prompt(self, ref_codes: List[int], ref_text: str, input_text: str) -> str:
+    def _format_prompt(self, ref_codes: Union[List[int], torch.Tensor, np.ndarray], ref_text: str, input_text: str) -> str:
+        if isinstance(ref_codes, (torch.Tensor, np.ndarray)):
+            ref_codes_list = ref_codes.flatten().tolist()
+        else:
+            ref_codes_list = ref_codes
+
         ref_text_phones = phonemize_with_dict(ref_text)
         input_text_phones = phonemize_with_dict(input_text, skip_normalize=True)
-        codes_str = "".join([f"<|speech_{idx}|>" for idx in ref_codes])
+        codes_str = "".join([f"<|speech_{idx}|>" for idx in ref_codes_list])
         return (
             f"user: Convert the text to speech:<|TEXT_PROMPT_START|>{ref_text_phones} {input_text_phones}"
             f"<|TEXT_PROMPT_END|>\nassistant:<|SPEECH_GENERATION_START|>{codes_str}"
         )
 
     def infer(self, text: str, ref_audio: Optional[Union[str, Path]] = None, ref_codes: Optional[Union[np.ndarray, torch.Tensor]] = None, ref_text: Optional[str] = None, max_chars: int = 256, silence_p: float = 0.15, crossfade_p: float = 0.0, voice: Optional[Dict[str, Any]] = None, temperature: float = 1.0, top_k: int = 50, skip_normalize: bool = False) -> np.ndarray:
-        if voice is not None:
-            ref_codes = voice.get('codes', ref_codes)
-            ref_text = voice.get('text', ref_text)
 
-        if ref_audio is not None and ref_codes is None:
-            ref_codes = self.encode_reference(ref_audio)
-        elif self._default_voice and (ref_codes is None or ref_text is None):
-            try:
-                voice_data = self.get_preset_voice(None)
-                ref_codes = voice_data['codes']
-                ref_text = voice_data['text']
-            except Exception: pass
-
-        if ref_codes is None or ref_text is None:
-             raise ValueError("Must provide reference voice.")
+        ref_codes, ref_text = self._resolve_ref_voice(voice, ref_audio, ref_codes, ref_text)
 
         if not skip_normalize:
             text = self.normalizer.normalize(text)
@@ -77,14 +72,7 @@ class RemoteVieNeuTTS(VieNeuTTS):
 
         all_wavs = []
         for chunk in chunks:
-            if isinstance(ref_codes, torch.Tensor):
-                ref_codes_list = ref_codes.cpu().numpy().flatten().tolist()
-            elif isinstance(ref_codes, np.ndarray):
-                ref_codes_list = ref_codes.flatten().tolist()
-            else:
-                ref_codes_list = ref_codes
-
-            prompt = self._format_prompt(ref_codes_list, ref_text, chunk)
+            prompt = self._format_prompt(ref_codes, ref_text, chunk)
             payload = {
                 "model": self.model_name,
                 "messages": [{"role": "user", "content": prompt}],
@@ -101,30 +89,15 @@ class RemoteVieNeuTTS(VieNeuTTS):
                 wav = self._decode(output_str)
                 all_wavs.append(wav)
             except Exception as e:
-                print(f"Error during remote inference: {e}")
+                logger.error(f"Error during remote inference: {e}")
                 continue
 
         final_wav = join_audio_chunks(all_wavs, self.sample_rate, silence_p, crossfade_p)
-        if self.watermarker:
-            final_wav = self.watermarker.apply_watermark(final_wav, sample_rate=self.sample_rate)
-        return final_wav
+        return self._apply_watermark(final_wav)
 
     def infer_stream(self, text: str, ref_audio: Optional[Union[str, Path]] = None, ref_codes: Optional[Union[np.ndarray, torch.Tensor]] = None, ref_text: Optional[str] = None, max_chars: int = 256, voice: Optional[Dict[str, Any]] = None, temperature: float = 1.0, top_k: int = 50, skip_normalize: bool = False) -> Generator[np.ndarray, None, None]:
-        if voice is not None:
-            ref_codes = voice.get('codes', ref_codes)
-            ref_text = voice.get('text', ref_text)
 
-        if ref_audio is not None and ref_codes is None:
-            ref_codes = self.encode_reference(ref_audio)
-        elif self._default_voice and (ref_codes is None or ref_text is None):
-            try:
-                voice_data = self.get_preset_voice(None)
-                ref_codes = voice_data['codes']
-                ref_text = voice_data['text']
-            except Exception: pass
-
-        if ref_codes is None or ref_text is None:
-             raise ValueError("Must provide reference voice.")
+        ref_codes, ref_text = self._resolve_ref_voice(voice, ref_audio, ref_codes, ref_text)
 
         if not skip_normalize:
             text = self.normalizer.normalize(text)
@@ -134,14 +107,7 @@ class RemoteVieNeuTTS(VieNeuTTS):
             yield from self._infer_stream_chunk(chunk, ref_codes, ref_text, temperature, top_k)
 
     def _infer_stream_chunk(self, chunk, ref_codes, ref_text, temperature, top_k):
-        if isinstance(ref_codes, torch.Tensor):
-            ref_codes_list = ref_codes.cpu().numpy().flatten().tolist()
-        elif isinstance(ref_codes, np.ndarray):
-            ref_codes_list = ref_codes.flatten().tolist()
-        else:
-            ref_codes_list = ref_codes
-
-        prompt = self._format_prompt(ref_codes_list, ref_text, chunk)
+        prompt = self._format_prompt(ref_codes, ref_text, chunk)
         payload = {
             "model": self.model_name,
             "messages": [{"role": "user", "content": prompt}],
@@ -151,6 +117,11 @@ class RemoteVieNeuTTS(VieNeuTTS):
             "stop": ["<|SPEECH_GENERATION_END|>"],
             "stream": True
         }
+
+        if isinstance(ref_codes, (torch.Tensor, np.ndarray)):
+            ref_codes_list = ref_codes.flatten().tolist()
+        else:
+            ref_codes_list = ref_codes
 
         audio_cache: List[np.ndarray] = []
         token_cache: List[str] = [f"<|speech_{idx}|>" for idx in ref_codes_list]
@@ -177,8 +148,7 @@ class RemoteVieNeuTTS(VieNeuTTS):
                                 sample_end = sample_start + (self.streaming_frames_per_chunk + 2 * self.streaming_overlap_frames) * self.hop_length
                                 curr_codes = token_cache[tokens_start:tokens_end]
                                 recon = self._decode("".join(curr_codes))
-                                if self.watermarker:
-                                    recon = self.watermarker.apply_watermark(recon, sample_rate=self.sample_rate)
+                                recon = self._apply_watermark(recon)
                                 recon = recon[sample_start:sample_end]
                                 audio_cache.append(recon)
                                 processed_recon = _linear_overlap_add(audio_cache, stride=self.streaming_stride_samples)
@@ -189,7 +159,7 @@ class RemoteVieNeuTTS(VieNeuTTS):
                                 yield processed_recon
                     except json.JSONDecodeError: continue
         except Exception as e:
-            print(f"Error streaming chunk: {e}")
+            logger.error(f"Error streaming chunk: {e}")
             return
 
         remaining_tokens = len(token_cache) - n_decoded_tokens
@@ -198,6 +168,7 @@ class RemoteVieNeuTTS(VieNeuTTS):
             sample_start = (len(token_cache) - tokens_start - remaining_tokens - self.streaming_overlap_frames) * self.hop_length
             curr_codes = token_cache[tokens_start:]
             recon = self._decode("".join(curr_codes))
+            recon = self._apply_watermark(recon)
             recon = recon[sample_start:]
             audio_cache.append(recon)
             processed_recon = _linear_overlap_add(audio_cache, stride=self.streaming_stride_samples)
@@ -210,21 +181,7 @@ class RemoteVieNeuTTS(VieNeuTTS):
         except ImportError:
             raise ImportError("Async requires 'aiohttp'.")
 
-        if voice is not None:
-            ref_codes = voice.get('codes', ref_codes)
-            ref_text = voice.get('text', ref_text)
-
-        if ref_audio is not None and ref_codes is None:
-            ref_codes = self.encode_reference(ref_audio)
-        elif self._default_voice and (ref_codes is None or ref_text is None):
-            try:
-                voice_data = self.get_preset_voice(None)
-                ref_codes = voice_data['codes']
-                ref_text = voice_data['text']
-            except Exception: pass
-
-        if ref_codes is None or ref_text is None:
-             raise ValueError("Must provide reference voice.")
+        ref_codes, ref_text = self._resolve_ref_voice(voice, ref_audio, ref_codes, ref_text)
 
         if not skip_normalize:
             text = self.normalizer.normalize(text)
@@ -242,22 +199,13 @@ class RemoteVieNeuTTS(VieNeuTTS):
             tasks = [self._infer_chunk_async(session, chunk, ref_codes, ref_text, temperature, top_k) for chunk in chunks]
             wavs = await asyncio.gather(*tasks)
             final_wav = join_audio_chunks(wavs, self.sample_rate, silence_p, crossfade_p)
-            if self.watermarker:
-                final_wav = self.watermarker.apply_watermark(final_wav, sample_rate=self.sample_rate)
-            return final_wav
+            return self._apply_watermark(final_wav)
         finally:
             if should_close_session:
                 await session.close()
 
     async def _infer_chunk_async(self, session, chunk, ref_codes, ref_text, temperature, top_k):
-        if isinstance(ref_codes, torch.Tensor):
-            ref_codes_list = ref_codes.cpu().numpy().flatten().tolist()
-        elif isinstance(ref_codes, np.ndarray):
-            ref_codes_list = ref_codes.flatten().tolist()
-        else:
-            ref_codes_list = ref_codes
-
-        prompt = self._format_prompt(ref_codes_list, ref_text, chunk)
+        prompt = self._format_prompt(ref_codes, ref_text, chunk)
         payload = {
             "model": self.model_name,
             "messages": [{"role": "user", "content": prompt}],
@@ -274,7 +222,7 @@ class RemoteVieNeuTTS(VieNeuTTS):
                 output_str = data["choices"][0]["message"]["content"]
                 return self._decode(output_str)
         except Exception as e:
-            print(f"Error in async chunk: {e}")
+            logger.error(f"Error in async chunk: {e}")
             return np.array([], dtype=np.float32)
 
     async def infer_batch_async(self, texts: List[str], ref_audio: Optional[Union[str, Path]] = None, ref_codes: Optional[Union[np.ndarray, torch.Tensor]] = None, ref_text: Optional[str] = None, max_chars: int = 256, silence_p: float = 0.15, crossfade_p: float = 0.0, voice: Optional[Dict[str, Any]] = None, temperature: float = 1.0, top_k: int = 50, concurrency_limit: int = 50, skip_normalize: bool = False) -> List[np.ndarray]:
@@ -286,20 +234,7 @@ class RemoteVieNeuTTS(VieNeuTTS):
         if not skip_normalize:
             texts = [self.normalizer.normalize(t) for t in texts]
 
-        if voice is not None:
-            ref_codes = voice.get('codes', ref_codes)
-            ref_text = voice.get('text', ref_text)
-        elif ref_audio is not None and ref_codes is None:
-            ref_codes = self.encode_reference(ref_audio)
-        elif self._default_voice and (ref_codes is None or ref_text is None):
-            try:
-                voice_data = self.get_preset_voice(None)
-                ref_codes = voice_data['codes']
-                ref_text = voice_data['text']
-            except Exception: pass
-
-        if ref_codes is None or ref_text is None:
-             raise ValueError("Must provide reference voice.")
+        ref_codes, ref_text = self._resolve_ref_voice(voice, ref_audio, ref_codes, ref_text)
 
         sem = asyncio.Semaphore(concurrency_limit)
         async with aiohttp.ClientSession() as session:

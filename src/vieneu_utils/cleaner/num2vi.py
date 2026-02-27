@@ -1,3 +1,5 @@
+from typing import List, Optional
+
 units = {
     '0': 'không',
     '1': 'một',
@@ -11,98 +13,130 @@ units = {
     '9': 'chín',
 }
 
-def chunks(lst, n):
-    chunks_lst = []
-    for i in range(0, len(lst), n):
-        chunks_lst.append(lst[i : i + n])
-    return chunks_lst
+def chunks(lst: List, n: int) -> List[List]:
+    """Split list into chunks of size n."""
+    return [lst[i : i + n] for i in range(0, len(lst), n)]
 
-def n2w_units(numbers: str):
+def n2w_units(numbers: str) -> str:
+    """Convert single digit to word."""
     if not numbers:
         raise ValueError('Số rỗng!!')
     if len(numbers) > 1:
         raise ValueError('Số vượt quá giá trị của hàng đơn vị!')
     return units[numbers]
 
-def pre_process_n2w(number: str):
-    char_to_replace = {' ': '', '-': '', '.': '', ',': ''}
-    for key, value in char_to_replace.items():
-        number = str(number).replace(key, value)
-    if not number.isdigit():
-        return None
-    return number
+def pre_process_n2w(number: str) -> Optional[str]:
+    """Clean input number string."""
+    clean = str(number).translate(str.maketrans('', '', ' -.,'))
+    return clean if clean.isdigit() else None
 
-def process_n2w_single(numbers: str):
-    total_number = ''
-    for element in numbers:
-        if element in units:
-            total_number += units[element] + ' '
-    return total_number.strip()
+def process_n2w_single(numbers: str) -> str:
+    """Convert each digit independently to word."""
+    return ' '.join(units[d] for d in numbers if d in units)
 
-def n2w_hundreds(numbers: str):
-    if len(numbers) > 3 or len(numbers) == 0:
+def n2w_hundreds(numbers: str) -> str:
+    """Convert 1-3 digit number to Vietnamese words."""
+    if not numbers or numbers == '000':
         return ""
-    if len(numbers) <= 1:
-        return n2w_units(numbers)
     
-    reversed_hundreds = numbers[::-1]
-    total_number = []
-    for e in range(0, len(reversed_hundreds)):
-        if e == 0:
-            total_number.append(units[reversed_hundreds[e]])
-        elif e == 1:
-            total_number.append(units[reversed_hundreds[e]] + ' mươi ')
-        elif e == 2:
-            total_number.append(units[reversed_hundreds[e]] + ' trăm ')
+    # Pad to 3 digits
+    n = numbers.zfill(3)
+    h_digit, t_digit, u_digit = n[0], n[1], n[2]
 
-    for idx, value in enumerate(total_number):
-        if idx == 0 and value == 'không':
-            if len(total_number) > 1 and total_number[1] == 'không mươi ':
-                total_number[1] = ''
-            total_number[idx] = ''
-        if idx == 0 and value == 'một':
-            if len(total_number) > 1 and total_number[1] != 'một mươi ' and total_number[1] != 'không mươi ':
-                total_number[idx] = 'mốt'
-        if idx == 0 and value == 'năm':
-            if len(total_number) > 1 and total_number[1] != 'không mươi ':
-                total_number[idx] = 'lăm'
-        if value == 'không mươi ':
-            total_number[idx] = 'lẻ '
-        if value == 'một mươi ':
-            total_number[idx] = 'mười '
+    res = []
 
-    return ''.join(total_number[::-1]).strip()
+    # Hundreds
+    if h_digit != '0':
+        res.append(units[h_digit] + " trăm")
+    elif len(numbers) == 3: # Case like 0xx in a larger number
+        res.append("không trăm")
 
-def n2w_large_number(numbers: str):
-    if int(numbers) == 0:
+    # Tens
+    if t_digit == '0':
+        if u_digit != '0' and (h_digit != '0' or len(numbers) == 3):
+            res.append("lẻ")
+    elif t_digit == '1':
+        res.append("mười")
+    else:
+        res.append(units[t_digit] + " mươi")
+
+    # Units
+    if u_digit != '0':
+        if u_digit == '1' and t_digit not in ('0', '1'):
+            res.append("mốt")
+        elif u_digit == '5' and t_digit != '0':
+            res.append("lăm")
+        elif u_digit == '4' and t_digit not in ('0', '1'):
+            # In some regions, 4 is 'tư' in certain positions,
+            # but usually TTS uses 'bốn' unless specified.
+            # The previous implementation used 'bốn'.
+            res.append(units[u_digit])
+        else:
+            res.append(units[u_digit])
+
+    return " ".join(res)
+
+def n2w_large_number(numbers: str) -> str:
+    """Convert large numbers to Vietnamese words."""
+    if not numbers or not numbers.lstrip('0'):
         return units['0']
         
-    reversed_large_number = numbers[::-1]
-    reversed_large_number = chunks(reversed_large_number, 3)
+    # Remove leading zeros
+    numbers = numbers.lstrip('0')
 
-    suffixes = ['', ' nghìn ', ' triệu ', ' tỷ ']
+    # Split into 3-digit groups from right to left
+    rev_numbers = numbers[::-1]
+    groups = [rev_numbers[i:i+3][::-1] for i in range(0, len(rev_numbers), 3)]
+
+    suffixes = ['', ' nghìn', ' triệu', ' tỷ']
+
     parts = []
-    for e in range(len(reversed_large_number)):
-        chunk = reversed_large_number[e][::-1]
-        if int(chunk) == 0:
+    for i, group in enumerate(groups):
+        if group == '000':
+            # Handle special case for billions: 1.000.000.000.000
+            if i % 3 == 0 and i > 0 and i // 3 < len(suffixes) and suffixes[3] in suffixes:
+                # This is complex, usually we just skip empty groups
+                pass
             continue
-        word = n2w_hundreds(chunk)
-        if e < len(suffixes):
-            word += suffixes[e]
-        parts.append(word)
 
-    return ' '.join(p.strip() for p in parts[::-1]).strip()
+        word = n2w_hundreds(group)
+        if word:
+            # Suffix handling
+            suffix_idx = i % 4 # 0: none, 1: nghìn, 2: triệu, 3: tỷ
+            # If we go beyond 'tỷ', it repeats? 1.000 tỷ?
+            # Vietnamese: 1 triệu tỷ (10^15).
+            # Simplified: just repeat 'tỷ' every 3 groups or use complex logic.
+            # Here we follow the previous implementation's limit.
+            if i < len(suffixes):
+                word += suffixes[i]
+            elif i >= 4:
+                # For numbers > 10^12, we can just append "tỷ" again or more
+                # But let's keep it simple as per original
+                word += " tỷ" * (i // 3)
 
-def n2w(number: str):
+            parts.append(word)
+
+    if not parts:
+        return units['0']
+
+    return ' '.join(parts[::-1]).strip()
+
+def n2w(number: str) -> str:
+    """Main entry point for number to word conversion."""
     clean_number = pre_process_n2w(number)
-    if not clean_number: return str(number)
+    if not clean_number:
+        return str(number)
+
     if len(clean_number) == 2 and clean_number[0] == '0':
         return f"không {units[clean_number[1]]}"
+
     return n2w_large_number(clean_number)
 
-def n2w_single(number: str):
+def n2w_single(number: str) -> str:
+    """Convert number to word by digits (e.g. for phone numbers)."""
     if str(number).startswith('+84'):
-        number = str(number).replace('+84', '0')
+        number = '0' + str(number)[3:]
     clean_number = pre_process_n2w(number)
-    if not clean_number: return str(number)
+    if not clean_number:
+        return str(number)
     return process_n2w_single(clean_number)
