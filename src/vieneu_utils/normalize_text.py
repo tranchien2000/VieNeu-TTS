@@ -1,4 +1,5 @@
 import re
+import unicodedata
 from .cleaner import clean_vietnamese_text
 
 class VietnameseTTSNormalizer:
@@ -15,6 +16,9 @@ class VietnameseTTSNormalizer:
         """Main normalization pipeline with EN tag protection."""
         if not text:
             return ""
+
+        # Pre-normalization: Ensure NFC format for Vietnamese characters
+        text = unicodedata.normalize('NFC', text)
 
         # Step 1: Detect and protect EN tags
         en_contents = []

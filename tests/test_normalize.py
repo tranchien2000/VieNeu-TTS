@@ -213,6 +213,10 @@ TEST_CASES = [
 
     # Redundant expansion (symbol + unit)
     ("#1kg", "thăng một ki lô gam"),
+
+    # ─── 24. CÂU TEST THỰC TẾ ──────────────────────────────────────────────────
+    ("Ông Lưu Trung Thái, Chủ tịch HĐQT MB cho biết, vốn hóa của ngân hàng đã tăng gần 10 lần kể từ năm 2017, đạt khoảng 8,5 tỷ USD, tạo nền tảng cho mục tiêu 10 tỷ USD vào năm 2027.",
+     "ông lưu trung thái, chủ tịch hđqt em bi cho biết, vốn hóa của ngân hàng đã tăng gần mười lần kể từ năm hai nghìn không trăm mười bảy, đạt khoảng tám phẩy năm tỷ đô la mỹ, tạo nền tảng cho mục tiêu mười tỷ đô la mỹ vào năm hai nghìn không trăm hai mươi bảy."),
 ]
 
 @pytest.mark.parametrize("input_text, expected", TEST_CASES)
