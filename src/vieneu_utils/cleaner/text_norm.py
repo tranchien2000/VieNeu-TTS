@@ -70,8 +70,29 @@ _acronyms_exceptions_vi = {
     "TPHCM": "thành phố hồ chí minh", "ĐH": "đại học", "PGS": "phó giáo sư"
 }
 
-_roman_number_re = r"\b(?=[IVXLCDM]{2,})M{0,4}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})\b"
-_letter_re = r"(chữ|chữ cái|kí tự|ký tự)\s+(['\"]?)([a-z])(['\"]?)\b"
+# Compiled Regular Expressions
+RE_ROMAN_NUMBER = re.compile(r"\b(?=[IVXLCDM]{2,})M{0,4}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})\b")
+RE_LETTER = re.compile(r"(chữ|chữ cái|kí tự|ký tự)\s+(['\"]?)([a-z])(['\"]?)\b", re.IGNORECASE)
+RE_STANDALONE_LETTER = re.compile(r'\b([a-zA-Z])\b\.?')
+RE_URL = re.compile(r'\b(?:https?://|www\.)[A-Za-z0-9.\-_~:/?#\[\]@!$&\'()*+,;=]+\b')
+RE_SLASH_NUMBER = re.compile(r'\b(\d+)/(\d+)\b')
+RE_EMAIL = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b')
+RE_SENTENCE_SPLIT = re.compile(r'([.!?]+(?:\s+|$))')
+RE_ACRONYM = re.compile(r'\b(?=[A-Z0-9]*[A-Z])[A-Z0-9]{2,}\b')
+RE_ALPHANUMERIC = re.compile(r'\b(\d+)([a-zA-Z])\b')
+RE_BRACKETS = re.compile(r'[\(\[\{]\s*(.*?)\s*[\)\]\}]')
+RE_STRIP_BRACKETS = re.compile(r'[\[\]\(\)\{\}]')
+RE_TEMP_C_NEG = re.compile(r'-(\d+(?:[.,]\d+)?)\s*°\s*c\b', re.IGNORECASE)
+RE_TEMP_F_NEG = re.compile(r'-(\d+(?:[.,]\d+)?)\s*°\s*f\b', re.IGNORECASE)
+RE_TEMP_C = re.compile(r'(\d+(?:[.,]\d+)?)\s*°\s*c\b', re.IGNORECASE)
+RE_TEMP_F = re.compile(r'(\d+(?:[.,]\d+)?)\s*°\s*f\b', re.IGNORECASE)
+RE_DEGREE = re.compile(r'°')
+RE_VERSION = re.compile(r'\b(\d+(?:\.\d+)+)\b')
+RE_CLEAN_OTHERS = re.compile(r'[^\w\sàáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữợỳýỷỹỵđ.,!?;:@%_]')
+
+# Reusable patterns for measurement/currency
+_MAGNITUDE_P = r"\s*(tỷ|triệu|nghìn|ngàn)?\s*"
+_NUMERIC_P = r"((?:\d+[.,])*\d+)"
 
 def _expand_number_with_sep(num_str):
     if not num_str: return ""
@@ -93,9 +114,6 @@ def _expand_number_with_sep(num_str):
     return n2w(num_str)
 
 def expand_measurement(text):
-    magnitude_p = r"\s*(tỷ|triệu|nghìn|ngàn)?\s*"
-    numeric_p = r"((?:\d+[.,])*\d+)"
-    
     def _repl(m, full):
         num = m.group(1)
         mag = m.group(2) if m.group(2) else ""
@@ -104,8 +122,8 @@ def expand_measurement(text):
     
     for unit, full in sorted(_measurement_key_vi.items(), key=lambda x: len(x[0]), reverse=True):
         # Case with number
-        pattern = rf"\b{numeric_p}{magnitude_p}{unit}\b"
-        text = re.sub(pattern, lambda m, f=full: _repl(m, f), text, flags=re.IGNORECASE)
+        pattern = re.compile(rf"\b{_NUMERIC_P}{_MAGNITUDE_P}{unit}\b", re.IGNORECASE)
+        text = pattern.sub(lambda m, f=full: _repl(m, f), text)
         
         # Standalone units
         safe_standalone = [
@@ -115,30 +133,28 @@ def expand_measurement(text):
         ]
         if unit.lower() in safe_standalone:
             # First try with standard word boundaries
-            text = re.sub(rf"(?<![\d.,])\b{unit}\b", f" {full} ", text, flags=re.IGNORECASE)
+            standalone_pattern = re.compile(rf"(?<![\d.,])\b{unit}\b", re.IGNORECASE)
+            text = standalone_pattern.sub(f" {full} ", text)
     return text
 
 def expand_currency(text):
-    magnitude_p = r"\s*(tỷ|triệu|nghìn|ngàn)?\s*"
-    numeric_p = r"((?:\d+[.,])*\d+)"
-    
     def _repl(m, full):
         num = m.group(1)
         mag = m.group(2) if m.group(2) else ""
         expanded_num = _expand_number_with_sep(num)
         return f"{expanded_num} {mag} {full}".replace("  ", " ").strip()
         
-    text = re.sub(rf"\$\s*{numeric_p}{magnitude_p}", lambda m: _repl(m, "đô la Mỹ"), text)
-    text = re.sub(rf"{numeric_p}{magnitude_p}\$", lambda m: _repl(m, "đô la Mỹ"), text)
-    text = re.sub(rf"{numeric_p}\s*%", lambda m: f"{_expand_number_with_sep(m.group(1))} phần trăm", text)
+    text = re.sub(rf"\$\s*{_NUMERIC_P}{_MAGNITUDE_P}", lambda m: _repl(m, "đô la Mỹ"), text)
+    text = re.sub(rf"{_NUMERIC_P}{_MAGNITUDE_P}\$", lambda m: _repl(m, "đô la Mỹ"), text)
+    text = re.sub(rf"{_NUMERIC_P}\s*%", lambda m: f"{_expand_number_with_sep(m.group(1))} phần trăm", text)
     
     for unit, full in _currency_key.items():
         if unit == "%": continue
-        text = re.sub(rf"\b{numeric_p}{magnitude_p}{unit}\b", lambda m, f=full: _repl(m, f), text, flags=re.IGNORECASE)
+        pattern = re.compile(rf"\b{_NUMERIC_P}{_MAGNITUDE_P}{unit}\b", re.IGNORECASE)
+        text = pattern.sub(lambda m, f=full: _repl(m, f), text)
     return text
 
 def expand_compound_units(text):
-    numeric_p = r"((?:\d+[.,])*\d+)"
     def _repl_compound(m):
         num_str = m.group(1) if m.group(1) else ""
         num = _expand_number_with_sep(num_str)
@@ -151,8 +167,8 @@ def expand_compound_units(text):
             res = f"{num} {res}"
         return res
 
-    pattern = rf"{numeric_p}?\s*\b([a-zμµ²³°]+)/([a-zμµ²³°0-9]+)\b"
-    text = re.sub(pattern, _repl_compound, text, flags=re.IGNORECASE)
+    pattern = re.compile(rf"{_NUMERIC_P}?\s*\b([a-zμµ²³°]+)/([a-zμµ²³°0-9]+)\b", re.IGNORECASE)
+    text = pattern.sub(_repl_compound, text)
     return text
 
 def expand_roman(match):
@@ -186,14 +202,9 @@ def expand_standalone_letters(text):
             return f" {_letter_key_vi[char]} "
         return m.group(0)
     
-    # Match a standalone letter (optionally followed by a dot)
-    # Using word boundaries to avoid matching letters inside words.
-    return re.sub(r'\b([a-zA-Z])\b\.?', _repl_letter, text)
+    return RE_STANDALONE_LETTER.sub(_repl_letter, text)
 
 def normalize_urls(text):
-    # Regex for URLs starting with http, https or www
-    url_re = r'\b(?:https?://|www\.)[A-Za-z0-9.\-_~:/?#\[\]@!$&\'()*+,;=]+\b'
-
     def _repl_url(m):
         url = m.group(0)
         res = []
@@ -214,11 +225,9 @@ def normalize_urls(text):
             else: res.append(char)
         return " ".join(res)
 
-    return re.sub(url_re, _repl_url, text)
+    return RE_URL.sub(_repl_url, text)
 
 def normalize_slashes(text):
-    # Match number/number (not handled by date or units)
-    pattern = r'\b(\d+)/(\d+)\b'
     def _repl(m):
         n1 = m.group(1)
         n2 = m.group(2)
@@ -226,11 +235,9 @@ def normalize_slashes(text):
         if len(n1) > 2 or int(n1) > 31:
             return f"{n2w(n1)} xẹt {n2w(n2)}"
         return f"{n2w(n1)} trên {n2w(n2)}"
-    return re.sub(pattern, _repl, text)
+    return RE_SLASH_NUMBER.sub(_repl, text)
 
 def normalize_emails(text):
-    email_re = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
-
     def _repl_email(m):
         email = m.group(0)
         parts = email.split('@')
@@ -272,11 +279,10 @@ def normalize_emails(text):
 
         return " ".join(user_norm) + " a còng " + domain_norm
 
-    return re.sub(email_re, _repl_email, text)
+    return RE_EMAIL.sub(_repl_email, text)
 
 def normalize_acronyms(text):
-    # Split into sentences to respect the "whole sentence is uppercase" rule
-    sentences = re.split(r'([.!?]+(?:\s+|$))', text)
+    sentences = RE_SENTENCE_SPLIT.split(text)
     processed = []
     for i in range(0, len(sentences), 2):
         s = sentences[i]
@@ -285,7 +291,6 @@ def normalize_acronyms(text):
             processed.append(sep)
             continue
 
-        # A sentence is "all uppercase" if all words with letters are uppercase
         words = s.split()
         alpha_words = [w for w in words if any(c.isalpha() for c in w)]
         is_all_caps = len(alpha_words) > 0 and all(w.isupper() for w in alpha_words)
@@ -296,8 +301,7 @@ def normalize_acronyms(text):
                 if word.isdigit(): return word
                 return " ".join(_en_letter_names.get(c.lower(), c) for c in word)
 
-            # Match 2+ uppercase letters/digits, must contain at least one uppercase letter
-            s = re.sub(r'\b(?=[A-Z0-9]*[A-Z])[A-Z0-9]{2,}\b', _repl_acronym, s)
+            s = RE_ACRONYM.sub(_repl_acronym, s)
 
         processed.append(s + sep)
     return "".join(processed)
@@ -310,8 +314,8 @@ def normalize_others(text):
     text = normalize_emails(text)
     text = normalize_slashes(text)
 
-    text = re.sub(_roman_number_re, expand_roman, text)
-    text = re.sub(_letter_re, expand_letter, text, flags=re.IGNORECASE)
+    text = RE_ROMAN_NUMBER.sub(expand_roman, text)
+    text = RE_LETTER.sub(expand_letter, text)
     
     def _expand_alphanumeric(m):
         num = m.group(1)
@@ -323,7 +327,7 @@ def normalize_others(text):
             return f"{num} {pronunciation}"
         return m.group(0)
     
-    text = re.sub(r'\b(\d+)([a-zA-Z])\b', _expand_alphanumeric, text)
+    text = RE_ALPHANUMERIC.sub(_expand_alphanumeric, text)
     
     text = text.replace('"', '').replace("'", '').replace(''', '').replace(''', '')
     text = text.replace('&', ' và ').replace('+', ' cộng ').replace('=', ' bằng ').replace('#', ' thăng ')
@@ -331,27 +335,25 @@ def normalize_others(text):
     text = text.replace('≥', ' lớn hơn hoặc bằng ').replace('≤', ' nhỏ hơn hoặc bằng ')
     text = text.replace('±', ' cộng trừ ').replace('≈', ' xấp xỉ ')
 
-    # Re-run expansions in case symbol replacement uncovered new patterns (e.g. #1kg -> thăng 1kg)
     text = expand_compound_units(text)
     text = expand_measurement(text)
     text = expand_currency(text)
     
-    text = re.sub(r'[\(\[\{]\s*(.*?)\s*[\)\]\}]', r', \1, ', text)
-    text = re.sub(r'[\[\]\(\)\{\}]', ' ', text)
+    text = RE_BRACKETS.sub(r', \1, ', text)
+    text = RE_STRIP_BRACKETS.sub(' ', text)
     
-    text = re.sub(r'-(\d+(?:[.,]\d+)?)\s*°\s*c\b', r'âm \1 độ xê', text, flags=re.IGNORECASE)
-    text = re.sub(r'-(\d+(?:[.,]\d+)?)\s*°\s*f\b', r'âm \1 độ ép', text, flags=re.IGNORECASE)
-    text = re.sub(r'(\d+(?:[.,]\d+)?)\s*°\s*c\b', r'\1 độ xê', text, flags=re.IGNORECASE)
-    text = re.sub(r'(\d+(?:[.,]\d+)?)\s*°\s*f\b', r'\1 độ ép', text, flags=re.IGNORECASE)
-    text = re.sub(r'°', ' độ ', text)
+    text = RE_TEMP_C_NEG.sub(r'âm \1 độ xê', text)
+    text = RE_TEMP_F_NEG.sub(r'âm \1 độ ép', text)
+    text = RE_TEMP_C.sub(r'\1 độ xê', text)
+    text = RE_TEMP_F.sub(r'\1 độ ép', text)
+    text = RE_DEGREE.sub(' độ ', text)
 
-    # Acronyms should be handled before converting version numbers like 1.2.3
     text = normalize_acronyms(text)
 
     def _expand_version(m):
-        return ' chấm '.join(m.group(0).split('.'))
-    text = re.sub(r'\b\d+(?:\.\d+)+\b', _expand_version, text)
+        return ' chấm '.join(m.group(1).split('.'))
+    text = RE_VERSION.sub(_expand_version, text)
 
-    text = re.sub(r'[^\w\sàáảãạăắằẳẵặâấầẩẫậèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữợỳýỷỹỵđ.,!?;:@%_]', ' ', text)
+    text = RE_CLEAN_OTHERS.sub(' ', text)
     
     return text

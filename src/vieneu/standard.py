@@ -1,15 +1,16 @@
 from pathlib import Path
 from typing import Optional, Union, List, Generator, Any, Dict
-import re
 import numpy as np
 import torch
-import librosa
 import gc
+import logging
 from .base import BaseVieneuTTS
-from .utils import extract_speech_ids
+from .utils import extract_speech_ids, _linear_overlap_add
 from vieneu_utils.phonemize_text import phonemize_with_dict
 from vieneu_utils.core_utils import split_text_into_chunks, join_audio_chunks
 from neucodec import NeuCodec, DistillNeuCodec
+
+logger = logging.getLogger("Vieneu.Standard")
 
 class VieNeuTTS(BaseVieneuTTS):
     """
@@ -61,15 +62,15 @@ class VieNeuTTS(BaseVieneuTTS):
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Error during VieNeuTTS closure: {e}")
 
     def _load_backbone(self, backbone_repo: str, backbone_device: str, hf_token: Optional[str] = None):
         if backbone_device == "mps" and not torch.backends.mps.is_available():
-            print("Warning: MPS not available, falling back to CPU")
+            logger.warning("MPS not available, falling back to CPU")
             backbone_device = "cpu"
 
-        print(f"Loading backbone from: {backbone_repo} on {backbone_device} ...")
+        logger.info(f"Loading backbone from: {backbone_repo} on {backbone_device} ...")
 
         if backbone_repo.lower().endswith("gguf") or "gguf" in backbone_repo.lower():
             try:
@@ -98,10 +99,10 @@ class VieNeuTTS(BaseVieneuTTS):
 
     def _load_codec(self, codec_repo: str, codec_device: str):
         if codec_device == "mps" and not torch.backends.mps.is_available():
-            print("Warning: MPS not available for codec, falling back to CPU")
+            logger.warning("Warning: MPS not available for codec, falling back to CPU")
             codec_device = "cpu"
 
-        print(f"Loading codec from: {codec_repo} on {codec_device} ...")
+        logger.info(f"Loading codec from: {codec_repo} on {codec_device} ...")
         match codec_repo:
             case "neuphonic/neucodec":
                 self.codec = NeuCodec.from_pretrained(codec_repo)
@@ -132,7 +133,7 @@ class VieNeuTTS(BaseVieneuTTS):
         except ImportError as e:
             raise ImportError("PEFT library required for LoRA. Install with: pip install peft")
 
-        print(f"🎯 Loading LoRA adapter from: {lora_repo_id}")
+        logger.info(f"🎯 Loading LoRA adapter from: {lora_repo_id}")
 
         if not hasattr(self, '_lora_loaded') or not self._lora_loaded:
             self._current_lora_repo = None
@@ -146,7 +147,7 @@ class VieNeuTTS(BaseVieneuTTS):
             self._lora_loaded = True
             self._current_lora_repo = lora_repo_id
             self._load_voices(lora_repo_id, hf_token, clear_existing=True)
-            print(f"   ✅ LoRA adapter loaded: {lora_repo_id}")
+            logger.info(f"   ✅ LoRA adapter loaded: {lora_repo_id}")
             return True
         except Exception as e:
             raise RuntimeError(f"Failed to load LoRA adapter: {str(e)}") from e
@@ -155,7 +156,7 @@ class VieNeuTTS(BaseVieneuTTS):
         if not getattr(self, '_lora_loaded', False):
             return False
 
-        print(f"   🔄 Unloading LoRA adapter: {self._current_lora_repo}")
+        logger.info(f"   🔄 Unloading LoRA adapter: {self._current_lora_repo}")
         try:
             self.backbone = self.backbone.unload()
             self._lora_loaded = False
@@ -163,29 +164,15 @@ class VieNeuTTS(BaseVieneuTTS):
             gc.collect()
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
-            print("   ✅ LoRA adapter unloaded, original weights restored")
+            logger.info("   ✅ LoRA adapter unloaded, original weights restored")
             return True
         except Exception as e:
-            print(f"   ⚠️ Error during unload: {e}")
+            logger.error(f"   ⚠️ Error during unload: {e}")
             return False
 
     def infer(self, text: str, ref_audio: Optional[Union[str, Path]] = None, ref_codes: Optional[Union[np.ndarray, torch.Tensor]] = None, ref_text: Optional[str] = None, max_chars: int = 256, silence_p: float = 0.15, crossfade_p: float = 0.0, voice: Optional[Dict[str, Any]] = None, temperature: float = 1.0, top_k: int = 50, skip_normalize: bool = False) -> np.ndarray:
-        if voice is not None:
-            ref_codes = voice.get('codes', ref_codes)
-            ref_text = voice.get('text', ref_text)
 
-        if ref_audio is not None and ref_codes is None:
-            ref_codes = self.encode_reference(ref_audio)
-        elif self._default_voice and (ref_codes is None or ref_text is None):
-            try:
-                voice_data = self.get_preset_voice(None)
-                ref_codes = voice_data['codes']
-                ref_text = voice_data['text']
-            except Exception:
-                pass
-
-        if ref_codes is None or ref_text is None:
-             raise ValueError("Must provide either 'voice' dict or both 'ref_codes' and 'ref_text'.")
+        ref_codes, ref_text = self._resolve_ref_voice(voice, ref_audio, ref_codes, ref_text)
 
         if not skip_normalize:
             text = self.normalizer.normalize(text)
@@ -205,24 +192,11 @@ class VieNeuTTS(BaseVieneuTTS):
             all_wavs.append(wav)
 
         final_wav = join_audio_chunks(all_wavs, self.sample_rate, silence_p, crossfade_p)
-        if self.watermarker:
-            final_wav = self.watermarker.apply_watermark(final_wav, sample_rate=self.sample_rate)
-        return final_wav
+        return self._apply_watermark(final_wav)
 
-    def infer_stream(self, text: str, ref_codes: Optional[Union[np.ndarray, torch.Tensor]] = None, ref_text: Optional[str] = None, max_chars: int = 256, voice: Optional[Dict[str, Any]] = None, temperature: float = 1.0, top_k: int = 50, skip_normalize: bool = False) -> Generator[np.ndarray, None, None]:
-        if voice is not None:
-            ref_codes = voice.get('codes', ref_codes)
-            ref_text = voice.get('text', ref_text)
-        elif self._default_voice and (ref_codes is None or ref_text is None):
-            try:
-                voice_data = self.get_preset_voice(None)
-                ref_codes = voice_data['codes']
-                ref_text = voice_data['text']
-            except Exception:
-                pass
+    def infer_stream(self, text: str, ref_audio: Optional[Union[str, Path]] = None, ref_codes: Optional[Union[np.ndarray, torch.Tensor]] = None, ref_text: Optional[str] = None, max_chars: int = 256, voice: Optional[Dict[str, Any]] = None, temperature: float = 1.0, top_k: int = 50, skip_normalize: bool = False) -> Generator[np.ndarray, None, None]:
 
-        if ref_codes is None or ref_text is None:
-             raise ValueError("Must provide either 'voice' dict or both 'ref_codes' and 'ref_text'.")
+        ref_codes, ref_text = self._resolve_ref_voice(voice, ref_audio, ref_codes, ref_text)
 
         if not skip_normalize:
             text = self.normalizer.normalize(text)
@@ -230,17 +204,19 @@ class VieNeuTTS(BaseVieneuTTS):
         chunks = split_text_into_chunks(text, max_chars=max_chars)
         for chunk in chunks:
             if self._is_quantized_model:
-                from .utils import _linear_overlap_add
                 yield from self._infer_stream_ggml(ref_codes, ref_text, chunk, temperature, top_k)
             else:
                 prompt_ids = self._apply_chat_template(ref_codes, ref_text, chunk)
                 output_str = self._infer_torch(prompt_ids, temperature, top_k)
                 wav = self._decode(output_str)
-                if self.watermarker:
-                    wav = self.watermarker.apply_watermark(wav, sample_rate=self.sample_rate)
-                yield wav
+                yield self._apply_watermark(wav)
 
-    def _apply_chat_template(self, ref_codes: List[int], ref_text: str, input_text: str) -> List[int]:
+    def _apply_chat_template(self, ref_codes: Union[List[int], torch.Tensor, np.ndarray], ref_text: str, input_text: str) -> List[int]:
+        if isinstance(ref_codes, (torch.Tensor, np.ndarray)):
+            ref_codes_list = ref_codes.flatten().tolist()
+        else:
+            ref_codes_list = ref_codes
+
         input_text = phonemize_with_dict(ref_text) + " " + phonemize_with_dict(input_text, skip_normalize=True)
 
         speech_replace = self.tokenizer.convert_tokens_to_ids("<|SPEECH_REPLACE|>")
@@ -257,7 +233,7 @@ class VieNeuTTS(BaseVieneuTTS):
         ids = ids[:text_replace_idx] + [text_prompt_start] + input_ids + [text_prompt_end] + ids[text_replace_idx + 1:]
 
         speech_replace_idx = ids.index(speech_replace)
-        codes_str = "".join([f"<|speech_{i}|>" for i in ref_codes])
+        codes_str = "".join([f"<|speech_{i}|>" for i in ref_codes_list])
         codes = self.tokenizer.encode(codes_str, add_special_tokens=False)
         ids = ids[:speech_replace_idx] + [speech_gen_start] + list(codes)
         return ids
@@ -280,10 +256,15 @@ class VieNeuTTS(BaseVieneuTTS):
         output_str = self.tokenizer.decode(output_tokens[0, input_length:].cpu().numpy().tolist(), add_special_tokens=False)
         return output_str
 
-    def _infer_ggml(self, ref_codes: List[int], ref_text: str, input_text: str, temperature: float = 1.0, top_k: int = 50) -> str:
+    def _infer_ggml(self, ref_codes: Union[List[int], torch.Tensor, np.ndarray], ref_text: str, input_text: str, temperature: float = 1.0, top_k: int = 50) -> str:
+        if isinstance(ref_codes, (torch.Tensor, np.ndarray)):
+            ref_codes_list = ref_codes.flatten().tolist()
+        else:
+            ref_codes_list = ref_codes
+
         ref_text = phonemize_with_dict(ref_text)
         input_text = phonemize_with_dict(input_text, skip_normalize=True)
-        codes_str = "".join([f"<|speech_{idx}|>" for idx in ref_codes])
+        codes_str = "".join([f"<|speech_{idx}|>" for idx in ref_codes_list])
         prompt = (
             f"user: Convert the text to speech:<|TEXT_PROMPT_START|>{ref_text} {input_text}"
             f"<|TEXT_PROMPT_END|>\nassistant:<|SPEECH_GENERATION_START|>{codes_str}"
@@ -291,20 +272,25 @@ class VieNeuTTS(BaseVieneuTTS):
         output = self.backbone(prompt, max_tokens=self.max_context, temperature=temperature, top_k=top_k, stop=["<|SPEECH_GENERATION_END|>"])
         return output["choices"][0]["text"]
 
-    def _infer_stream_ggml(self, ref_codes: Union[np.ndarray, torch.Tensor], ref_text: str, input_text: str, temperature: float = 1.0, top_k: int = 50) -> Generator[np.ndarray, None, None]:
-        from .utils import _linear_overlap_add
+    def _infer_stream_ggml(self, ref_codes: Union[np.ndarray, torch.Tensor, List[int]], ref_text: str, input_text: str, temperature: float = 1.0, top_k: int = 50) -> Generator[np.ndarray, None, None]:
         ref_text = phonemize_with_dict(ref_text)
         input_text = phonemize_with_dict(input_text, skip_normalize=True)
-        codes_str = "".join([f"<|speech_{idx}|>" for idx in ref_codes])
+
+        if isinstance(ref_codes, (torch.Tensor, np.ndarray)):
+            ref_codes_list = ref_codes.flatten().tolist()
+        else:
+            ref_codes_list = ref_codes
+
+        codes_str = "".join([f"<|speech_{idx}|>" for idx in ref_codes_list])
         prompt = (
             f"user: Convert the text to speech:<|TEXT_PROMPT_START|>{ref_text} {input_text}"
             f"<|TEXT_PROMPT_END|>\nassistant:<|SPEECH_GENERATION_START|>{codes_str}"
         )
 
         audio_cache: List[np.ndarray] = []
-        token_cache: List[str] = [f"<|speech_{idx}|>" for idx in ref_codes]
+        token_cache: List[str] = [f"<|speech_{idx}|>" for idx in ref_codes_list]
         n_decoded_samples: int = 0
-        n_decoded_tokens: int = len(ref_codes)
+        n_decoded_tokens: int = len(ref_codes_list)
 
         for item in self.backbone(prompt, max_tokens=self.max_context, temperature=temperature, top_k=top_k, stop=["<|SPEECH_GENERATION_END|>"], stream=True):
             output_str = item["choices"][0]["text"]
@@ -317,8 +303,7 @@ class VieNeuTTS(BaseVieneuTTS):
                 sample_end = sample_start + (self.streaming_frames_per_chunk + 2 * self.streaming_overlap_frames) * self.hop_length
                 curr_codes = token_cache[tokens_start:tokens_end]
                 recon = self._decode("".join(curr_codes))
-                if self.watermarker:
-                    recon = self.watermarker.apply_watermark(recon, sample_rate=self.sample_rate)
+                recon = self._apply_watermark(recon)
                 recon = recon[sample_start:sample_end]
                 audio_cache.append(recon)
 
@@ -335,8 +320,7 @@ class VieNeuTTS(BaseVieneuTTS):
             sample_start = (len(token_cache) - tokens_start - remaining_tokens - self.streaming_overlap_frames) * self.hop_length
             curr_codes = token_cache[tokens_start:]
             recon = self._decode("".join(curr_codes))
-            if self.watermarker:
-                recon = self.watermarker.apply_watermark(recon, sample_rate=self.sample_rate)
+            recon = self._apply_watermark(recon)
             recon = recon[sample_start:]
             audio_cache.append(recon)
             processed_recon = _linear_overlap_add(audio_cache, stride=self.streaming_stride_samples)

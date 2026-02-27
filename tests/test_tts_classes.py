@@ -30,8 +30,25 @@ def mock_backbone():
 @pytest.fixture
 def mock_tokenizer():
     tokenizer = MagicMock()
-    tokenizer.convert_tokens_to_ids.return_value = 1
-    tokenizer.encode.return_value = [1, 2, 3]
+
+    # Map special tokens to specific IDs
+    token_to_id = {
+        "<|SPEECH_REPLACE|>": 1001,
+        "<|SPEECH_GENERATION_START|>": 1002,
+        "<|TEXT_REPLACE|>": 1003,
+        "<|TEXT_PROMPT_START|>": 1004,
+        "<|TEXT_PROMPT_END|>": 1005,
+        "<|SPEECH_GENERATION_END|>": 1006
+    }
+    tokenizer.convert_tokens_to_ids.side_effect = lambda x: token_to_id.get(x, 999)
+
+    # Mock encode to include the TEXT_REPLACE and SPEECH_REPLACE tokens when expected
+    def mocked_encode(text, **kwargs):
+        if "TEXT_REPLACE" in text:
+            return [10, 1003, 11, 1001]
+        return [1, 2, 3]
+
+    tokenizer.encode.side_effect = mocked_encode
     tokenizer.decode.return_value = "<|speech_1|><|speech_2|>"
     return tokenizer
 
@@ -53,11 +70,25 @@ def test_vieneu_tts_infer(mock_codec, mock_backbone, mock_tokenizer):
 
         tts = VieNeuTTS(backbone_repo="some/repo", backbone_device="cpu")
 
-        # Mocking phonemize_with_dict to avoid espeak dependency issues in some envs
         with patch("vieneu.standard.phonemize_with_dict", return_value="phonemes"):
             audio = tts.infer("Xin chào", ref_codes=[1, 2, 3], ref_text="Chào")
             assert isinstance(audio, np.ndarray)
             assert len(audio) > 0
+            assert len(audio) == 4800
+
+def test_vieneu_tts_infer_with_voice_preset(mock_codec, mock_backbone, mock_tokenizer):
+    with patch("vieneu.standard.NeuCodec.from_pretrained", return_value=mock_codec), \
+         patch("vieneu.standard.DistillNeuCodec.from_pretrained", return_value=mock_codec), \
+         patch("transformers.AutoTokenizer.from_pretrained", return_value=mock_tokenizer), \
+         patch("transformers.AutoModelForCausalLM.from_pretrained", return_value=mock_backbone):
+
+        tts = VieNeuTTS(backbone_repo="some/repo", backbone_device="cpu")
+        tts._preset_voices = {"test_voice": {"codes": [1, 2, 3], "text": "test"}}
+
+        with patch("vieneu.standard.phonemize_with_dict", return_value="phonemes"):
+            audio = tts.infer("Xin chào", voice=tts.get_preset_voice("test_voice"))
+            assert isinstance(audio, np.ndarray)
+            assert len(audio) == 4800
 
 def test_remote_vieneu_tts_infer(mock_codec):
     with patch("vieneu.standard.DistillNeuCodec.from_pretrained", return_value=mock_codec):
@@ -73,4 +104,18 @@ def test_remote_vieneu_tts_infer(mock_codec):
              patch("vieneu.remote.phonemize_with_dict", return_value="phonemes"):
             audio = tts.infer("Xin chào", ref_codes=[1, 2, 3], ref_text="Chào")
             assert isinstance(audio, np.ndarray)
-            assert len(audio) > 0
+            assert len(audio) == 4800
+
+def test_vieneu_tts_streaming(mock_codec, mock_backbone, mock_tokenizer):
+    with patch("vieneu.standard.NeuCodec.from_pretrained", return_value=mock_codec), \
+         patch("vieneu.standard.DistillNeuCodec.from_pretrained", return_value=mock_codec), \
+         patch("transformers.AutoTokenizer.from_pretrained", return_value=mock_tokenizer), \
+         patch("transformers.AutoModelForCausalLM.from_pretrained", return_value=mock_backbone):
+
+        tts = VieNeuTTS(backbone_repo="some/repo", backbone_device="cpu")
+
+        with patch("vieneu.standard.phonemize_with_dict", return_value="phonemes"):
+            stream = tts.infer_stream("Xin chào", ref_codes=[1, 2, 3], ref_text="Chào")
+            chunks = list(stream)
+            assert len(chunks) > 0
+            assert isinstance(chunks[0], np.ndarray)

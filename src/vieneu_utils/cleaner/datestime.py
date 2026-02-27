@@ -6,12 +6,13 @@ day_in_month = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 _date_seperator = r"(\/|-|\.)"
 _short_date_seperator = r"(\/|-)"
 
-_full_date_pattern = r"\b(\d{1,2})" + _date_seperator + r"(\d{1,2})" + _date_seperator + r"(\d{4})\b"
-_day_month_pattern = r"\b(\d{1,2})" + _short_date_seperator + r"(\d{1,2})\b"
-_month_year_pattern = r"\b(\d{1,2})" + _date_seperator + r"(\d{4})\b"
-
-_full_time_pattern = r"\b(\d{1,2})(g|:|h)(\d{1,2})(p|:|m)(\d{1,2})(?:\s*(giây|s|g))?\b"
-_time_pattern = r"\b(\d{1,2})(g|:|h)(\d{1,2})(?:\s*(phút|p|m))?\b"
+# Compiled Regular Expressions
+RE_FULL_DATE = re.compile(r"\b(\d{1,2})" + _date_seperator + r"(\d{1,2})" + _date_seperator + r"(\d{4})\b", re.IGNORECASE)
+RE_DAY_MONTH = re.compile(r"\b(\d{1,2})" + _short_date_seperator + r"(\d{1,2})\b", re.IGNORECASE)
+RE_MONTH_YEAR = re.compile(r"\b(\d{1,2})" + _date_seperator + r"(\d{4})\b", re.IGNORECASE)
+RE_FULL_TIME = re.compile(r"\b(\d{1,2})(g|:|h)(\d{1,2})(p|:|m)(\d{1,2})(?:\s*(giây|s|g))?\b", re.IGNORECASE)
+RE_TIME = re.compile(r"\b(\d{1,2})(g|:|h)(\d{1,2})(?:\s*(phút|p|m))?\b", re.IGNORECASE)
+RE_REDUNDANT_NGAY = re.compile(r'\bngày\s+ngày\b', re.IGNORECASE)
 
 def _is_valid_date(day, month):
     try:
@@ -45,23 +46,19 @@ def _expand_time(match):
     return match.group(0)
 
 def normalize_date(text):
-    text = re.sub(_full_date_pattern, _expand_full_date, text, flags=re.IGNORECASE)
-    text = re.sub(
-        _month_year_pattern,
+    text = RE_FULL_DATE.sub(_expand_full_date, text)
+    text = RE_MONTH_YEAR.sub(
         lambda m: f"tháng {n2w(str(int(m.group(1))))} năm {n2w(m.group(3))}",
-        text,
-        flags=re.IGNORECASE
+        text
     )
-    text = re.sub(_day_month_pattern, _expand_day_month, text, flags=re.IGNORECASE)
-    text = re.sub(r'\bngày\s+ngày\b', 'ngày', text, flags=re.IGNORECASE)
+    text = RE_DAY_MONTH.sub(_expand_day_month, text)
+    text = RE_REDUNDANT_NGAY.sub('ngày', text)
     return text
 
 def normalize_time(text):
-    text = re.sub(
-        _full_time_pattern,
+    text = RE_FULL_TIME.sub(
         lambda m: f"{n2w(str(int(m.group(1))))} giờ {n2w(str(int(m.group(3))))} phút {n2w(str(int(m.group(5))))} giây",
-        text,
-        flags=re.IGNORECASE
+        text
     )
-    text = re.sub(_time_pattern, _expand_time, text, flags=re.IGNORECASE)
+    text = RE_TIME.sub(_expand_time, text)
     return text
