@@ -53,6 +53,8 @@ def normalize_date(text):
     )
     text = RE_DAY_MONTH.sub(_expand_day_month, text)
     text = RE_REDUNDANT_NGAY.sub('ngày', text)
+    text = re.sub(r'\btháng\s+tháng\b', 'tháng', text, flags=re.IGNORECASE)
+    text = re.sub(r'\bnăm\s+năm\b', 'năm', text, flags=re.IGNORECASE)
     return text
 
 def normalize_time(text):
