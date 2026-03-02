@@ -46,7 +46,7 @@ def _setup_windows_espeak() -> None:
     if os.path.exists(default_path):
         EspeakWrapper.set_library(default_path)
     else:
-        logger.warning("⚠️ eSpeak-NG is not installed. The system will use the built-in dictionary, but it is recommended to install eSpeak-NG for maximum performance and accuracy.")
+        logger.warning("\033[91;1m⚠️ eSpeak-NG is not installed. The system will use the built-in dictionary, but it is recommended to install eSpeak-NG for maximum performance and accuracy.\033[0m")
 
 def _setup_linux_espeak() -> None:
     """Setup eSpeak for Linux."""
@@ -64,7 +64,7 @@ def _setup_linux_espeak() -> None:
             EspeakWrapper.set_library(sorted(matches, key=len)[0])
             return
     
-    logger.warning("⚠️ eSpeak-NG is not installed on Linux. The system will use the built-in dictionary, but it is recommended to install eSpeak-NG (sudo apt install espeak-ng) for maximum performance.")
+    logger.warning("\033[91;1m⚠️ eSpeak-NG is not installed on Linux. The system will use the built-in dictionary, but it is recommended to install eSpeak-NG (sudo apt install espeak-ng) for maximum performance.\033[0m")
 
 def _setup_macos_espeak() -> None:
     """Setup eSpeak for macOS."""
@@ -82,7 +82,7 @@ def _setup_macos_espeak() -> None:
             EspeakWrapper.set_library(path)
             return
     
-    logger.warning("⚠️ eSpeak-NG is not installed on macOS. The system will use the built-in dictionary, but it is recommended to install eSpeak-NG (brew install espeak-ng) for maximum performance.")
+    logger.warning("\033[91;1m⚠️ eSpeak-NG is not installed on macOS. The system will use the built-in dictionary, but it is recommended to install eSpeak-NG (brew install espeak-ng) for maximum performance.\033[0m")
 
 # Configure logging
 logger = logging.getLogger("Vieneu.Phonemizer")
