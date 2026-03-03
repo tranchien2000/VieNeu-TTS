@@ -33,17 +33,60 @@ def load_json(path: str) -> dict:
 def setup_espeak_library() -> None:
     """Configure eSpeak library path based on operating system."""
     system = platform.system()
+    
     if system == "Windows":
-        default_path = r"C:\Program Files\eSpeak NG\libespeak-ng.dll"
-        if os.path.exists(default_path):
-            EspeakWrapper.set_library(default_path)
+        _setup_windows_espeak()
     elif system == "Linux":
-        search_patterns = ["/usr/lib/x86_64-linux-gnu/libespeak-ng.so*", "/usr/lib/libespeak-ng.so*"]
-        for p in search_patterns:
-            matches = glob.glob(p)
-            if matches:
-                EspeakWrapper.set_library(sorted(matches, key=len)[0])
-                return
+        _setup_linux_espeak()
+    elif system == "Darwin":
+        _setup_macos_espeak()
+    else:
+        logger.warning(f"Warning: Unsupported OS: {system}")
+        return
+
+def _setup_windows_espeak() -> None:
+    """Setup eSpeak for Windows."""
+    default_path = r"C:\Program Files\eSpeak NG\libespeak-ng.dll"
+    if os.path.exists(default_path):
+        EspeakWrapper.set_library(default_path)
+    else:
+        logger.warning("\033[91;1m⚠️ eSpeak-NG is not installed. The system will use the built-in dictionary, but it is recommended to install eSpeak-NG for maximum performance and accuracy.\033[0m")
+
+def _setup_linux_espeak() -> None:
+    """Setup eSpeak for Linux."""
+    search_patterns = [
+        "/usr/lib/x86_64-linux-gnu/libespeak-ng.so*",
+        "/usr/lib/x86_64-linux-gnu/libespeak.so*",
+        "/usr/lib/libespeak-ng.so*",
+        "/usr/lib64/libespeak-ng.so*",
+        "/usr/local/lib/libespeak-ng.so*",
+    ]
+    
+    for pattern in search_patterns:
+        matches = glob.glob(pattern)
+        if matches:
+            EspeakWrapper.set_library(sorted(matches, key=len)[0])
+            return
+    
+    logger.warning("\033[91;1m⚠️ eSpeak-NG is not installed on Linux. The system will use the built-in dictionary, but it is recommended to install eSpeak-NG (sudo apt install espeak-ng) for maximum performance.\033[0m")
+
+def _setup_macos_espeak() -> None:
+    """Setup eSpeak for macOS."""
+    espeak_lib = os.environ.get('PHONEMIZER_ESPEAK_LIBRARY')
+    
+    paths_to_check = [
+        espeak_lib,
+        "/opt/homebrew/lib/libespeak-ng.dylib",  # Apple Silicon
+        "/usr/local/lib/libespeak-ng.dylib",     # Intel
+        "/opt/local/lib/libespeak-ng.dylib",     # MacPorts
+    ]
+    
+    for path in paths_to_check:
+        if path and os.path.exists(path):
+            EspeakWrapper.set_library(path)
+            return
+    
+    logger.warning("\033[91;1m⚠️ eSpeak-NG is not installed on macOS. The system will use the built-in dictionary, but it is recommended to install eSpeak-NG (brew install espeak-ng) for maximum performance.\033[0m")
 
 # Initialize
 setup_espeak_library()
