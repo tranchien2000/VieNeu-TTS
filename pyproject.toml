@@ -36,7 +36,7 @@ explicit = true
 
 [project]
 name = "vieneu"
-version = "1.2.3"
+version = "1.2.4"
 description = "Advanced on-device Vietnamese TTS with instant voice cloning"
 readme = "README_PYPI.md"
 license = { file = "LICENSE" }
@@ -125,7 +125,7 @@ where = ["src", "."]
 include = ["vieneu*", "vieneu_utils*", "apps*", "examples*"]
 
 [tool.setuptools.package-data]
-vieneu_utils = ["*.json"]
+vieneu_utils = ["phone_dict/*.db"]
 vieneu = ["assets/samples/*"]
 
 [tool.uv.sources]
