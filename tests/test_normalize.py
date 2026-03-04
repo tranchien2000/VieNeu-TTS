@@ -169,13 +169,13 @@ TEST_CASES = [
     ("Đơn vị km", "đơn vị ki lô mét"),
 
     # ─── 20. EMAIL ───────────────────────────────────────────────────────────
-    ("Liên hệ qua email pnnbao@gmail.com nhé.", "liên hệ qua email phê nờ nờ bê a o a còng gờ meo chấm com nhé."),
-    ("Email: contact@example.com", "email: xê o nờ tê a xê tê a còng e ích a mờ phê lờ e chấm xê o mờ"),
+    ("Liên hệ qua email pnnbao@gmail.com nhé.", "liên hệ qua email phê nờ nờ bê a ô a còng gờ meo chấm com nhé."),
+    ("Email: contact@example.com", "email: xê ô nờ tê a xê tê a còng e ích a mờ phê lờ e chấm xê ô mờ"),
 
     # ─── 21. VIẾT TẮT ALPHANUMERIC (ENGLISH STYLE) ──────────────────────────
     ("Mô hình B2B rất phổ biến.", "mô hình <en>b two b</en> rất phổ biến."),
-    ("Tôi dùng camera K3.", "tôi dùng camera <en>k three</en>."),
-    ("Mã số A1B.", "mã số <en>a one b</en>."),
+    ("Tôi dùng camera K3.", "tôi dùng camera ca ba."),
+    ("Mã số A1B.", "mã số a một bê."),
     ("Tôi đang học về AI.", "tôi đang học về <en>a i</en>."),
     ("Dự án VYE.", "dự án <en>v y e</en>."),
 
@@ -185,8 +185,8 @@ TEST_CASES = [
 
     # ─── 23. TOÀN DIỆN (CẢI TIẾN MỚI) ──────────────────────────────────────────
     # URLs
-    ("Truy cập https://vieneu.io để biết thêm chi tiết.", "truy cập hát tê tê phê ét hai chấm xẹt xẹt vờ i e nờ e u chấm i o để biết thêm chi tiết."),
-    ("Website www.google.com rất hữu ích.", "website vê kép vê kép vê kép chấm gờ o o gờ lờ e chấm xê o mờ rất hữu ích."),
+    ("Truy cập https://vieneu.io để biết thêm chi tiết.", "truy cập hát tê tê phê ét hai chấm xẹt xẹt vờ i e nờ e u chấm i ô để biết thêm chi tiết."),
+    ("Website www.google.com rất hữu ích.", "website vê kép vê kép vê kép chấm gờ ô ô gờ lờ e chấm xê ô mờ rất hữu ích."),
 
     # Slashes / Địa chỉ
     ("Địa chỉ nhà tôi là 123/4 đường Nguyễn Trãi.", "địa chỉ nhà tôi là một trăm hai mươi ba xẹt bốn đường nguyễn trãi."),

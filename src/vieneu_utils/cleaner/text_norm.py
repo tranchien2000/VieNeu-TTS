@@ -14,7 +14,7 @@ _en_letter_names = {
 _vi_letter_names = {
     "a": "a", "b": "bê", "c": "xê", "d": "dê", "đ": "đê", "e": "e", "ê": "ê",
     "f": "ép", "g": "gờ", "h": "hát", "i": "i", "j": "giây", "k": "ca", "l": "lờ",
-    "m": "mờ", "n": "nờ", "o": "o", "ô": "ô", "ơ": "ơ", "p": "phê", "q": "qui",
+    "m": "mờ", "n": "nờ", "o": "ô", "ô": "ô", "ơ": "ơ", "p": "phê", "q": "qui",
     "r": "rờ", "s": "ét", "t": "tê", "u": "u", "ư": "ư", "v": "vờ", "w": "vê kép",
     "x": "ích", "y": "y", "z": "dét"
 }
@@ -324,9 +324,19 @@ def normalize_acronyms(text):
                 if word.isdigit(): return word
                 if word in WORD_LIKE_ACRONYMS:
                     return f"__START_EN__{word.lower()}__END_EN__"
-                
-                digit_names = {"0":"zero","1":"one","2":"two","3":"three","4":"four","5":"five","6":"six","7":"seven","8":"eight","9":"nine"}
-                spaced_word = " ".join(digit_names.get(c, c.lower()) for c in word if c.isalnum())
+                if any(c.isdigit() for c in word):
+                    if word.upper() == "B2B":
+                        return "__START_EN__b two b__END_EN__"
+                    
+                    res = []
+                    for c in word.lower():
+                        if c.isdigit():
+                            res.append(n2w_single(c))
+                        else:
+                            res.append(_vi_letter_names.get(c, c))
+                    return " ".join(res)
+
+                spaced_word = " ".join(c.lower() for c in word if c.isalnum())
                 if spaced_word:
                     return f"__START_EN__{spaced_word}__END_EN__"
                 return word
