@@ -59,15 +59,14 @@ _currency_key = {
 _letter_key_vi = _vi_letter_names
 
 _acronyms_exceptions_vi = {
-    "CĐV": "cổ động viên", "TV": "ti vi", "HĐND": "hội đồng nhân dân", "TAND": "toàn án nhân dân",
+    "CĐV": "cổ động viên", "HĐND": "hội đồng nhân dân", "TAND": "toàn án nhân dân",
     "BHXH": "bảo hiểm xã hội", "BHTN": "bảo hiểm thất nghiệp", "TP.HCM": "thành phố hồ chí minh",
     "VN": "việt nam", "UBND": "uỷ ban nhân dân", "TP": "thành phố", "HCM": "hồ chí minh",
     "HN": "hà nội", "BTC": "ban tổ chức", "CLB": "câu lạc bộ", "HTX": "hợp tác xã",
     "NXB": "nhà xuất bản", "TW": "trung ương", "CSGT": "cảnh sát giao thông", "LHQ": "liên hợp quốc",
     "THCS": "trung học cơ sở", "THPT": "trung học phổ thông", "ĐH": "đại học", "HLV": "huấn luyện viên",
     "GS": "giáo sư", "TS": "tiến sĩ", "TNHH": "trách nhiệm hữu hạn", "VĐV": "vận động viên",
-    "GDP": "gi đi pi", "FDI": "ép đê i", "ODA": "ô đê a", "covid": "cô vít", "youtube": "du túp",
-    "TPHCM": "thành phố hồ chí minh", "ĐH": "đại học", "PGS": "phó giáo sư"
+    "TPHCM": "thành phố hồ chí minh", "PGS": "phó giáo sư"
 }
 
 # Compiled Regular Expressions
@@ -303,6 +302,8 @@ def normalize_emails(text):
 
     return RE_EMAIL.sub(_repl_email, text)
 
+WORD_LIKE_ACRONYMS = {"UNESCO", "NASA", "NATO", "ASEAN", "OPEC", "SARS", "FIFA", "UNIC", "RAM", "VRAM"}
+
 def normalize_acronyms(text):
     sentences = RE_SENTENCE_SPLIT.split(text)
     processed = []
@@ -321,7 +322,14 @@ def normalize_acronyms(text):
             def _repl_acronym(m):
                 word = m.group(0)
                 if word.isdigit(): return word
-                return " ".join(_en_letter_names.get(c.lower(), c) for c in word)
+                if word in WORD_LIKE_ACRONYMS:
+                    return f"__START_EN__{word.lower()}__END_EN__"
+                
+                digit_names = {"0":"zero","1":"one","2":"two","3":"three","4":"four","5":"five","6":"six","7":"seven","8":"eight","9":"nine"}
+                spaced_word = " ".join(digit_names.get(c, c.lower()) for c in word if c.isalnum())
+                if spaced_word:
+                    return f"__START_EN__{spaced_word}__END_EN__"
+                return word
 
             s = RE_ACRONYM.sub(_repl_acronym, s)
 
@@ -379,5 +387,7 @@ def normalize_others(text):
     text = RE_VERSION.sub(_expand_version, text)
 
     text = RE_CLEAN_OTHERS.sub(' ', text)
+    
+    text = text.replace('__START_EN__', '<en>').replace('__END_EN__', '</en>')
     
     return text

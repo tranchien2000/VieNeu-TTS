@@ -173,15 +173,15 @@ TEST_CASES = [
     ("Email: contact@example.com", "email: xê o nờ tê a xê tê a còng e ích a mờ phê lờ e chấm xê o mờ"),
 
     # ─── 21. VIẾT TẮT ALPHANUMERIC (ENGLISH STYLE) ──────────────────────────
-    ("Mô hình B2B rất phổ biến.", "mô hình bi two bi rất phổ biến."),
-    ("Tôi dùng camera K3.", "tôi dùng camera cây three."),
-    ("Mã số A1B.", "mã số ây one bi."),
-    ("Tôi đang học về AI.", "tôi đang học về ây ai."),
-    ("Dự án VYE.", "dự án vi quai i"),
+    ("Mô hình B2B rất phổ biến.", "mô hình <en>b two b</en> rất phổ biến."),
+    ("Tôi dùng camera K3.", "tôi dùng camera <en>k three</en>."),
+    ("Mã số A1B.", "mã số <en>a one b</en>."),
+    ("Tôi đang học về AI.", "tôi đang học về <en>a i</en>."),
+    ("Dự án VYE.", "dự án <en>v y e</en>."),
 
     # ─── 22. PHÂN BIỆT HOA THƯỜNG TRONG CÂU ─────────────────────────────────
     ("TÔI ĐI HỌC", "tôi đi học"),
-    ("Chào mừng bạn đến với CTY.", "chào mừng bạn đến với xi ti quai."),
+    ("Chào mừng bạn đến với CTY.", "chào mừng bạn đến với <en>c t y</en>."),
 
     # ─── 23. TOÀN DIỆN (CẢI TIẾN MỚI) ──────────────────────────────────────────
     # URLs
@@ -217,7 +217,7 @@ TEST_CASES = [
 
     # ─── 24. CÂU TEST THỰC TẾ ──────────────────────────────────────────────────
     ("Ông Lưu Trung Thái, Chủ tịch HĐQT MB cho biết, vốn hóa của ngân hàng đã tăng gần 10 lần kể từ năm 2017, đạt khoảng 8,5 tỷ USD, tạo nền tảng cho mục tiêu 10 tỷ USD vào năm 2027.",
-     "ông lưu trung thái, chủ tịch hđqt em bi cho biết, vốn hóa của ngân hàng đã tăng gần mười lần kể từ năm hai nghìn không trăm mười bảy, đạt khoảng tám phẩy năm tỷ đô la mỹ, tạo nền tảng cho mục tiêu mười tỷ đô la mỹ vào năm hai nghìn không trăm hai mươi bảy."),
+     "ông lưu trung thái, chủ tịch hđqt <en>m b</en> cho biết, vốn hóa của ngân hàng đã tăng gần mười lần kể từ năm hai nghìn không trăm mười bảy, đạt khoảng tám phẩy năm tỷ đô la mỹ, tạo nền tảng cho mục tiêu mười tỷ đô la mỹ vào năm hai nghìn không trăm hai mươi bảy."),
 
     # ─── 25. THÊM MỚI (CẢI THIỆN) ──────────────────────────────────────────
     ("Số tiền là 1.000.000.000.000 đồng.", "số tiền là một nghìn tỷ đồng."),

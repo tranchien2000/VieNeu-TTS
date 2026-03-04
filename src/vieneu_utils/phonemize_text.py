@@ -202,6 +202,8 @@ def phonemize_batch(texts: list[str], skip_normalize: bool = False, phoneme_dict
 
     batch_token_lists = []
     global_unknown = set()
+    # Collect words that must bypass dict and go directly to espeak en-us
+    force_espeak_words = set()
 
     for text in texts:
         matches = re.finditer(r'(<en>.*?</en>)|(\w+)|([^\w\s])', text, re.I | re.U)
@@ -212,33 +214,39 @@ def phonemize_batch(texts: list[str], skip_normalize: bool = False, phoneme_dict
                 content = re.sub(r'</?en>', '', en_tag, flags=re.I).strip()
                 for st in re.finditer(r'(\w+)|([^\w\s])', content, re.U):
                     sw, sp = st.groups()
-                    if sp: sent_tokens.append({'lang': 'punct', 'content': sp, 'phone': sp})
+                    if sp:
+                        sent_tokens.append({'lang': 'punct', 'content': sp, 'phone': sp})
                     else:
-                        sent_tokens.append({'lang': 'en', 'content': sw, 'phone': None})
-            elif punct: sent_tokens.append({'lang': 'punct', 'content': punct, 'phone': punct})
+                        # Mark token as force_espeak: bỏ qua dict, dùng espeak en-us trực tiếp
+                        sent_tokens.append({'lang': 'en', 'content': sw, 'phone': None, 'force_espeak': True})
+                        force_espeak_words.add(sw)
+            elif punct:
+                sent_tokens.append({'lang': 'punct', 'content': punct, 'phone': punct})
             elif word:
                 sent_tokens.append({'lang': 'unknown', 'content': word, 'phone': None})
         batch_token_lists.append(sent_tokens)
 
-    # Resolve all words from DB in one batch
+    # Resolve all NON-forced words from DB in one batch
     all_words = set()
     for sent in batch_token_lists:
         for t in sent:
-            if t['lang'] != 'punct':
+            if t['lang'] != 'punct' and not t.get('force_espeak'):
                 all_words.add(t['content'].lower())
-    
+
     db_merged, db_common = phone_db.lookup_batch(list(all_words)) if use_system else ({}, {})
-    
-    # Fill tokens with data from DB or custom dict
+
+    # Fill tokens with data from DB or custom dict (skipping force_espeak tokens)
     for sent in batch_token_lists:
         for t in sent:
             if t['lang'] == 'punct': continue
+            # force_espeak tokens skip all dict lookups entirely
+            if t.get('force_espeak'): continue
             lw = t['content'].lower()
-            
+
             # Priority: 1. Custom dict
             if lw in custom:
                 t['phone'] = custom[lw]
-                t['lang'] = 'en' # Custom is usually en fallback or specific overriden vi
+                t['lang'] = 'en'
             # 2. Merged DB
             elif lw in db_merged:
                 val = db_merged[lw]
@@ -251,18 +259,27 @@ def phonemize_batch(texts: list[str], skip_normalize: bool = False, phoneme_dict
             # 4. Global Unknown
             else:
                 global_unknown.add(t['content'])
-                t['lang'] = 'en' # Temporary placeholder for espeak fallback logic
+                t['lang'] = 'en'  # Temporary placeholder for espeak fallback logic
 
+    # --- Batch espeak for force_espeak words (always en-us) ---
+    if force_espeak_words:
+        fe_words = sorted(list(force_espeak_words))
+        fe_phones = espeak_fallback_batch(fe_words, 'en-us')
+        fe_lut = {w: f"<en>{p}" for w, p in zip(fe_words, fe_phones)}
+        for sent in batch_token_lists:
+            for t in sent:
+                if t.get('force_espeak') and t['phone'] is None:
+                    t['phone'] = fe_lut.get(t['content'], t['content'])
 
+    # --- Batch espeak for global_unknown words (vi or en-us by accent) ---
     if global_unknown:
         u_words = sorted(list(global_unknown))
-        # Logic: if word has accents, use 'vi', else use 'en-us'
         vi_accents = "àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ"
         def has_accent(w): return any(c in vi_accents for c in w.lower())
-        
+
         vi_words = [w for w in u_words if has_accent(w)]
         en_words = [w for w in u_words if not has_accent(w)]
-        
+
         lut = {}
         if vi_words:
             res_vi = espeak_fallback_batch(vi_words, 'vi')
@@ -272,12 +289,11 @@ def phonemize_batch(texts: list[str], skip_normalize: bool = False, phoneme_dict
             res_en = espeak_fallback_batch(en_words, 'en-us')
             for w, p in zip(en_words, res_en):
                 lut[w] = f"<en>{p}"
-                
+
         for sent in batch_token_lists:
             for t in sent:
                 if t['phone'] is None and t['content'] in lut:
                     t['phone'] = lut[t['content']]
-                    # Also update lang based on accent
                     if has_accent(t['content']):
                         t['lang'] = 'vi'
                     else:
@@ -296,9 +312,6 @@ def phonemize_batch(texts: list[str], skip_normalize: bool = False, phoneme_dict
                     p = p['en'] if t['lang'] == 'en' else p['vi']
                 if p is None: p = t['content']
                 p = p.replace('<en>', '')
-                # North VI 'r' adjustment removed as requested
-                # if t['lang'] == 'vi' and t['content'].lower().startswith('r') and not p.startswith('ɹ'):
-                #     p = 'ɹ' + p[1:]
                 sent_phones.append(p)
         txt = " ".join(sent_phones)
         txt = re.sub(r'\s+([.,!?;:])', r'\1', txt)
@@ -315,5 +328,5 @@ def phonemize_with_dict(text: str, phoneme_dict: dict = None, skip_normalize: bo
 
 if __name__ == "__main__":
     import sys
-    test_text = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "tôi muốn to long go to the market"
+    test_text = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "tôi đang học về AI"
     print(f"Output: {phonemize_text(test_text)}")

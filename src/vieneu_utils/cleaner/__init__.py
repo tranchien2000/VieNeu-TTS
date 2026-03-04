@@ -51,6 +51,9 @@ def clean_vietnamese_text(text):
     text = normalize_others(text)
     text = normalize_number_vi(text)
     
+    # Protect internally generated <en> tags from expand_standalone_letters
+    text = re.sub(r'<en>.*?</en>', protect, text, flags=re.IGNORECASE)
+    
     # Finally expand standalone letters to catch initials like "M."
     text = expand_standalone_letters(text)
 
