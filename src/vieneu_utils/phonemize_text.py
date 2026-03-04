@@ -328,5 +328,5 @@ def phonemize_with_dict(text: str, phoneme_dict: dict = None, skip_normalize: bo
 
 if __name__ == "__main__":
     import sys
-    test_text = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "tôi đang học về AI"
+    test_text = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "Trí tuệ nhân tạo không còn là khái niệm xa vời trong các bộ phim khoa học viễn tưởng. Ngày nay, AI hiện diện trong từng hơi thở của cuộc sống: từ trợ lý ảo trên điện thoại, hệ thống gợi ý phim của Netflix, cho đến những cỗ máy tự vận hành trong nhà máy. Nó không thay thế con người, mà đóng vai trò như một người cộng sự đắc lực, giúp chúng ta mở rộng giới hạn của tri thức và sáng tạo."
     print(f"Output: {phonemize_text(test_text)}")
