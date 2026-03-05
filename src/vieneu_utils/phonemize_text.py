@@ -39,16 +39,23 @@ class PhonemeDB:
         conn = self._get_conn()
         cursor = conn.cursor()
         
-        # Batch query for efficiency
-        placeholders = ','.join(['?'] * len(words))
+        merged_map = {}
+        common_map = {}
         
-        # Query merged table
-        cursor.execute(f"SELECT word, phone FROM merged WHERE word IN ({placeholders})", words)
-        merged_map = dict(cursor.fetchall())
-        
-        # Query common table
-        cursor.execute(f"SELECT word, vi_phone, en_phone FROM common WHERE word IN ({placeholders})", words)
-        common_map = {row[0]: {"vi": row[1], "en": row[2]} for row in cursor.fetchall()}
+        # SQLite has a limit on the number of host parameters (typically 999)
+        chunk_size = 950
+        for i in range(0, len(words), chunk_size):
+            chunk = words[i : i + chunk_size]
+            placeholders = ','.join(['?'] * len(chunk))
+
+            # Query merged table
+            cursor.execute(f"SELECT word, phone FROM merged WHERE word IN ({placeholders})", chunk)
+            merged_map.update(dict(cursor.fetchall()))
+
+            # Query common table
+            cursor.execute(f"SELECT word, vi_phone, en_phone FROM common WHERE word IN ({placeholders})", chunk)
+            for row in cursor.fetchall():
+                common_map[row[0]] = {"vi": row[1], "en": row[2]}
         
         return merged_map, common_map
 
@@ -328,5 +335,5 @@ def phonemize_with_dict(text: str, phoneme_dict: dict = None, skip_normalize: bo
 
 if __name__ == "__main__":
     import sys
-    test_text = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "Trí tuệ nhân tạo không còn là khái niệm xa vời trong các bộ phim khoa học viễn tưởng. Ngày nay, AI hiện diện trong từng hơi thở của cuộc sống: từ trợ lý ảo trên điện thoại, hệ thống gợi ý phim của Netflix, cho đến những cỗ máy tự vận hành trong nhà máy. Nó không thay thế con người, mà đóng vai trò như một người cộng sự đắc lực, giúp chúng ta mở rộng giới hạn của tri thức và sáng tạo."
+    test_text = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "Một nghiên cứu gần đây của Đại học Harvard phối hợp với Boston Consulting Group (BCG) thực hiện trên 758 tư vấn viên cao cấp đã chỉ ra mặt trái tàn khốc này. Kết quả cho thấy: những người sử dụng AI để giải quyết các vấn đề kinh doanh phức tạp (vượt quá khả năng của AI) mắc sai lầm nhiều hơn 19% so với những người không dùng. Điều đáng nói là, vì câu trả lời của AI quá trôi chảy và tự tin, những tư vấn viên này đã hoàn toàn tin tưởng và bỏ qua bước kiểm chứng. Họ để cho sự tiện lợi đánh lừa chuyên môn của mình."
     print(f"Output: {phonemize_text(test_text)}")
