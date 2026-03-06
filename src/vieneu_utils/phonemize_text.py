@@ -327,5 +327,5 @@ def phonemize_with_dict(text: str, phoneme_dict: dict = None, skip_normalize: bo
 
 if __name__ == "__main__":
     import sys
-    test_text = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "Một nghiên cứu gần đây của Đại học Harvard phối hợp với Boston Consulting Group (BCG) thực hiện trên 758 tư vấn viên cao cấp đã chỉ ra mặt trái tàn khốc này. Kết quả cho thấy: những người sử dụng AI để giải quyết các vấn đề kinh doanh phức tạp (vượt quá khả năng của AI) mắc sai lầm nhiều hơn 19% so với những người không dùng. Điều đáng nói là, vì câu trả lời của AI quá trôi chảy và tự tin, những tư vấn viên này đã hoàn toàn tin tưởng và bỏ qua bước kiểm chứng. Họ để cho sự tiện lợi đánh lừa chuyên môn của mình."
+    test_text = " ".join(sys.argv[1:]) if len(sys.argv) > 1 else "Đọc kết quả sẽ giúp hiểu rõ hơn sở thích và thói quen của thế hệ Z."
     print(f"Output: {phonemize_text(test_text)}")

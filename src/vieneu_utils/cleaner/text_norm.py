@@ -2,20 +2,11 @@ import re
 from .num2vi import n2w, n2w_single
 from .symbols import vietnamese_re, vietnamese_without_num_re
 
-_en_letter_names = {
-    "a": "ây", "b": "bi", "c": "xi", "d": "đi", "e": "i", "f": "ép", "g": "di",
-    "h": "ếch", "i": "ai", "j": "giây", "k": "cây", "l": "eo", "m": "em", "n": "en",
-    "o": "âu", "p": "pi", "q": "kiu", "r": "a", "s": "ét", "t": "ti", "u": "du",
-    "v": "vi", "w": "đắp bờ liu", "x": "ích", "y": "quai", "z": "di",
-    "0": "zero", "1": "one", "2": "two", "3": "three", "4": "four",
-    "5": "five", "6": "six", "7": "seven", "8": "eight", "9": "nine"
-}
-
 _vi_letter_names = {
-    "a": "a", "b": "bê", "c": "xê", "d": "dê", "đ": "đê", "e": "e", "ê": "ê",
+    "a": "a", "b": "bê", "c": "xê", "d": "đê", "đ": "đê", "e": "e", "ê": "ê",
     "f": "ép", "g": "gờ", "h": "hát", "i": "i", "j": "giây", "k": "ca", "l": "lờ",
-    "m": "mờ", "n": "nờ", "o": "ô", "ô": "ô", "ơ": "ơ", "p": "phê", "q": "qui",
-    "r": "rờ", "s": "ét", "t": "tê", "u": "u", "ư": "ư", "v": "vờ", "w": "vê kép",
+    "m": "mờ", "n": "nờ", "o": "o", "ô": "ô", "ơ": "ơ", "p": "pê", "q": "qui",
+    "r": "rờ", "s": "ét", "t": "tê", "u": "u", "ư": "ư", "v": "vê", "w": "vê kép",
     "x": "ích", "y": "y", "z": "dét"
 }
 
@@ -49,7 +40,7 @@ _measurement_key_vi = {
     "sqm": "mét vuông", "cum": "mét khối",
     "gb": "gi ga bai", "mb": "mê ga bai", "kb": "ki lô bai", "tb": "tê ra bai",
     "db": "đê xi ben", "oz": "ao xơ", "lb": "pao", "lbs": "pao",
-    "ft": "phít", "in": "ins", "dpi": "đê phê i"
+    "ft": "phít", "in": "ins", "dpi": "đi phi ai", "pH": "pê hát"
 }
 
 _currency_key = {
@@ -72,7 +63,7 @@ _acronyms_exceptions_vi = {
 # Compiled Regular Expressions
 RE_ROMAN_NUMBER = re.compile(r"\b(?=[IVXLCDM]{2,})M{0,4}(CM|CD|D?C{0,3})(XC|XL|L?X{0,3})(IX|IV|V?I{0,3})\b")
 RE_LETTER = re.compile(r"(chữ|chữ cái|kí tự|ký tự)\s+(['\"]?)([a-z])(['\"]?)\b", re.IGNORECASE)
-RE_STANDALONE_LETTER = re.compile(r'\b([a-zA-Z])\b\.?')
+RE_STANDALONE_LETTER = re.compile(r'\b([a-zA-Z])\b(\.?)')
 RE_URL = re.compile(r'\b(?:https?://|www\.)[A-Za-z0-9.\-_~:/?#\[\]@!$&\'()*+,;=]+\b')
 RE_SLASH_NUMBER = re.compile(r'\b(\d+)/(\d+)\b')
 RE_EMAIL = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b')
@@ -111,7 +102,7 @@ for unit, full in sorted(_measurement_key_vi.items(), key=lambda x: len(x[0]), r
     safe_standalone = [
         "km", "cm", "mm", "kg", "mg",
         "m2", "km2", "usd", "vnd",
-        "mhz", "khz", "ghz", "hz"
+        "mhz", "khz", "ghz", "hz", "ph"
     ]
     if unit.lower() in safe_standalone:
         standalone_pattern = re.compile(rf"(?<![\d.,])\b{unit}\b", re.IGNORECASE)
@@ -229,8 +220,9 @@ def expand_abbreviations(text):
 def expand_standalone_letters(text):
     def _repl_letter(m):
         char = m.group(1).lower()
+        dot = m.group(2) if m.group(2) else ""
         if char in _letter_key_vi:
-            return f" {_letter_key_vi[char]} "
+            return f" {_letter_key_vi[char]}{dot} "
         return m.group(0)
     
     return RE_STANDALONE_LETTER.sub(_repl_letter, text)
@@ -313,7 +305,7 @@ def normalize_emails(text):
     return RE_EMAIL.sub(_repl_email, text)
 
 WORD_LIKE_ACRONYMS = {"UNESCO", "NASA", "NATO", "ASEAN", "OPEC", "SARS", "FIFA", "UNIC", "RAM", "VRAM", "COVID", "IELTS", "STEM", "SWAT", "SEAL", "WASP", "COBOL", "BASIC", "OLED", "COVAX", "BRICS", "APEC", "VUCA", "PERMA", "DINK", "MENA", "EPIC", "OASIS", "BASE", "DART", "IDEA", "CHAOS", "SMART", "FANG"}
-
+# AT&T
 def normalize_acronyms(text):
     sentences = RE_SENTENCE_SPLIT.split(text)
     processed = []

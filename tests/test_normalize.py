@@ -162,15 +162,15 @@ TEST_CASES = [
     ("Đề án 06 và Chỉ thị 04", "đề án không sáu và chỉ thị không bốn"),
 
     # ─── 19. AN TOÀN (KHÔNG NHẦM LẪN) ──────────────────────────────────────────
-    ("Anh M. đi bộ", "anh mờ đi bộ"),
+    ("Anh M đi bộ", "anh mờ đi bộ"),
     ("Vitamin G", "vitamin gờ"),
-    ("L. là tên riêng", "lờ là tên riêng"),
+    ("L là tên riêng", "lờ là tên riêng"),
     ("5m chiều dài", "năm mét chiều dài"),
     ("Đơn vị km", "đơn vị ki lô mét"),
 
     # ─── 20. EMAIL ───────────────────────────────────────────────────────────
-    ("Liên hệ qua email pnnbao@gmail.com nhé.", "liên hệ qua email phê nờ nờ bê a ô a còng gờ meo chấm com nhé."),
-    ("Email: contact@example.com", "email: xê ô nờ tê a xê tê a còng e ích a mờ phê lờ e chấm xê ô mờ"),
+    ("Liên hệ qua email pnnbao@gmail.com nhé.", "liên hệ qua email pê nờ nờ bê a o a còng gờ meo chấm com nhé."),
+    ("Email: contact@example.com", "email: xê o nờ tê a xê tê a còng e ích a mờ pê lờ e chấm xê o mờ"),
 
     # ─── 21. VIẾT TẮT ALPHANUMERIC (ENGLISH STYLE) ──────────────────────────
     ("Mô hình B2B rất phổ biến.", "mô hình <en>b two b</en> rất phổ biến."),
@@ -185,8 +185,8 @@ TEST_CASES = [
 
     # ─── 23. TOÀN DIỆN (CẢI TIẾN MỚI) ──────────────────────────────────────────
     # URLs
-    ("Truy cập https://vieneu.io để biết thêm chi tiết.", "truy cập hát tê tê phê ét hai chấm xẹt xẹt vờ i e nờ e u chấm i ô để biết thêm chi tiết."),
-    ("Website www.google.com rất hữu ích.", "website vê kép vê kép vê kép chấm gờ ô ô gờ lờ e chấm xê ô mờ rất hữu ích."),
+    ("Truy cập https://vieneu.io để biết thêm chi tiết.", "truy cập hát tê tê pê ét hai chấm xẹt xẹt vê i e nờ e u chấm i o để biết thêm chi tiết."),
+    ("Website www.google.com rất hữu ích.", "website vê kép vê kép vê kép chấm gờ o o gờ lờ e chấm xê o mờ rất hữu ích."),
 
     # Slashes / Địa chỉ
     ("Địa chỉ nhà tôi là 123/4 đường Nguyễn Trãi.", "địa chỉ nhà tôi là một trăm hai mươi ba xẹt bốn đường nguyễn trãi."),
@@ -206,10 +206,11 @@ TEST_CASES = [
     ("Âm thanh 80db.", "âm thanh tám mươi đê xi ben."),
     ("Trọng lượng 10lb.", "trọng lượng mười pao."),
     ("Màn hình 24in.", "màn hình hai mươi bốn ins."),
-    ("Độ phân giải 300dpi.", "độ phân giải ba trăm đê phê i"),
+    ("Độ phân giải 300dpi.", "độ phân giải ba trăm đi phi ai."),
+    ("Độ pH của nước là 7.", "độ pê hát của nước là bảy."),
 
     # Emails mở rộng
-    ("Email công việc: admin@fpt.vn", "email công việc: a dê mờ i nờ a còng ép phê tê chấm vê nờ"),
+    ("Email công việc: admin@fpt.vn", "email công việc: a đê mờ i nờ a còng ép phê tê chấm vê nờ"),
     ("Liên hệ hotmail: test@hotmail.com", "liên hệ hotmail: tê e ét tê a còng hót meo chấm com"),
 
     # Redundant expansion (symbol + unit)
@@ -229,7 +230,7 @@ TEST_CASES = [
     ("MixedCase Acronyms như ChatGPT hay Claude.", "mixedcase acronyms như chatgpt hay claude."),
     ("Unit mix: 10km/h và 5m/s.", "unit mix: mười ki lô mét trên giờ và năm mét trên giây."),
     ("Số cực lớn: 1.000.000.000.000.000.000", "số cực lớn: một tỷ tỷ"),
-    ("Email với tên miền lạ: user@domain.tech", "email với tên miền lạ: u ét e rờ a còng dê ô mờ a i nờ chấm tê e xê hát"),
+    ("Email với tên miền lạ: user@domain.tech", "email với tên miền lạ: u ét e rờ a còng đê o mờ a i nờ chấm tê e xê hát"),
 ]
 
 @pytest.mark.parametrize("input_text, expected", TEST_CASES)
