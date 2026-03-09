@@ -103,9 +103,19 @@ async def get_models():
         for k, v in AVAILABLE_MODELS.items()
     ]
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+from vieneu_utils.url_extract import extract_text_from_url
+
 class ModelRequest(BaseModel):
     model_key: str
+
+class UrlRequest(BaseModel):
+    url: str
+    max_chars: int = Field(default=5000, le=20000)
+
+class StreamRequest(BaseModel):
+    text: str
+    voice_id: str = None
 
 @app.post("/set_model")
 async def set_model(req: ModelRequest):
@@ -115,6 +125,20 @@ async def set_model(req: ModelRequest):
         return {"status": "ok", "current_model": req.model_key}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+@app.post("/extract_url")
+async def extract_url(req: UrlRequest):
+    """Extract article text from a URL."""
+    result = extract_text_from_url(req.url, max_chars=req.max_chars)
+    if result["error"]:
+        return {"status": "error", "message": result["error"]}
+    return {
+        "status": "ok",
+        "title": result["title"],
+        "text": result["text"],
+        "char_count": result["char_count"],
+        "truncated": result["truncated"],
+    }
 
 @app.get("/voices")
 async def get_voices():
@@ -182,6 +206,11 @@ async def stream_audio(text: str, voice_id: str = None):
             print(f"Error during inference: {e}")
 
     return StreamingResponse(audio_generator(), media_type="audio/wav")
+
+@app.post("/stream")
+async def stream_audio_post(req: StreamRequest):
+    """Streaming Endpoint via POST (for long text from URL extraction)."""
+    return await stream_audio(req.text, req.voice_id)
 
 def main():
     print("🌍 Open http://localhost:8001 to test GGUF Streaming")

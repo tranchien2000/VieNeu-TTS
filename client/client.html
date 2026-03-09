@@ -835,6 +835,12 @@
             const [audioBlob, setAudioBlob] = useState(null);
             const [analyserNode, setAnalyserNode] = useState(null);
 
+            // URL extraction state
+            const [inputMode, setInputMode] = useState('text'); // 'text' or 'url'
+            const [urlInput, setUrlInput] = useState('');
+            const [isExtracting, setIsExtracting] = useState(false);
+            const [extractionMeta, setExtractionMeta] = useState(null);
+
             const [theme, setTheme] = useState(() => {
                 const stored = localStorage.getItem('vieneu-theme');
                 return stored || 'dark';
@@ -939,10 +945,19 @@
                 analyser.connect(ctx.destination);
 
                 try {
-                    const encodedText = encodeURIComponent(text);
-                    const voiceParam = selectedVoice ? `&voice_id=${selectedVoice}` : "";
-
-                    const response = await fetch(`${API_URL}/stream?text=${encodedText}${voiceParam}`, { signal });
+                    let response;
+                    if (text.length > 2000) {
+                        response = await fetch(`${API_URL}/stream`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ text, voice_id: selectedVoice || undefined }),
+                            signal
+                        });
+                    } else {
+                        const encodedText = encodeURIComponent(text);
+                        const voiceParam = selectedVoice ? `&voice_id=${selectedVoice}` : "";
+                        response = await fetch(`${API_URL}/stream?text=${encodedText}${voiceParam}`, { signal });
+                    }
 
                     if (!response.body) return;
                     const reader = response.body.getReader();
@@ -1117,6 +1132,35 @@
                 URL.revokeObjectURL(url);
             };
 
+            const handleExtractUrl = async () => {
+                if (!urlInput.trim()) return;
+                setIsExtracting(true);
+                setExtractionMeta(null);
+                try {
+                    const res = await fetch(`${API_URL}/extract_url`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: urlInput.trim(), max_chars: 5000 })
+                    });
+                    const data = await res.json();
+                    if (data.status === 'ok') {
+                        setText(data.text);
+                        setExtractionMeta({
+                            title: data.title,
+                            charCount: data.char_count,
+                            truncated: data.truncated
+                        });
+                        setInputMode('text');
+                    } else {
+                        alert('Extraction failed: ' + data.message);
+                    }
+                } catch (e) {
+                    alert('Network error extracting URL');
+                } finally {
+                    setIsExtracting(false);
+                }
+            };
+
             const charCount = text.length;
             const segmentEstimate = Math.max(1, Math.ceil(charCount / SEGMENT_CHAR_SIZE));
             const statusLabel = status === StreamStatus.IDLE
@@ -1191,20 +1235,74 @@
                         <div className="grid gap-6 lg:grid-cols-[1.35fr_0.65fr]">
                             <div className="space-y-4">
                                 <div className="flex items-center justify-between">
-                                    <label className="label-text">Input Text</label>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => setInputMode('text')}
+                                            className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${inputMode === 'text' ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' : 'text-muted hover:text-main'}`}
+                                        >
+                                            Text
+                                        </button>
+                                        <button
+                                            onClick={() => setInputMode('url')}
+                                            className={`px-3 py-1 rounded-lg text-sm font-medium transition-all ${inputMode === 'url' ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' : 'text-muted hover:text-main'}`}
+                                        >
+                                            URL
+                                        </button>
+                                    </div>
                                     <span className="text-xs text-muted">{charCount} chars</span>
                                 </div>
-                                <div className="input-frame">
-                                    <textarea
-                                        value={text}
-                                        onChange={(e) => setText(e.target.value)}
-                                        placeholder="Enter text to synthesize..."
-                                        className="input-area"
-                                        spellCheck="false"
-                                    />
-                                </div>
+
+                                {inputMode === 'url' && (
+                                    <div className="space-y-3">
+                                        <div className="input-frame">
+                                            <input
+                                                type="url"
+                                                value={urlInput}
+                                                onChange={(e) => setUrlInput(e.target.value)}
+                                                onKeyDown={(e) => { if (e.key === 'Enter') handleExtractUrl(); }}
+                                                placeholder="https://example.com/article..."
+                                                className="input-area"
+                                                style={{ minHeight: 'auto', height: '48px', resize: 'none' }}
+                                                disabled={isExtracting}
+                                            />
+                                        </div>
+                                        <button
+                                            onClick={handleExtractUrl}
+                                            disabled={isExtracting || !urlInput.trim()}
+                                            className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+                                        >
+                                            {isExtracting ? 'Extracting...' : 'Extract Text'}
+                                        </button>
+                                    </div>
+                                )}
+
+                                {inputMode === 'text' && (
+                                    <div className="space-y-2">
+                                        {extractionMeta && (
+                                            <div className="flex flex-wrap items-center gap-2 text-xs">
+                                                {extractionMeta.title && (
+                                                    <span className="chip">{extractionMeta.title.length > 50 ? extractionMeta.title.slice(0, 50) + '...' : extractionMeta.title}</span>
+                                                )}
+                                                <span className="chip">{extractionMeta.charCount} chars</span>
+                                                {extractionMeta.truncated && (
+                                                    <span className="chip chip-warn">Truncated</span>
+                                                )}
+                                            </div>
+                                        )}
+                                        <div className="input-frame">
+                                            <textarea
+                                                value={text}
+                                                onChange={(e) => setText(e.target.value)}
+                                                placeholder="Enter text to synthesize..."
+                                                className="input-area"
+                                                spellCheck="false"
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div className="flex items-center justify-between text-xs text-muted">
-                                    <span>Tip: punctuation helps natural pauses.</span>
+                                    <span>{inputMode === 'url' ? 'Paste an article URL to extract text for TTS.' : 'Tip: punctuation helps natural pauses.'}</span>
                                     <span className="font-mono">~{segmentEstimate} segments</span>
                                 </div>
                             </div>

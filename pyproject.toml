@@ -78,6 +78,7 @@ dependencies = [
     "perth>=0.2.0",
     "llama-cpp-python==0.3.16",
     "requests",
+    "trafilatura>=2.0.0",
 ]
 
 [project.urls]
