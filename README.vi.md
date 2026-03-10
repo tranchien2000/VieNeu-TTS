@@ -15,7 +15,7 @@
 > **Voice Cloning:** Tất cả các biến thể mô hình (bao gồm cả GGUF) đều hỗ trợ clone giọng nói tức thì chỉ với **3-5 giây** âm thanh mẫu.
 
 Dự án này bao gồm hai kiến trúc cốt lõi được huấn luyện trên tập dữ liệu [VieNeu-TTS-1000h](https://huggingface.co/datasets/pnnbao-ump/VieNeu-TTS-1000h):
-- **VieNeu-TTS (0.5B):** Phiên bản nâng cao được fine-tune từ kiến trúc NeuTTS Air để đạt được sự ổn định tối đa.
+- **VieNeu-TTS (0.5B):** Phiên bản nâng cao được tối ưu hóa để đạt được sự ổn định tối đa.
 - **VieNeu-TTS-0.3B:** Mô hình chuyên dụng được **huấn luyện từ đầu (trained from scratch)** bằng tập dữ liệu VieNeu-TTS-1000h, mang lại tốc độ inference nhanh gấp 2 lần và độ trễ cực thấp.
 
 Đây là một sự nâng cấp đáng kể so với VieNeu-TTS-140h trước đó với những cải tiến sau:
@@ -393,7 +393,7 @@ Kiểm tra [docs/Deploy.md](docs/Deploy.md) để biết thêm chi tiết.
 
 ## 🙏 Lời cảm ơn
 
-Dự án này được xây dựng dựa trên kiến trúc [NeuTTS Air](https://huggingface.co/neuphonic/neutts-air) và [NeuCodec](https://huggingface.co/neuphonic/neucodec). Cụ thể, mô hình **VieNeu-TTS (0.5B)** được fine-tune từ NeuTTS Air, trong khi mô hình **VieNeu-TTS-0.3B** là một kiến trúc tùy chỉnh được huấn luyện từ đầu sử dụng tập dữ liệu [VieNeu-TTS-1000h](https://huggingface.co/datasets/pnnbao-ump/VieNeu-TTS-1000h).
+Dự án này sử dụng [neucodec](https://huggingface.co/neuphonic/neucodec) để giải mã âm thanh và [sea-g2p](https://github.com/pnnbao97/sea-g2p) để chuẩn hóa văn bản và xử lý âm vị.
 
 ---
 
