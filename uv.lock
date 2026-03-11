@@ -4369,6 +4369,18 @@ wheels = [
 ]
 
 [[package]]
+name = "sea-g2p"
+version = "0.2.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "phonemizer" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ca/48/aed23f995da553c77fa962b292e0e28e016c8c6525a0337d1d52fe15c485/sea_g2p-0.2.1.tar.gz", hash = "sha256:7d3b6d254b078d966a1dd9695d4765dbf127fea1d7878f29a79f807517439b36", size = 37962934, upload-time = "2026-03-10T01:38:02.969Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ae/eb/46e343fc8a81cce67205c4593ff7ae19e15a431e1764c98212568dbd4527/sea_g2p-0.2.1-py3-none-any.whl", hash = "sha256:4b51d49407ec696f3e1ca8a7e71a613deef9427279c2bfe9b4aef089ca274199", size = 37988905, upload-time = "2026-03-10T01:37:47.229Z" },
+]
+
+[[package]]
 name = "segments"
 version = "2.3.0"
 source = { registry = "https://pypi.org/simple" }
@@ -5186,7 +5198,7 @@ wheels = [
 
 [[package]]
 name = "vieneu"
-version = "1.2.6"
+version = "1.2.7"
 source = { editable = "." }
 dependencies = [
     { name = "datasets" },
@@ -5197,7 +5209,8 @@ dependencies = [
     { name = "neucodec" },
     { name = "onnxruntime" },
     { name = "perth" },
-    { name = "phonemizer" },
+    { name = "requests" },
+    { name = "sea-g2p" },
     { name = "torch", version = "2.8.0+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "sys_platform != 'darwin'" },
     { name = "torch", version = "2.9.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
     { name = "torchaudio", version = "2.8.0+cu128", source = { registry = "https://download.pytorch.org/whl/cu128" }, marker = "sys_platform != 'darwin'" },
@@ -5226,7 +5239,6 @@ web = [
     { name = "lmdeploy", version = "0.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version != '3.12.*' and sys_platform == 'linux') or (python_full_version != '3.12.*' and sys_platform == 'win32') or (sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "lmdeploy", version = "0.11.0", source = { url = "https://github.com/InternLM/lmdeploy/releases/download/v0.11.0/lmdeploy-0.11.0+cu128-cp312-cp312-manylinux2014_x86_64.whl" }, marker = "python_full_version == '3.12.*' and sys_platform == 'linux'" },
     { name = "lmdeploy", version = "0.11.0", source = { url = "https://github.com/InternLM/lmdeploy/releases/download/v0.11.0/lmdeploy-0.11.0+cu128-cp312-cp312-win_amd64.whl" }, marker = "python_full_version == '3.12.*' and sys_platform == 'win32'" },
-    { name = "requests" },
     { name = "trafilatura" },
     { name = "transformers", marker = "sys_platform == 'darwin'" },
     { name = "triton", marker = "sys_platform == 'linux'" },
@@ -5247,7 +5259,8 @@ requires-dist = [
     { name = "neucodec", specifier = ">=0.0.4" },
     { name = "onnxruntime", specifier = ">=1.23.2" },
     { name = "perth", specifier = ">=0.2.0" },
-    { name = "phonemizer", specifier = ">=3.3.0" },
+    { name = "requests" },
+    { name = "sea-g2p", specifier = ">=0.2.1" },
     { name = "torch", marker = "sys_platform != 'darwin'", index = "https://download.pytorch.org/whl/cu128" },
     { name = "torch", marker = "sys_platform == 'darwin'", index = "https://pypi.org/simple" },
     { name = "torchaudio", marker = "sys_platform != 'darwin'", index = "https://download.pytorch.org/whl/cu128" },
@@ -5269,7 +5282,6 @@ web = [
     { name = "lmdeploy", marker = "(python_full_version != '3.12.*' and sys_platform == 'linux') or (python_full_version != '3.12.*' and sys_platform == 'win32') or (sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "lmdeploy", marker = "python_full_version == '3.12.*' and sys_platform == 'linux'", url = "https://github.com/InternLM/lmdeploy/releases/download/v0.11.0/lmdeploy-0.11.0+cu128-cp312-cp312-manylinux2014_x86_64.whl" },
     { name = "lmdeploy", marker = "python_full_version == '3.12.*' and sys_platform == 'win32'", url = "https://github.com/InternLM/lmdeploy/releases/download/v0.11.0/lmdeploy-0.11.0+cu128-cp312-cp312-win_amd64.whl" },
-    { name = "requests" },
     { name = "trafilatura", specifier = ">=2.0.0" },
     { name = "transformers", marker = "sys_platform == 'darwin'" },
     { name = "triton", marker = "sys_platform == 'linux'" },

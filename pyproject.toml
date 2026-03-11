@@ -36,7 +36,7 @@ explicit = true
 
 [project]
 name = "vieneu"
-version = "1.2.6"
+version = "1.2.7"
 description = "Advanced on-device Vietnamese TTS with instant voice cloning"
 readme = "README_PYPI.md"
 license = { file = "LICENSE" }
@@ -67,7 +67,7 @@ authors = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "phonemizer>=3.3.0",
+    "sea-g2p>=0.2.1",
     "neucodec>=0.0.4",
     "librosa>=0.11.0",
     "onnxruntime>=1.23.2",
@@ -76,6 +76,7 @@ dependencies = [
     "torchaudio",
     "perth>=0.2.0",
     "llama-cpp-python==0.3.16",
+    "requests",
 ]
 
 [project.urls]
@@ -108,7 +109,6 @@ web = [
     "transformers; sys_platform == 'darwin'",
     "accelerate; sys_platform == 'darwin'",
     "gradio",
-    "requests",
     "trafilatura>=2.0.0",
 ]
 
@@ -127,7 +127,6 @@ where = ["src", "."]
 include = ["vieneu*", "vieneu_utils*", "apps*", "examples*"]
 
 [tool.setuptools.package-data]
-vieneu_utils = ["phone_dict/*.db"]
 vieneu = ["assets/samples/*"]
 
 [tool.uv.sources]
