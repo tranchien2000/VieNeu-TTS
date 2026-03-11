@@ -12,7 +12,7 @@ required-environments = [
 override-dependencies = [
     "nvidia-nccl-cu12; sys_platform == 'linux'",
 ]
-default-groups = ["gpu"]
+default-groups = ["web"]
 
 [[tool.uv.index]]
 name = "pytorch"
@@ -70,15 +70,12 @@ dependencies = [
     "phonemizer>=3.3.0",
     "neucodec>=0.0.4",
     "librosa>=0.11.0",
-    "gradio>=5.49.1",
     "onnxruntime>=1.23.2",
     "datasets>=3.2.0",
     "torch",
     "torchaudio",
     "perth>=0.2.0",
     "llama-cpp-python==0.3.16",
-    "requests",
-    "trafilatura>=2.0.0",
 ]
 
 [project.urls]
@@ -103,12 +100,16 @@ dev = [
     "pytest",
     "pytest-asyncio",
 ]
-gpu = [
+
+web = [
     "lmdeploy; sys_platform != 'darwin'",
     "triton-windows; sys_platform == 'win32'",
     "triton; sys_platform == 'linux'",
     "transformers; sys_platform == 'darwin'",
     "accelerate; sys_platform == 'darwin'",
+    "gradio",
+    "requests",
+    "trafilatura>=2.0.0",
 ]
 
 [tool.pytest.ini_options]
