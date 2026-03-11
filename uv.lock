@@ -5089,7 +5089,6 @@ version = "1.2.7"
 source = { editable = "." }
 dependencies = [
     { name = "datasets" },
-    { name = "gradio" },
     { name = "librosa" },
     { name = "llama-cpp-python", version = "0.3.16", source = { registry = "https://abetlen.github.io/llama-cpp-python/whl/metal/" }, marker = "sys_platform == 'darwin'" },
     { name = "llama-cpp-python", version = "0.3.16", source = { registry = "https://pnnbao97.github.io/llama-cpp-python-v0.3.16/cpu/" }, marker = "sys_platform == 'win32'" },
@@ -5121,8 +5120,9 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
 ]
-gpu = [
+web = [
     { name = "accelerate", marker = "sys_platform == 'darwin'" },
+    { name = "gradio" },
     { name = "lmdeploy", version = "0.11.0", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version != '3.12.*' and sys_platform == 'linux') or (python_full_version != '3.12.*' and sys_platform == 'win32') or (sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "lmdeploy", version = "0.11.0", source = { url = "https://github.com/InternLM/lmdeploy/releases/download/v0.11.0/lmdeploy-0.11.0+cu128-cp312-cp312-manylinux2014_x86_64.whl" }, marker = "python_full_version == '3.12.*' and sys_platform == 'linux'" },
     { name = "lmdeploy", version = "0.11.0", source = { url = "https://github.com/InternLM/lmdeploy/releases/download/v0.11.0/lmdeploy-0.11.0+cu128-cp312-cp312-win_amd64.whl" }, marker = "python_full_version == '3.12.*' and sys_platform == 'win32'" },
@@ -5135,7 +5135,6 @@ gpu = [
 requires-dist = [
     { name = "accelerate", marker = "sys_platform == 'darwin' and extra == 'gpu'" },
     { name = "datasets", specifier = ">=3.2.0" },
-    { name = "gradio", specifier = ">=5.49.1" },
     { name = "librosa", specifier = ">=0.11.0" },
     { name = "llama-cpp-python", marker = "sys_platform != 'darwin' and sys_platform != 'win32'", specifier = "==0.3.16", index = "https://pypi.org/simple" },
     { name = "llama-cpp-python", marker = "sys_platform == 'darwin'", specifier = "==0.3.16", index = "https://abetlen.github.io/llama-cpp-python/whl/metal/" },
@@ -5163,8 +5162,9 @@ dev = [
     { name = "pytest" },
     { name = "pytest-asyncio" },
 ]
-gpu = [
+web = [
     { name = "accelerate", marker = "sys_platform == 'darwin'" },
+    { name = "gradio", specifier = ">=5.49.1" },
     { name = "lmdeploy", marker = "(python_full_version != '3.12.*' and sys_platform == 'linux') or (python_full_version != '3.12.*' and sys_platform == 'win32') or (sys_platform != 'darwin' and sys_platform != 'linux' and sys_platform != 'win32')" },
     { name = "lmdeploy", marker = "python_full_version == '3.12.*' and sys_platform == 'linux'", url = "https://github.com/InternLM/lmdeploy/releases/download/v0.11.0/lmdeploy-0.11.0+cu128-cp312-cp312-manylinux2014_x86_64.whl" },
     { name = "lmdeploy", marker = "python_full_version == '3.12.*' and sys_platform == 'win32'", url = "https://github.com/InternLM/lmdeploy/releases/download/v0.11.0/lmdeploy-0.11.0+cu128-cp312-cp312-win_amd64.whl" },
