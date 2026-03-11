@@ -18,9 +18,9 @@ This project features two core architectures trained on the [VieNeu-TTS-1000h](h
 - **VieNeu-TTS (0.5B):** An enhanced model optimized for maximum stability.
 - **VieNeu-TTS-0.3B:** A specialized model **trained from scratch** using the VieNeu-TTS-1000h dataset, delivering 2x faster inference and ultra-low latency.
 
-These represent a significant upgrade from the previous VieNeu-TTS-140h with the following improvements:
-- **Enhanced pronunciation**: More accurate and stable Vietnamese pronunciation
-- **Code-switching support**: Seamless transitions between Vietnamese and English
+These represent a significant upgrade with the following improvements:
+- **Enhanced pronunciation**: More accurate and stable Vietnamese pronunciation powered by the [sea-g2p](https://github.com/pnnbao97/sea-g2p) library
+- **Code-switching support**: Seamless transitions between Vietnamese and English powered by the [sea-g2p](https://github.com/pnnbao97/sea-g2p) library
 - **Better voice cloning**: Higher fidelity and speaker consistency
 - **Real-time synthesis**: 24 kHz waveform generation on CPU or GPU
 - **Multiple model formats**: Support for PyTorch, GGUF Q4/Q8 (CPU optimized), and ONNX codec
@@ -44,7 +44,8 @@ VieNeu-TTS delivers production-ready speech synthesis fully offline.
 5. [🛠️ Fine-tuning Guide](#finetuning)
 6. [🔬 Model Overview](#backbones)
 7. [🐋 Deployment with Docker (Compose)](#docker)
-8. [🤝 Support & Contact](#support)
+8. [🚀 Roadmap](#roadmap)
+9. [🤝 Support & Contact](#support)
 
 ---
 
@@ -331,7 +332,18 @@ Check [docs/Deploy.md](docs/Deploy.md) for more details.
 
 ---
 
-## 🤝 8. Support & Contact <a name="support"></a>
+## 🚀 Roadmap <a name="roadmap"></a>
+
+We are constantly working to improve VieNeu-TTS. Here is what we have planned:
+
+- [ ] **🦜 VieNeu-TTS 2.0**: Upcoming version featuring superior voice cloning fidelity and improved handling of long-context text synthesis.
+- [ ] **🔊 VieNeu-Codec**: Development of a custom neural audio codec specifically optimized for the nuances of the Vietnamese language.
+- [ ] **📦 Multi-format Support**: Beyond GGUF, we plan to add official support for **ONNX** to enable even wider deployment flexibility (Web, Mobile, etc.).
+- [ ] **🩺 VieNeu-TTS Medical**: A specialized model variant fine-tuned for medical terminology and healthcare domain applications.
+
+---
+
+## 🤝 9. Support & Contact <a name="support"></a>
 
 - **Hugging Face:** [pnnbao-ump](https://huggingface.co/pnnbao-ump)
 - **Discord:** [Join our community](https://discord.gg/yJt8kzjzWZ)

@@ -18,9 +18,9 @@ Dự án này bao gồm hai kiến trúc cốt lõi được huấn luyện trê
 - **VieNeu-TTS (0.5B):** Phiên bản nâng cao được tối ưu hóa để đạt được sự ổn định tối đa.
 - **VieNeu-TTS-0.3B:** Mô hình chuyên dụng được **huấn luyện từ đầu (trained from scratch)** bằng tập dữ liệu VieNeu-TTS-1000h, mang lại tốc độ inference nhanh gấp 2 lần và độ trễ cực thấp.
 
-Đây là một sự nâng cấp đáng kể so với VieNeu-TTS-140h trước đó với những cải tiến sau:
-- **Phát âm nâng cao**: Phát âm tiếng Việt chính xác và ổn định hơn.
-- **Hỗ trợ Code-switching**: Chuyển đổi mượt mà giữa tiếng Việt và tiếng Anh.
+Đây là một sự nâng cấp đáng kể với những cải tiến sau:
+- **Phát âm nâng cao**: Phát âm tiếng Việt chính xác và ổn định hơn nhờ thư viện [sea-g2p](https://github.com/pnnbao97/sea-g2p) mạnh mẽ.
+- **Hỗ trợ Code-switching**: Chuyển đổi mượt mà giữa tiếng Việt và tiếng Anh nhờ thư viện [sea-g2p](https://github.com/pnnbao97/sea-g2p) mạnh mẽ.
 - **Clone giọng nói tốt hơn**: Độ trung thực và tính nhất quán của người nói cao hơn.
 - **Tổng hợp thời gian thực**: Tạo dạng sóng 24 kHz trên CPU hoặc GPU.
 - **Nhiều định dạng mô hình**: Hỗ trợ PyTorch, GGUF Q4/Q8 (tối ưu hóa cho CPU) và ONNX codec.
@@ -44,7 +44,8 @@ VieNeu-TTS cung cấp khả năng tổng hợp giọng nói sẵn sàng cho môi
 5. [🛠️ Hướng dẫn Fine-tuning](#finetuning)
 6. [🔬 Tổng quan mô hình](#backbones)
 7. [🐋 Triển khai với Docker (Compose)](#docker)
-8. [🤝 Hỗ trợ & Liên hệ](#support)
+8. [🚀 Roadmap](#roadmap)
+9. [🤝 Hỗ trợ & Liên hệ](#support)
 
 ---
 
@@ -355,7 +356,18 @@ Kiểm tra [docs/Deploy.md](docs/Deploy.md) để biết thêm chi tiết.
 
 ---
 
-## 🤝 8. Hỗ trợ & Liên hệ <a name="support"></a>
+## 🚀 Roadmap <a name="roadmap"></a>
+
+Chúng tôi không ngừng nỗ lực để cải thiện VieNeu-TTS. Dưới đây là những kế hoạch sắp tới:
+
+- [ ] **🦜 Version 2.0**: Phiên bản sắp ra mắt với khả năng voice cloning tốt hơn và xử lý ngữ cảnh dài hơn.
+- [ ] **🔊 VieNeu-Codec**: Phát triển neural audio codec riêng được tối ưu hóa đặc biệt cho các âm sắc đặc thù của tiếng Việt.
+- [ ] **📦 Hỗ trợ đa định dạng**: Ngoài GGUF, chúng tôi có kế hoạch hỗ trợ chính thức cho **ONNX** để triển khai linh hoạt hơn trên Web, Mobile, v.v.
+- [ ] **🩺 VieNeu-TTS Medical**: Phiên bản chuyên dụng được tinh chỉnh cho thuật ngữ y khoa và ứng dụng trong lĩnh vực chăm sóc sức khỏe.
+
+---
+
+## 🤝 9. Hỗ trợ & Liên hệ <a name="support"></a>
 
 - **Hugging Face:** [pnnbao-ump](https://huggingface.co/pnnbao-ump)
 - **Discord:** [Tham gia cộng đồng](https://discord.gg/yJt8kzjzWZ)
