@@ -4430,14 +4430,14 @@ wheels = [
 
 [[package]]
 name = "sea-g2p"
-version = "0.4.2"
+version = "0.4.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "phonemizer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/2e/4c/567339a408236ab7c9bc4785b0c799e6f74695d2839ddfdb515d18bcbff6/sea_g2p-0.4.2.tar.gz", hash = "sha256:7aa5fbf8e90e187dbad1efca4d3f080691e797244051331995aab1d479c22da9", size = 28345967, upload-time = "2026-03-11T14:19:11.458Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/a3/db/dd91687a13c25265596f4141346dad182b63b2df6ce099c71ff2b92d3a6b/sea_g2p-0.4.5.tar.gz", hash = "sha256:3f76eaec43db3319001a4431da65587a118c8670c0e73e9065873f44bbe6edfa", size = 28348776, upload-time = "2026-03-12T03:47:26.285Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/22/69/3aab41d210a1c5509a7e9359043aa91a5f4edd71226a6878df89d42f64f1/sea_g2p-0.4.2-py3-none-any.whl", hash = "sha256:195b960ccd4db9a8e8c1b3442ef592f28d220875c83a91194a8e4c076c0a6af8", size = 28370169, upload-time = "2026-03-11T14:18:54.401Z" },
+    { url = "https://files.pythonhosted.org/packages/23/c0/baaa5ccdbd1fdea43c09f667d55fd3a693287918942800586bbe395b5ccc/sea_g2p-0.4.5-py3-none-any.whl", hash = "sha256:179d0090d0ad946ed6698ab01c4cc63fd207c072e1ea3d5fe8caf6b1f0e5b2a3", size = 28371847, upload-time = "2026-03-12T03:47:08.474Z" },
 ]
 
 [[package]]
@@ -5324,7 +5324,7 @@ requires-dist = [
     { name = "onnxruntime", specifier = ">=1.23.2" },
     { name = "perth", specifier = ">=0.2.0" },
     { name = "requests" },
-    { name = "sea-g2p", specifier = ">=0.4.2" },
+    { name = "sea-g2p", specifier = ">=0.4.5" },
     { name = "torch", marker = "sys_platform != 'darwin'", index = "https://download.pytorch.org/whl/cu128" },
     { name = "torch", marker = "sys_platform == 'darwin'", index = "https://pypi.org/simple" },
     { name = "torchaudio", marker = "sys_platform != 'darwin'", index = "https://download.pytorch.org/whl/cu128" },
