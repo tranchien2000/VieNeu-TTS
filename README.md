@@ -51,8 +51,7 @@ VieNeu-TTS delivers production-ready speech synthesis fully offline.
 
 ## 🦜 1. Installation & Web UI <a name="installation"></a>
 
-> **Intel Arc GPU installation (Optional):** Using PyTorch 2.11 with XPU support. [For Intel arc gpu user, read the Intel Arc GPU section below](#intel-arc). Tested on Arc B580 and A770 on window.
-> Recommend setting: Intel arc have high memory bandwidth so keep the batch size as high as possible and minimize the number of character per chunk.
+> *For Intel arc gpu user, [read the Intel Arc GPU section below](#intel-arc).*
 
 > ⚡ **Quick Start**  
 > ℹ️ This is the fastest way to get started.  
@@ -64,12 +63,6 @@ VieNeu-TTS delivers production-ready speech synthesis fully offline.
 > uv run vieneu-web
 > ```
 > Open `http://127.0.0.1:7860` and start generating speech.
-
-
-### System Requirements
-- **NVIDIA GPU (Optional):** For maximum speed via LMDeploy or GGUF GPU acceleration.
-  - Requires **NVIDIA Driver >= 570.65** (CUDA 12.8+) or higher.
-  - For **LMDeploy**, it is recommended to have the [NVIDIA GPU Computing Toolkit](https://developer.nvidia.com/cuda-downloads) installed.
 
 ### Installation Steps
 1. **Clone the Repo:**
