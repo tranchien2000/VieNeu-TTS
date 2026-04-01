@@ -139,16 +139,16 @@ class TurboGPUVieNeuTTS(BaseVieneuTTS):
             f"<|SPEECH_GENERATION_START|>"
         )
 
-    def infer(self, text: str, ref_codes: Optional[Any] = None, temperature: float = 0.4, top_k: int = 50, max_chars: int = 256, skip_normalize: bool = False, skip_phonemize: bool = False, **kwargs) -> np.ndarray:
+    def infer(self, text: str, voice: Optional[Any] = None, temperature: float = 0.4, top_k: int = 50, max_chars: int = 256, skip_normalize: bool = False, skip_phonemize: bool = False, **kwargs) -> np.ndarray:
         from vieneu_utils.phonemize_text import phonemize_text
         from vieneu_utils.core_utils import split_into_chunks_v2, get_silence_duration_v2
 
         phonemes = phonemize_text(text) if not skip_phonemize else text
         chunks = split_into_chunks_v2(phonemes, max_chunk_size=max_chars)
         
-        if ref_codes is None:
-            ref_codes = self.get_preset_voice()
-        voice_embedding = self._get_voice_params(ref_codes)
+        if voice is None:
+            voice = self.get_preset_voice()
+        voice_embedding = self._get_voice_params(voice)
 
         all_wavs = []
         for i, chunk in enumerate(chunks):
@@ -189,7 +189,7 @@ class TurboGPUVieNeuTTS(BaseVieneuTTS):
     def infer_batch(
         self, 
         texts: List[str], 
-        ref_codes: Optional[Any] = None, 
+        voice: Optional[Any] = None, 
         temperature: float = 0.4, 
         top_k: int = 50, 
         max_batch_size: int = 4, 
@@ -201,9 +201,9 @@ class TurboGPUVieNeuTTS(BaseVieneuTTS):
         """Batch inference for Turbo GPU."""
         from vieneu_utils.phonemize_text import phonemize_batch
         
-        if ref_codes is None:
-            ref_codes = self.get_preset_voice()
-        voice_embedding = self._get_voice_params(ref_codes)
+        if voice is None:
+            voice = self.get_preset_voice()
+        voice_embedding = self._get_voice_params(voice)
 
         chunk_phonemes = phonemize_batch(texts, skip_normalize=True) if not skip_phonemize else texts
         
@@ -424,7 +424,7 @@ class TurboVieNeuTTS(BaseVieneuTTS):
     def infer(
         self,
         text: str,
-        ref_codes: Optional[Any] = None,
+        voice: Optional[Any] = None,
         temperature: float = 0.4,
         top_k: int = 50,
         max_chars: int = 256,
@@ -439,10 +439,10 @@ class TurboVieNeuTTS(BaseVieneuTTS):
             return np.array([], dtype=np.float32)
 
         # Use default voice if none provided
-        if ref_codes is None:
-            ref_codes = self.get_preset_voice()
+        if voice is None:
+            voice = self.get_preset_voice()
 
-        voice_embedding = self._get_voice_params(ref_codes)
+        voice_embedding = self._get_voice_params(voice)
 
         all_wavs = []
         for i, chunk in enumerate(chunks):

@@ -83,19 +83,57 @@ from vieneu import Vieneu
 # Initialize in Turbo mode (Default - Minimal dependencies)
 tts = Vieneu()
 
-# Synthesize speech (uses default Southern Male voice 'Xuân Vĩnh')
-text = "Trước đây, hệ thống điện chủ yếu sử dụng direct current, nhưng Tesla đã chứng minh rằng alternating current is more efficient."
+# 1. Simple synthesis (uses default Southern Male voice 'Xuân Vĩnh')
+text = "Hệ thống điện chủ yếu sử dụng alternating current because it is more efficient."
 audio = tts.infer(text=text)
 
 # Save to file
-tts.save(audio, "output.wav")
-print("💾 Saved to output.wav")
+tts.save(audio, "output_Xuân Vĩnh.wav")
+print("💾 Saved to output_Xuân Vĩnh.wav")
+
+# 2. Using a specific Preset Voice
+voices = tts.list_preset_voices()
+for desc, voice_id in voices:
+    print(f"Voice: {desc} (ID: {voice_id})")
+
+my_voice_id = voices[1][1] if len(voices) > 1 else voices[0][1] # Giọng Phạm Tuyên
+voice_data = tts.get_preset_voice(my_voice_id)
+
+audio_custom = tts.infer(text="Tôi đang nói bằng giọng của Bác sĩ Tuyên.", voice=voice_data)
+
+# 3. Save to file
+tts.save(audio_custom, "output_Phạm Tuyên.wav")
+print("💾 Saved to output_Phạm Tuyên.wav")
+```
+
+### 🦜 3. Zero-shot Voice Cloning (SDK) <a name="cloning"></a>
+
+Clone any voice with only **3-5 seconds** of audio using the local Turbo engine:
+
+```python
+from vieneu import Vieneu
+
+tts = Vieneu() # Defaults to Turbo mode
+
+# 1. Encode the reference audio (extracts speaker embedding)
+# Supported formats: .wav, .mp3, .flac
+my_voice = tts.encode_reference("examples/audio_ref/example.wav")
+
+# 2. Synthesize with the cloned voice
+# No reference text required for Turbo v2!
+audio = tts.infer(
+    text="Đây là giọng nói được clone trực tiếp bằng SDK của VieNeu-TTS.", 
+    voice=my_voice
+)
+
+tts.save(audio, "cloned_voice.wav")
 ```
 
 ### Advanced Modes
 | Mode | Description | Requirements |
 |---|---|---|
-| `turbo` | (Default) Ultra-fast CPU inference | `onnxruntime`, `llama-cpp-python` |
+| `turbo` | (Default) Ultra-fast CPU/GGUF inference | `onnxruntime`, `llama-cpp-python` |
+| `turbo_gpu` | Optimized Turbo mode for NVIDIA GPU | `transformers` or `lmdeploy` |
 | `remote` | Connect to a remote VieNeu API Server | `requests` |
 
 ---
