@@ -1,19 +1,13 @@
 import os
 import numpy as np
 import logging
-from typing import Optional, List, Dict, Any, Generator
+from typing import Optional, List, Any, Generator
+from pathlib import Path
 from .base import BaseVieneuTTS
 from vieneu_utils.phonemize_text import phonemize_text
 from vieneu_utils.core_utils import split_into_chunks_v2, get_silence_duration_v2
 
 logger = logging.getLogger("Vieneu.Turbo")
-
-TURBO_VOICE_ID_MAP = {
-    "Xuân Vĩnh (Nam - Miền Nam)": 3,
-    "Đoan Trang (Nữ - Miền Bắc)": 0,
-    "Thục Đoan (Nữ - Miền Nam)": 1,
-    "Phạm Tuyên (Nam - Miền Bắc)": 2,
-}
 
 class TurboVieNeuTTS(BaseVieneuTTS):
     def __init__(
@@ -22,39 +16,25 @@ class TurboVieNeuTTS(BaseVieneuTTS):
         backbone_filename: str = "vieneu-tts-v2-turbo.gguf",
         decoder_repo: str = "pnnbao-ump/VieNeu-Codec",
         decoder_filename: str = "vieneu_decoder.onnx",
+        encoder_repo: str = "pnnbao-ump/VieNeu-Codec",
+        encoder_filename: str = "vieneu_encoder.onnx",
         device: str = "cpu",
         hf_token: Optional[str] = None,
     ):
         super().__init__()
         self.backbone = None
         self.decoder_sess = None
+        self.encoder_sess = None
         self._is_onnx_codec = True
         self.max_context = 4096
+        
+        # Load components
         self._load_backbone(backbone_repo, backbone_filename, device, hf_token)
         self._load_decoder(decoder_repo, decoder_filename, device, hf_token)
-        self._load_voices()
-
-    def _load_voices(self) -> None:
-        self._preset_voices = TURBO_VOICE_ID_MAP.copy()
-        if self._preset_voices:
-            self._default_voice = next(iter(self._preset_voices))
-
-    def list_preset_voices(self) -> List[str]:
-        return list(self._preset_voices.keys())
-
-    def get_preset_voice(self, name: str) -> Dict[str, Any]:
-        if name not in self._preset_voices:
-            raise ValueError(f"Voice '{name}' not found.")
-        voice_id = self._preset_voices[name]
-        embedding = None
-        if voice_id == -1:
-            embedding = self._speaker_embeddings.get(name)
-        return {
-            "name": name,
-            "voice_id": voice_id,
-            "codes": voice_id if voice_id >= 0 else embedding,
-            "text": ""
-        }
+        self._load_encoder(encoder_repo, encoder_filename, device, hf_token)
+        
+        # Load voices from the repository/directory (uses voices.json)
+        self._load_voices(backbone_repo, hf_token)
 
     def _load_backbone(self, backbone_repo, backbone_filename, device, hf_token=None):
         try:
@@ -108,38 +88,82 @@ class TurboVieNeuTTS(BaseVieneuTTS):
         providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if device in ("gpu", "cuda") else ["CPUExecutionProvider"]
         self.decoder_sess = ort.InferenceSession(decoder_path, providers=providers)
 
-    def _get_voice_params(self, ref_codes: Any) -> tuple:
-        if ref_codes is None:
-            return -1, np.zeros((1, 128), dtype=np.float32)
-        if isinstance(ref_codes, int):
-            return ref_codes, np.zeros((1, 128), dtype=np.float32)
-        if isinstance(ref_codes, dict):
-            voice_id = ref_codes.get("voice_id", -1)
-            embedding = ref_codes.get("codes")
-            if embedding is None or isinstance(embedding, (int, float)):
-                embedding = np.zeros((1, 128), dtype=np.float32)
-            elif isinstance(embedding, list):
-                embedding = np.array(embedding, dtype=np.float32)
-            if isinstance(embedding, np.ndarray) and embedding.ndim == 1:
-                embedding = embedding[None, :]
-            return voice_id, embedding
-        if isinstance(ref_codes, np.ndarray):
-            if ref_codes.ndim == 1:
-                ref_codes = ref_codes[None, :]
-            return -1, ref_codes
-        return -1, np.zeros((1, 128), dtype=np.float32)
+    def _load_encoder(self, encoder_repo, encoder_filename, device, hf_token=None):
+        try:
+            import onnxruntime as ort
+        except ImportError:
+            return
 
-    def _decode(self, codes_str: str, voice_id: int = -1, embedding: Optional[np.ndarray] = None) -> np.ndarray:
+        if os.path.exists(encoder_repo):
+            encoder_path = encoder_repo
+        else:
+            from huggingface_hub import hf_hub_download
+            try:
+                encoder_path = hf_hub_download(
+                    repo_id=encoder_repo, filename=encoder_filename, token=hf_token
+                )
+            except Exception:
+                if os.path.exists(encoder_filename):
+                    encoder_path = encoder_filename
+                else:
+                    logger.warning("Speaker encoder not found, voice cloning might be limited in Turbo mode.")
+                    return
+
+        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if device in ("gpu", "cuda") else ["CPUExecutionProvider"]
+        self.encoder_sess = ort.InferenceSession(encoder_path, providers=providers)
+
+    def encode_reference(self, ref_audio: Any) -> np.ndarray:
+        """Standalone ONNX implementation for speaker encoding in Turbo mode."""
+        if self.encoder_sess is None:
+            raise RuntimeError("Speaker encoder model not loaded. Please ensure vieneu_encoder.onnx is available.")
+        
+        import librosa
+        if isinstance(ref_audio, (str, Path)):
+            wav, _ = librosa.load(ref_audio, sr=24000)
+        else:
+            wav = ref_audio
+        
+        if wav.ndim == 1:
+            wav = wav[None, :]
+        
+        inputs = {"waveform": wav.astype(np.float32)}
+        embedding = self.encoder_sess.run(None, inputs)[0]
+        return embedding
+
+    def _get_voice_params(self, ref_codes: Any) -> np.ndarray:
+        """Extract the 128-dim voice embedding for the new decoder logic."""
+        # Handle dict input (from get_preset_voice returned dict)
+        if isinstance(ref_codes, dict):
+            ref_codes = ref_codes.get("codes")
+            
+        # Ensure it is a float32 numpy array with shape (1, D)
+        if isinstance(ref_codes, (np.ndarray, list)):
+            emb = np.array(ref_codes, dtype=np.float32)
+            if emb.ndim == 1:
+                emb = emb[None, :]
+            if emb.shape[-1] in [128]:
+                return emb
+        
+        # Fallback to zeros (128-dim)
+        return np.zeros((1, 128), dtype=np.float32)
+
+    def _decode(self, codes_str: str, voice_embedding: Optional[np.ndarray] = None) -> np.ndarray:
         from .utils import extract_speech_ids
         speech_ids = extract_speech_ids(codes_str)
         if not speech_ids:
             return np.array([], dtype=np.float32)
+        
         tokens = np.array(speech_ids, dtype=np.int64)[None, :]
-        v_id = np.array([voice_id], dtype=np.int64)
-        if embedding is None:
-            embedding = np.zeros((1, 128), dtype=np.float32)
-        inputs = {"content_ids": tokens, "voice_id": v_id, "evoice_embedding": embedding}
+        
+        if voice_embedding is None:
+            voice_embedding = np.zeros((1, 128), dtype=np.float32)
+            
+        inputs = {
+            "content_ids": tokens, 
+            "voice_embedding": voice_embedding
+        }
         audio = self.decoder_sess.run(None, inputs)[0]
+        
         if audio.ndim == 3:
             return audio[0, 0, :]
         elif audio.ndim == 2:
@@ -163,14 +187,15 @@ class TurboVieNeuTTS(BaseVieneuTTS):
         if not chunks:
             return np.array([], dtype=np.float32)
 
-        if ref_codes is None and self._default_voice:
-            ref_codes = self.get_preset_voice(self._default_voice)
+        # Use default voice if none provided
+        if ref_codes is None:
+            ref_codes = self.get_preset_voice()
 
-        voice_id, emb = self._get_voice_params(ref_codes)
+        voice_embedding = self._get_voice_params(ref_codes)
 
         all_wavs = []
         for i, chunk in enumerate(chunks):
-            prompt = self._format_turbo_prompt(chunk.text)  # ← .text
+            prompt = self._format_turbo_prompt(chunk.text)
 
             self.backbone.reset()
             result = self.backbone(
@@ -184,11 +209,11 @@ class TurboVieNeuTTS(BaseVieneuTTS):
                 repeat_penalty=1.15,
                 echo=False,
             )
-            wav = self._decode(result["choices"][0]["text"], voice_id, emb)
+            wav = self._decode(result["choices"][0]["text"], voice_embedding)
             all_wavs.append(wav)
 
             if i < len(chunks) - 1:
-                silence_dur = get_silence_duration_v2(chunk)  # ← PhoneChunk
+                silence_dur = get_silence_duration_v2(chunk)
                 if silence_dur > 0:
                     all_wavs.append(np.zeros(int(self.sample_rate * silence_dur), dtype=np.float32))
 
@@ -217,13 +242,13 @@ class TurboVieNeuTTS(BaseVieneuTTS):
 
         chunks = split_into_chunks_v2(phonemes, max_chunk_size=max_chars)
 
-        if ref_codes is None and self._default_voice:
-            ref_codes = self.get_preset_voice(self._default_voice)
+        if ref_codes is None:
+            ref_codes = self.get_preset_voice()
 
-        voice_id, emb = self._get_voice_params(ref_codes)
+        voice_embedding = self._get_voice_params(ref_codes)
 
         for i, chunk in enumerate(chunks):
-            prompt = self._format_turbo_prompt(chunk.text)  # ← .text
+            prompt = self._format_turbo_prompt(chunk.text)
 
             self.backbone.reset()
             result = self.backbone(
@@ -237,11 +262,11 @@ class TurboVieNeuTTS(BaseVieneuTTS):
                 repeat_penalty=1.15,
                 echo=False,
             )
-            wav = self._decode(result["choices"][0]["text"], voice_id, emb)
+            wav = self._decode(result["choices"][0]["text"], voice_embedding)
             yield self._apply_watermark(wav)
 
             if i < len(chunks) - 1:
-                silence_dur = get_silence_duration_v2(chunk)  # ← PhoneChunk
+                silence_dur = get_silence_duration_v2(chunk)
                 if silence_dur > 0:
                     yield np.zeros(int(self.sample_rate * silence_dur), dtype=np.float32)
 
@@ -253,3 +278,4 @@ class TurboVieNeuTTS(BaseVieneuTTS):
             self.backbone.close()
             self.backbone = None
         self.decoder_sess = None
+        self.encoder_sess = None

@@ -133,9 +133,8 @@ def get_model_status_message() -> str:
         codec_device = "CPU"
     else:
         codec_device = "GPU/MPS" if (torch.cuda.is_available() if 'torch' in sys.modules else False) or (torch.backends.mps.is_available() if 'torch' in sys.modules else False) else "CPU"
-    
-    preencoded_note = "\n⚠️ Codec ONNX không hỗ trợ chức năng clone giọng nói." if codec_config.get('use_preencoded') else ""
-    
+
+    preencoded_note = ""    
     opt_info = ""
     if using_lmdeploy and hasattr(tts, 'get_optimization_stats'):
         stats = tts.get_optimization_stats()
@@ -692,19 +691,17 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
             voice_data = tts.get_preset_voice(voice_choice)
             ref_codes = voice_data['codes']
             ref_text_raw = voice_data['text']
-            
+        
         elif mode_tab == "custom_mode":
-            # Reference from Custom Cloning UI
             if custom_audio is None:
-                 raise ValueError("Vui lòng upload file Audio mẫu (Reference Audio)!")
-            if not custom_text or not custom_text.strip():
-                 raise ValueError("Vui lòng nhập nội dung văn bản của Audio mẫu (Reference Text)!")
+                raise ValueError("Vui lòng upload file Audio mẫu (Reference Audio)!")
             
-            ref_text_raw = custom_text.strip()
+            is_turbo = "v2-Turbo" in (current_backbone or "")
+            if not is_turbo and (not custom_text or not custom_text.strip()):
+                raise ValueError("Vui lòng nhập nội dung văn bản của Audio mẫu (Reference Text)!")
+            
+            ref_text_raw = custom_text.strip() if custom_text else ""
             ref_codes = tts.encode_reference(custom_audio)
-            
-        else:
-            raise ValueError(f"Unknown mode: {mode_tab}")
 
         # Ensure numpy for inference
         if 'torch' in sys.modules:
@@ -1264,13 +1261,13 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                         voice_select = gr.Dropdown(choices=[], value=None, label="Giọng mẫu")
                     
                     with gr.TabItem("🦜 Voice Cloning", id="custom_mode") as tab_custom:
-                        turbo_v2_cloning_notice = gr.Markdown(
-                            "⚠️ **Thông báo:** Bản Turbo không hỗ trợ chức năng Voice Cloning. Vui lòng sử dụng bản **VieNeu-TTS (GPU)** hoặc chờ đến khi phiên bản **VieNeu-TTS-v2** chính thức ra mắt.", 
-                            visible=True,
-                            elem_id="turbo-cloning-notice"
-                        )
+                        # turbo_v2_cloning_notice = gr.Markdown(
+                        #     "⚠️ **Thông báo:** Bản Turbo không hỗ trợ chức năng Voice Cloning. Vui lòng sử dụng bản **VieNeu-TTS (GPU)** hoặc chờ đến khi phiên bản **VieNeu-TTS-v2** chính thức ra mắt.", 
+                        #     visible=True,
+                        #     elem_id="turbo-cloning-notice"
+                        # )
                         
-                        with gr.Group(visible=False) as cloning_elements_group:
+                        with gr.Group(visible=True) as cloning_elements_group:
                             custom_audio = gr.Audio(label="Audio giọng mẫu (3-5 giây) (.wav)", type="filepath")
                             cloning_warning_msg = gr.Markdown(visible=False, elem_id="cloning-warning")
                             custom_text = gr.Textbox(label="Nội dung audio mẫu - vui lòng gõ đúng nội dung của audio mẫu - kể cả dấu câu vì model rất nhạy cảm với dấu câu (.,?!)")
@@ -1404,7 +1401,6 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                     gr.update(), 
                     gr.update(),
                     gr.update(choices=get_available_devices(), value="Auto"),
-                    gr.update(visible=False), # turbo notice
                     gr.update(visible=True)   # cloning group
                 )
             
@@ -1414,7 +1410,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                 temp_update = gr.update(value=0.4)
                 device_update = gr.update(choices=["CPU"], value="CPU")
                 turbo_notice_update = gr.update(visible=True)
-                cloning_group_update = gr.update(visible=False)
+                cloning_group_update = gr.update(visible=True)
             else:
                 codec_update = gr.update(value="NeuCodec (Distill)", interactive=False)
                 text_update = gr.update(value=DEFAULT_TEXT_GPU)
@@ -1429,7 +1425,6 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                 text_update, 
                 temp_update, 
                 device_update,
-                turbo_notice_update,
                 cloning_group_update
             )
 
@@ -1442,7 +1437,6 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                 text_input, 
                 temperature_slider, 
                 device_choice,
-                turbo_v2_cloning_notice,
                 cloning_elements_group
             ]
         )
