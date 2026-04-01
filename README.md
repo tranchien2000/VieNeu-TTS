@@ -125,15 +125,15 @@ from vieneu import Vieneu
 
 tts = Vieneu() # Defaults to Turbo mode
 
-# 1. Encode the reference audio (extracts speaker embedding)
-# Supported formats: .wav, .mp3, .flac
+# 1. Encode the reference audio
+# Supported formats: .wav, .mp3, .flac (5-10 seconds recommended)
 my_voice = tts.encode_reference("examples/audio_ref/example.wav")
 
 # 2. Synthesize with the cloned voice
 # No reference text required for Turbo v2!
 audio = tts.infer(
     text="Đây là giọng nói được clone trực tiếp bằng SDK của VieNeu-TTS.", 
-    voice=my_voice
+    voice=my_voice  # accepts numpy array from encode_reference() or preset dict from get_preset_voice()
 )
 
 tts.save(audio, "cloned_voice.wav")
