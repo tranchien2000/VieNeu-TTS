@@ -1245,13 +1245,13 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                     <div class="warning-banner-item">
                         <strong>🐆 Hệ máy GPU</strong>
                         <div class="warning-banner-content">
-                            Phiên bản <b>VieNeu-TTS-v2 Turbo</b> đã hỗ trợ song ngữ Anh Việt (code-switching) mượt mà và tốc độ rất nhanh. Trong trường hợp bạn muốn sử dụng version 1, để có độ chính xác cao nhất và giọng đọc tự nhiên nhất, hãy sử dụng <b>VieNeu-TTS (Mặc định - GPU)</b>. Chọn <b>VieNeu-TTS-0.3B (GPU)</b> để tăng tốc độ lên gấp 2 lần (độ chính xác đạt khoảng 80% so với bản gốc). 
+                            Phiên bản <b>VieNeu-TTS-v2 Turbo</b> đã hỗ trợ song ngữ Anh Việt (code-switching) mượt mà và tốc độ rất nhanh - tuy nhiên vẫn đang trong quá trình thử nghiệm. Trong trường hợp bạn cần sự ổn định, hãy sử dụng version 1, để có độ chính xác cao nhất và giọng đọc tự nhiên nhất, hãy sử dụng <b>VieNeu-TTS (Mặc định - GPU)</b>. Chọn <b>VieNeu-TTS-0.3B (GPU)</b> để tăng tốc độ lên gấp 2 lần (độ chính xác đạt khoảng 80% so với bản gốc). 
                         </div>
                     </div>
                     <div class="warning-banner-item" style="background: #dcfce7; border-color: #86efac;">
-                        <strong style="color: #15803d;">🚀 VieNeu-TTS-v2 Turbo</strong>
+                        <strong style="color: #15803d;">🚀 VieNeu-TTS-v2</strong>
                         <div class="warning-banner-content" style="color: #166534;">
-                            Phiên bản <b>v2 Turbo</b> hiện là lựa chọn tối ưu nhất, hỗ trợ <b>song ngữ Anh-Việt</b> mượt mà. Đã có cả bản <b>CPU (kiến trúc GGUF)</b> cho máy yếu và bản <b>GPU (kiến trúc LMDeploy)</b> cho tốc độ tổng hợp tức thì.
+                            Phiên bản <b>VieNeu-TTS-v2</b> đang trong quá trình phát triển nhằm hỗ trợ <b>song ngữ Anh-Việt</b>. Phiên bản <b>v2 Turbo</b> được ra mắt trước nhằm mục đích thử nghiệm.
                         </div>
                     </div>
                 </div>

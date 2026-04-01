@@ -23,6 +23,16 @@
 
 https://github.com/user-attachments/assets/adb15c5b-185d-44e3-b7e4-417774cdef27
 
+## 📌 Table of Contents
+
+1. [🦜 Installation & Web UI](#installation)
+2. [📦 Using the Python SDK](#sdk)
+3. [🐳 Docker & Remote Server](#docker-remote)
+4. [🔬 Model Overview](#backbones)
+5. [🚀 Roadmap](#roadmap)
+6. [🤝 Support & Contact](#support)
+7. [📑 Citation](#citation)
+
 ---
 
 ## 🦜 1. Installation & Web UI <a name="installation"></a>
@@ -195,7 +205,7 @@ if os.path.exists("examples/audio_ref/example_ngoc_huyen.wav"):
 *For full implementation details, see: [examples/main_remote.py](examples/main_remote.py)*
 
 ### Voice Preset Specification (v1.0)
-VieNeu-TTS uses the official `vieneu.voice.presets` specification to define reusable voice assets. Only `voices.json` files following this spec are guaranteed to be compatible with VieNeu-TTS SDK \u2265 v1.x.
+VieNeu-TTS uses the official `vieneu.voice.presets` specification to define reusable voice assets. Only `voices.json` files following this spec are guaranteed to be compatible with VieNeu-TTS SDK ≥ v1.x.
 
 ### 3. Advanced Configuration
 
@@ -233,7 +243,7 @@ docker run --gpus all \
 
 ---
 
-## 🚀 Roadmap <a name="roadmap"></a>
+## 🚀 5. Roadmap <a name="roadmap"></a>
 
 - [x] **VieNeu-TTS-v2 Turbo**: English-Vietnamese code-switching support.
 - [x] **VieNeu-Codec**: Optimized neural codec for Vietnamese (ONNX).
@@ -243,7 +253,7 @@ docker run --gpus all \
 
 ---
 
-## 🤝 Support & Contact <a name="support"></a>
+## 🤝 6. Support & Contact <a name="support"></a>
 
 - **Hugging Face:** [pnnbao-ump](https://huggingface.co/pnnbao-ump)
 - **Discord:** [Join our community](https://discord.gg/yJt8kzjzWZ)
@@ -251,7 +261,7 @@ docker run --gpus all \
 - **License:** Apache 2.0 (Free to use).
 
 ---
-## 📑 Citation
+## 📑 7. Citation <a name="citation"></a>
 
 ```bibtex
 @misc{vieneutts2026,

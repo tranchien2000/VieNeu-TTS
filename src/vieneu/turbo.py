@@ -139,13 +139,15 @@ class TurboGPUVieNeuTTS(BaseVieneuTTS):
             f"<|SPEECH_GENERATION_START|>"
         )
 
-    def infer(self, text: str, voice: Optional[Any] = None, temperature: float = 0.4, top_k: int = 50, max_chars: int = 256, skip_normalize: bool = False, skip_phonemize: bool = False, **kwargs) -> np.ndarray:
+    def infer(self, text: str, voice: Optional[Any] = None, ref_codes: Optional[Any] = None, temperature: float = 0.4, top_k: int = 50, max_chars: int = 256, skip_normalize: bool = False, skip_phonemize: bool = False, **kwargs) -> np.ndarray:
         from vieneu_utils.phonemize_text import phonemize_text
         from vieneu_utils.core_utils import split_into_chunks_v2, get_silence_duration_v2
 
         phonemes = phonemize_text(text) if not skip_phonemize else text
         chunks = split_into_chunks_v2(phonemes, max_chunk_size=max_chars)
         
+        if voice is None:
+            voice = ref_codes
         if voice is None:
             voice = self.get_preset_voice()
         voice_embedding = self._get_voice_params(voice)
@@ -190,6 +192,7 @@ class TurboGPUVieNeuTTS(BaseVieneuTTS):
         self, 
         texts: List[str], 
         voice: Optional[Any] = None, 
+        ref_codes: Optional[Any] = None, 
         temperature: float = 0.4, 
         top_k: int = 50, 
         max_batch_size: int = 4, 
@@ -201,6 +204,8 @@ class TurboGPUVieNeuTTS(BaseVieneuTTS):
         """Batch inference for Turbo GPU."""
         from vieneu_utils.phonemize_text import phonemize_batch
         
+        if voice is None:
+            voice = ref_codes
         if voice is None:
             voice = self.get_preset_voice()
         voice_embedding = self._get_voice_params(voice)
@@ -224,6 +229,7 @@ class TurboGPUVieNeuTTS(BaseVieneuTTS):
                 batch_wavs = [
                     self.infer(
                         t, 
+                        voice=voice, 
                         ref_codes=ref_codes, 
                         temperature=temperature, 
                         top_k=top_k, 
@@ -251,6 +257,62 @@ class TurboGPUVieNeuTTS(BaseVieneuTTS):
         }
         audio = self.decoder_sess.run(None, inputs)[0]
         return audio.flatten()
+
+    def infer_stream(
+        self,
+        text: str,
+        voice: Optional[Any] = None,
+        ref_codes: Optional[Any] = None,
+        temperature: float = 0.4,
+        top_k: int = 50,
+        max_chars: int = 256,
+        skip_normalize: bool = False,
+        skip_phonemize: bool = False,
+        **kwargs
+    ) -> Generator[np.ndarray, None, None]:
+        """Streaming inference for Turbo GPU."""
+        from vieneu_utils.phonemize_text import phonemize_text
+        from vieneu_utils.core_utils import split_into_chunks_v2, get_silence_duration_v2
+
+        phonemes = phonemize_text(text) if not skip_phonemize else text
+        chunks = split_into_chunks_v2(phonemes, max_chunk_size=max_chars)
+        
+        if voice is None:
+            voice = ref_codes
+        if voice is None:
+            voice = self.get_preset_voice()
+        voice_embedding = self._get_voice_params(voice)
+
+        for i, chunk in enumerate(chunks):
+            prompt = self._format_turbo_prompt(chunk.text)
+            
+            if self.backend == "lmdeploy":
+                # Ensure gen_config uses current parameters
+                self.gen_config.temperature = temperature
+                self.gen_config.top_k = top_k
+                responses = self.backbone([prompt], gen_config=self.gen_config, do_preprocess=False)
+                generated_text = responses[0].text
+            else:
+                import torch
+                inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
+                with torch.no_grad():
+                    output_tokens = self.backbone.generate(
+                        **inputs,
+                        max_new_tokens=2048,
+                        temperature=temperature,
+                        top_k=top_k,
+                        do_sample=True,
+                        pad_token_id=self.tokenizer.eos_token_id,
+                    )
+                generated_text = self.tokenizer.decode(output_tokens[0][inputs.input_ids.shape[-1]:], skip_special_tokens=True)
+            
+            wav = self._decode(generated_text, voice_embedding)
+            yield self._apply_watermark(wav)
+
+            if i < len(chunks) - 1:
+                silence_dur = get_silence_duration_v2(chunk)
+                if silence_dur > 0:
+                    yield np.zeros(int(self.sample_rate * silence_dur), dtype=np.float32)
 
     def close(self):
         self.backbone = None
@@ -425,6 +487,7 @@ class TurboVieNeuTTS(BaseVieneuTTS):
         self,
         text: str,
         voice: Optional[Any] = None,
+        ref_codes: Optional[Any] = None,
         temperature: float = 0.4,
         top_k: int = 50,
         max_chars: int = 256,
@@ -439,6 +502,8 @@ class TurboVieNeuTTS(BaseVieneuTTS):
             return np.array([], dtype=np.float32)
 
         # Use default voice if none provided
+        if voice is None:
+            voice = ref_codes
         if voice is None:
             voice = self.get_preset_voice()
 
@@ -481,6 +546,7 @@ class TurboVieNeuTTS(BaseVieneuTTS):
     def infer_stream(
         self,
         text: str,
+        voice: Optional[Any] = None,
         ref_codes: Optional[Any] = None,
         temperature: float = 0.4,
         top_k: int = 50,
@@ -493,10 +559,12 @@ class TurboVieNeuTTS(BaseVieneuTTS):
 
         chunks = split_into_chunks_v2(phonemes, max_chunk_size=max_chars)
 
-        if ref_codes is None:
-            ref_codes = self.get_preset_voice()
+        if voice is None:
+            voice = ref_codes
+        if voice is None:
+            voice = self.get_preset_voice()
 
-        voice_embedding = self._get_voice_params(ref_codes)
+        voice_embedding = self._get_voice_params(voice)
 
         for i, chunk in enumerate(chunks):
             prompt = self._format_turbo_prompt(chunk.text)
@@ -521,8 +589,8 @@ class TurboVieNeuTTS(BaseVieneuTTS):
                 if silence_dur > 0:
                     yield np.zeros(int(self.sample_rate * silence_dur), dtype=np.float32)
 
-    def infer_batch(self, texts: List[str], apply_watermark: bool = True, **kwargs) -> List[np.ndarray]:
-        results = [self.infer(t, **kwargs) for t in texts]
+    def infer_batch(self, texts: List[str], voice: Optional[Any] = None, ref_codes: Optional[Any] = None, apply_watermark: bool = True, **kwargs) -> List[np.ndarray]:
+        results = [self.infer(t, voice=voice, ref_codes=ref_codes, **kwargs) for t in texts]
         if apply_watermark:
             results = [self._apply_watermark(r) for r in results]
         return results
