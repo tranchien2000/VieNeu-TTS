@@ -443,10 +443,13 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
             print(f"📦 Using original backend")
 
             if device_choice == "Auto":
-                if "gguf" in backbone_config['repo'].lower() or "v2-turbo" in backbone_config['repo'].lower():
-                    # GGUF: uses Metal on Mac, CUDA on Windows/Linux
+                repo_lower = backbone_config['repo'].lower()
+                is_gguf_backbone = "gguf" in repo_lower
+
+                if is_gguf_backbone:
+                    # GGUF backbones (llama-cpp-python): Metal on Mac, CUDA on Windows/Linux
                     if sys.platform == "darwin":
-                        backbone_device = "gpu"  # llama-cpp-python uses Metal
+                        backbone_device = "gpu"  # llama-cpp-python uses Metal via n_gpu_layers
                     else:
                         try:
                             import torch
@@ -454,7 +457,7 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
                         except ImportError:
                             backbone_device = "cpu"
                 else:
-                    # PyTorch model
+                    # PyTorch backbones (Standard, Turbo GPU): use native torch device
                     try:
                         import torch
                         if sys.platform == "darwin":

@@ -39,15 +39,16 @@ def test_turbo_gguf_infer(mock_hf, mock_llama, mock_ort, mock_onnx_session, mock
     tts._preset_voices = {"test": {"codes": np.zeros(128), "text": "test"}}
     
     with patch("vieneu_utils.phonemize_text.phonemize_text", return_value="p-h-o-n-e-m-e-s"):
-        audio = tts.infer("Xin chào", voice="test")
+        audio = tts.infer("Xin chào", voice={"codes": np.zeros(128), "text": "test"})
         assert isinstance(audio, np.ndarray)
         assert len(audio) > 0
         mock_llama_instance.assert_called()
 
 @patch("onnxruntime.InferenceSession")
+@patch("huggingface_hub.hf_hub_download", return_value="dummy_path")
 @patch("transformers.AutoTokenizer.from_pretrained")
 @patch("transformers.AutoModelForCausalLM.from_pretrained")
-def test_turbo_gpu_standard_init(mock_model, mock_tokenizer, mock_ort):
+def test_turbo_gpu_standard_init(mock_model, mock_tokenizer, mock_hf, mock_ort):
     # Mock model and tokenizer
     mock_tokenizer.return_value = MagicMock()
     mock_model_instance = MagicMock()
@@ -60,27 +61,29 @@ def test_turbo_gpu_standard_init(mock_model, mock_tokenizer, mock_ort):
     assert tts.device == "cuda"
 
 @patch("onnxruntime.InferenceSession")
+@patch("huggingface_hub.hf_hub_download", return_value="dummy_path")
 @patch("lmdeploy.pipeline")
-def test_turbo_gpu_lmdeploy_init(mock_pipeline, mock_ort):
+def test_turbo_gpu_lmdeploy_init(mock_pipeline, mock_hf, mock_ort):
     mock_pipeline_instance = MagicMock()
     mock_pipeline.return_value = mock_pipeline_instance
-    
+
     tts = TurboGPUVieNeuTTS(backbone_repo="dummy", device="cuda", backend="lmdeploy")
     assert tts.backend == "lmdeploy"
     assert tts.backbone is not None
 
 @patch("onnxruntime.InferenceSession")
+@patch("huggingface_hub.hf_hub_download", return_value="dummy_path")
 @patch("transformers.AutoTokenizer.from_pretrained")
 @patch("transformers.AutoModelForCausalLM.from_pretrained")
-def test_turbo_gpu_infer(mock_model, mock_tokenizer, mock_ort, mock_onnx_session):
+def test_turbo_gpu_infer(mock_model, mock_tokenizer, mock_hf, mock_ort, mock_onnx_session):
     mock_ort.return_value = mock_onnx_session
-    
+
     # Mock standard Transformers path
     mock_tokenizer_instance = MagicMock()
     mock_tokenizer_instance.return_value = {"input_ids": torch.zeros((1, 5), dtype=torch.long)}
     mock_tokenizer_instance.decode.return_value = "<|speech_100|><|speech_101|>"
     mock_tokenizer.return_value = mock_tokenizer_instance
-    
+
     mock_model_instance = MagicMock()
     mock_model_instance.generate.return_value = torch.zeros((1, 20), dtype=torch.long)
     mock_model_instance.to.return_value = mock_model_instance
@@ -88,9 +91,9 @@ def test_turbo_gpu_infer(mock_model, mock_tokenizer, mock_ort, mock_onnx_session
 
     tts = TurboGPUVieNeuTTS(backbone_repo="dummy", device="cpu", backend="standard")
     tts._preset_voices = {"test": {"codes": np.zeros(128), "text": "test"}}
-    
+
     with patch("vieneu_utils.phonemize_text.phonemize_text", return_value="p-h-o-n-e-m-e-s"):
-        audio = tts.infer("Xin chào", voice="test")
+        audio = tts.infer("Xin chào", voice={"codes": np.zeros(128), "text": "test"})
         assert isinstance(audio, np.ndarray)
         assert len(audio) > 0
 
