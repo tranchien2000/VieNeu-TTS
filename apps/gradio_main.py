@@ -1266,15 +1266,9 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                 </div>
                 <div class="warning-banner-grid">
                     <div class="warning-banner-item">
-                        <strong>🦜 Tính năng multi-language</strong>
-                        <div class="warning-banner-content">
-                            Bản <b>VieNeu-TTS-v2</b> (bao gồm cả bản <b>Turbo v2</b>) hỗ trợ đọc <b>song ngữ Anh-Việt</b> mượt mà và tự nhiên nhất nhờ sự hỗ trợ của thư viện <b>sea-g2p</b> và codec <b>VieNeu-Codec</b>.
-                        </div>
-                    </div>
-                    <div class="warning-banner-item">
                         <strong>🐆 Hệ máy GPU</strong>
                         <div class="warning-banner-content">
-                            Phiên bản <b>VieNeu-TTS-v2 Turbo</b> đã hỗ trợ song ngữ Anh Việt (code-switching) mượt mà và tốc độ rất nhanh - tuy nhiên vẫn đang trong quá trình thử nghiệm. Trong trường hợp bạn cần sự ổn định, hãy sử dụng version 1, để có độ chính xác cao nhất và giọng đọc tự nhiên nhất, hãy sử dụng <b>VieNeu-TTS (Mặc định - GPU)</b>. Chọn <b>VieNeu-TTS-0.3B (GPU)</b> để tăng tốc độ lên gấp 2 lần (độ chính xác đạt khoảng 80% so với bản gốc). 
+                            Để có độ chính xác cao nhất và giọng đọc tự nhiên nhất, hãy sử dụng <b>VieNeu-TTS (Mặc định - GPU)</b>. Chọn <b>VieNeu-TTS-0.3B (GPU)</b> để tăng tốc độ lên gấp 2 lần (độ chính xác đạt khoảng 80% so với bản gốc). 
                         </div>
                     </div>
                     <div class="warning-banner-item" style="background: #dcfce7; border-color: #86efac;">
