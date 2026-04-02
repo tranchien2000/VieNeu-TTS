@@ -29,7 +29,7 @@
 
 1. [🦜 Installation & Web UI](#installation)
 2. [📦 Using the Python SDK](#sdk)
-3. [🐳 Docker & Remote Server](#docker-remote)
+3. [🐳 High-Quality Server (Standard Mode)](#docker-remote)
 4. [🔬 Model Overview](#backbones)
 5. [🚀 Roadmap](#roadmap)
 6. [🤝 Support & Contact](#support)
@@ -75,7 +75,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ## 📦 2. Using the Python SDK (vieneu) <a name="sdk"></a>
 
-The `vieneu` SDK now defaults to **Turbo mode** for maximum compatibility.
+The `vieneu` SDK defaults to **Turbo mode** when used locally to prioritize extreme speed and real-time performance. To achieve maximum audio quality (Standard VieNeu-TTS), you should set up a [Remote Server](#docker-remote) and use the SDK in **remote mode**.
 
 ### Quick Start
 ```bash
@@ -143,7 +143,7 @@ tts.save(audio, "cloned_voice.wav")
 
 ---
 
-## 🐳 3. Docker & Remote Server <a name="docker-remote"></a>
+## 🐳 3. High-Quality Server (Standard Mode) <a name="docker-remote"></a>
 
 Deploy VieNeu-TTS as a high-performance API Server (powered by LMDeploy) with a single command.
 
