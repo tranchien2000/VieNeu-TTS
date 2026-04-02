@@ -6,6 +6,7 @@ from pathlib import Path
 from .base import BaseVieneuTTS
 from vieneu_utils.phonemize_text import phonemize_text
 from vieneu_utils.core_utils import split_into_chunks_v2, get_silence_duration_v2
+from tqdm import tqdm
 import sys
 
 logger = logging.getLogger("Vieneu.Turbo")
@@ -218,9 +219,19 @@ class TurboGPUVieNeuTTS(BaseVieneuTTS):
         new_tokens = output_tokens[0, inputs['input_ids'].shape[-1]:].cpu()
         return self.tokenizer.decode(new_tokens, skip_special_tokens=True)
 
-    def infer(self, text: str, voice: Optional[Any] = None, ref_codes: Optional[Any] = None, temperature: float = 0.4, top_k: int = 50, max_chars: int = 256, skip_normalize: bool = False, skip_phonemize: bool = False, **kwargs) -> np.ndarray:
-        from vieneu_utils.phonemize_text import phonemize_text
-        from vieneu_utils.core_utils import split_into_chunks_v2, get_silence_duration_v2
+    def infer(
+        self, 
+        text: str, 
+        voice: Optional[Any] = None, 
+        ref_codes: Optional[Any] = None, 
+        temperature: float = 0.4, 
+        top_k: int = 50, 
+        max_chars: int = 256, 
+        skip_normalize: bool = False, 
+        skip_phonemize: bool = False, 
+        show_progress: bool = True,
+        **kwargs
+    ) -> np.ndarray:
 
         phonemes = phonemize_text(text) if not skip_phonemize else text
         chunks = split_into_chunks_v2(phonemes, max_chunk_size=max_chars)
@@ -232,13 +243,9 @@ class TurboGPUVieNeuTTS(BaseVieneuTTS):
         voice_embedding = self._get_voice_params(voice)
 
         all_wavs = []
-        num_chunks = len(chunks)
-        if num_chunks > 1:
-            logger.info(f"🚀 Starting synthesis ({num_chunks} chunks)...")
-
-        for i, chunk in enumerate(chunks):
-            if num_chunks > 1:
-                logger.info(f"  🔊 Chunk {i+1}/{num_chunks}...")
+        pbar = tqdm(chunks, desc="🚀 Synthesizing", disable=not (show_progress and len(chunks) > 1), leave=False)
+        for i, chunk in enumerate(pbar):
+            pbar.set_description(f"  🔊 Chunk {i+1}/{len(chunks)}")
             prompt = self._format_turbo_prompt(chunk.text)
             
             if self.backend == "lmdeploy":
@@ -591,11 +598,13 @@ class TurboVieNeuTTS(BaseVieneuTTS):
         max_chars: int = 256,
         skip_normalize: bool = False,
         skip_phonemize: bool = False,
+        show_progress: bool = True,
         **kwargs
     ) -> np.ndarray:
-        phonemes = phonemize_text(text) if not skip_phonemize else text
 
+        phonemes = phonemize_text(text) if not skip_phonemize else text
         chunks = split_into_chunks_v2(phonemes, max_chunk_size=max_chars)
+        
         if not chunks:
             return np.array([], dtype=np.float32)
 
@@ -608,13 +617,9 @@ class TurboVieNeuTTS(BaseVieneuTTS):
         voice_embedding = self._get_voice_params(voice)
 
         all_wavs = []
-        num_chunks = len(chunks)
-        if num_chunks > 1:
-            logger.info(f"🚀 Starting synthesis ({num_chunks} chunks)...")
-
-        for i, chunk in enumerate(chunks):
-            if num_chunks > 1:
-                logger.info(f"  🔊 Chunk {i+1}/{num_chunks}...")
+        pbar = tqdm(chunks, desc="🚀 Synthesizing", disable=not (show_progress and len(chunks) > 1), leave=False)
+        for i, chunk in enumerate(pbar):
+            pbar.set_description(f"  🔊 Chunk {i+1}/{len(chunks)}")
             prompt = self._format_turbo_prompt(chunk.text)
 
             self.backbone.reset()

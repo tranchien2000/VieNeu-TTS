@@ -5191,7 +5191,7 @@ wheels = [
 
 [[package]]
 name = "vieneu"
-version = "2.4.1"
+version = "2.4.2"
 source = { editable = "." }
 dependencies = [
     { name = "gradio" },
@@ -5208,6 +5208,7 @@ dependencies = [
     { name = "requests" },
     { name = "sea-g2p" },
     { name = "soundfile" },
+    { name = "tqdm" },
 ]
 
 [package.optional-dependencies]
@@ -5273,6 +5274,7 @@ requires-dist = [
     { name = "torch", marker = "sys_platform != 'darwin' and extra == 'gpu'", index = "https://download.pytorch.org/whl/cu128" },
     { name = "torchaudio", marker = "sys_platform == 'darwin' and extra == 'gpu'", index = "https://pypi.org/simple" },
     { name = "torchaudio", marker = "sys_platform != 'darwin' and extra == 'gpu'", index = "https://download.pytorch.org/whl/cu128" },
+    { name = "tqdm" },
     { name = "transformers", marker = "sys_platform == 'darwin' and extra == 'gpu'" },
     { name = "triton", marker = "sys_platform == 'linux' and extra == 'gpu'" },
     { name = "triton-windows", marker = "sys_platform == 'win32' and extra == 'gpu'" },
