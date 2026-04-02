@@ -1181,14 +1181,23 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
         # --- CONFIGURATION ---
         with gr.Group():
             with gr.Row():
+                # --- BACKBONE & CODEC DEFAULT LOGIC ---
+                default_backbone = "VieNeu-TTS (GPU)" if "VieNeu-TTS (GPU)" in BACKBONE_CONFIGS else ("VieNeu-TTS-v2-Turbo (CPU)" if "VieNeu-TTS-v2-Turbo (CPU)" in BACKBONE_CONFIGS else list(BACKBONE_CONFIGS.keys())[0])
+                
+                # Default codec logic
+                if "Turbo" in default_backbone:
+                    default_codec = "VieNeu-Codec"
+                else:
+                    default_codec = "NeuCodec (Distill)" if "NeuCodec (Distill)" in CODEC_CONFIGS else list(CODEC_CONFIGS.keys())[0]
+
                 backbone_select = gr.Dropdown(
                     list(BACKBONE_CONFIGS.keys()) + ["Custom Model"], 
-                    value="VieNeu-TTS (GPU)" if "VieNeu-TTS (GPU)" in BACKBONE_CONFIGS else ("VieNeu-TTS (CPU)" if "VieNeu-TTS (CPU)" in BACKBONE_CONFIGS else list(BACKBONE_CONFIGS.keys())[0]), 
+                    value=default_backbone, 
                     label="🦜 Backbone"
                 )
                 codec_select = gr.Dropdown(
                     list(CODEC_CONFIGS.keys()), 
-                    value="VieNeu-Codec" if "VieNeu-Codec" in CODEC_CONFIGS else list(CODEC_CONFIGS.keys())[0], 
+                    value=default_codec, 
                     label="🎵 Codec",
                     interactive=False
                 )
