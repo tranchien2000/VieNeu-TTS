@@ -1,19 +1,18 @@
 from pathlib import Path
 from typing import Optional, Union, List, Generator, Any, Dict
 import numpy as np
-import torch
 import requests
 import json
 import asyncio
 import logging
-from .standard import VieNeuTTS
+from .base import BaseVieneuTTS
 from .utils import _linear_overlap_add
-from vieneu_utils.phonemize_text import phonemize_with_dict
+from vieneu_utils.phonemize_text import phonemize_with_dict, phonemize_batch
 from vieneu_utils.core_utils import split_text_into_chunks, join_audio_chunks
 
 logger = logging.getLogger("Vieneu.Remote")
 
-class RemoteVieNeuTTS(VieNeuTTS):
+class RemoteVieNeuTTS(BaseVieneuTTS):
     """
     Client for VieNeu-TTS running on a remote LMDeploy server.
     """
@@ -46,7 +45,7 @@ class RemoteVieNeuTTS(VieNeuTTS):
         pass
 
 
-    def infer(self, text: str, ref_audio: Optional[Union[str, Path]] = None, ref_codes: Optional[Union[np.ndarray, torch.Tensor]] = None, ref_text: Optional[str] = None, max_chars: int = 256, silence_p: float = 0.15, crossfade_p: float = 0.0, voice: Optional[Dict[str, Any]] = None, temperature: float = 1.0, top_k: int = 50, skip_normalize: bool = False) -> np.ndarray:
+    def infer(self, text: str, ref_audio: Optional[Union[str, Path]] = None, ref_codes: Optional[Union[np.ndarray, 'torch.Tensor']] = None, ref_text: Optional[str] = None, max_chars: int = 256, silence_p: float = 0.15, crossfade_p: float = 0.0, voice: Optional[Dict[str, Any]] = None, temperature: float = 1.0, top_k: int = 50, skip_normalize: bool = False, **kwargs) -> np.ndarray:
 
         ref_codes, ref_text = self._resolve_ref_voice(voice, ref_audio, ref_codes, ref_text)
 
@@ -108,10 +107,19 @@ class RemoteVieNeuTTS(VieNeuTTS):
             "stream": True
         }
 
-        if isinstance(ref_codes, (torch.Tensor, np.ndarray)):
-            ref_codes_list = ref_codes.flatten().tolist()
-        else:
-            ref_codes_list = ref_codes
+        try:
+            import torch
+            if isinstance(ref_codes, torch.Tensor):
+                ref_codes_list = ref_codes.flatten().tolist()
+            elif isinstance(ref_codes, np.ndarray):
+                ref_codes_list = ref_codes.flatten().tolist()
+            else:
+                ref_codes_list = ref_codes
+        except ImportError:
+            if isinstance(ref_codes, np.ndarray):
+                ref_codes_list = ref_codes.flatten().tolist()
+            else:
+                ref_codes_list = ref_codes
 
         audio_cache: List[np.ndarray] = []
         token_cache: List[str] = [f"<|speech_{idx}|>" for idx in ref_codes_list]
@@ -208,7 +216,7 @@ class RemoteVieNeuTTS(VieNeuTTS):
         self,
         session,
         chunk: str,
-        ref_codes: Union[List[int], torch.Tensor, np.ndarray],
+        ref_codes: Union[List[int], 'torch.Tensor', np.ndarray],
         ref_text: str,
         temperature: float,
         top_k: int,
