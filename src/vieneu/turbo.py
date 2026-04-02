@@ -6,6 +6,7 @@ from pathlib import Path
 from .base import BaseVieneuTTS
 from vieneu_utils.phonemize_text import phonemize_text
 from vieneu_utils.core_utils import split_into_chunks_v2, get_silence_duration_v2
+import sys
 
 logger = logging.getLogger("Vieneu.Turbo")
 
@@ -66,7 +67,7 @@ class TurboGPUVieNeuTTS(BaseVieneuTTS):
             else:
                 try:
                     from lmdeploy import pipeline, TurbomindEngineConfig, GenerationConfig
-                    logger.info(f"Loading Turbo GPU (LMDeploy) from: {repo}")
+                    logger.info(f"⏳ Loading Turbo GPU (LMDeploy) from: {repo}...")
                     
                     engine_config = TurbomindEngineConfig(
                         cache_max_entry_count=kwargs.get("memory_util", 0.3),
@@ -81,6 +82,7 @@ class TurboGPUVieNeuTTS(BaseVieneuTTS):
                         repetition_penalty=1.1,
                         do_sample=True, stop_words=["<|SPEECH_GENERATION_END|>"]
                     )
+                    logger.info(f"✅ Turbo GPU (LMDeploy) ready on {self.device}")
                     return
                 except ImportError:
                     logger.warning("LMDeploy not found. Falling back to Standard (Transformers).")
@@ -90,7 +92,7 @@ class TurboGPUVieNeuTTS(BaseVieneuTTS):
             import torch
             from transformers import AutoTokenizer, AutoModelForCausalLM
             
-            logger.info(f"Loading Turbo GPU (Standard) from: {repo} on {self.device}")
+            logger.info(f"⏳ Loading Turbo GPU (Standard) from: {repo} on {self.device}...")
             self.tokenizer = AutoTokenizer.from_pretrained(repo, token=hf_token)
 
             # dtype selection — mirrors standard.py:
@@ -108,6 +110,7 @@ class TurboGPUVieNeuTTS(BaseVieneuTTS):
                 token=hf_token
             ).to(torch.device(self.device))  # use torch.device() like standard.py
             self.backbone.eval()
+            logger.info(f"✅ Turbo GPU (Standard) ready on {self.device}")
 
     def _get_onnx_providers(self, device: str) -> list:
         """Return appropriate ONNX Runtime providers.
@@ -132,8 +135,9 @@ class TurboGPUVieNeuTTS(BaseVieneuTTS):
             )
         
         providers = self._get_onnx_providers(device)
-        logger.info(f"Loading decoder ONNX on providers: {providers}")
+        logger.info(f"⏳ Loading decoder ONNX (providers: {providers}) from: {decoder_repo}...")
         self.decoder_sess = ort.InferenceSession(decoder_path, providers=providers)
+        logger.info("✅ Decoder ONNX ready")
 
     def _load_encoder(self, encoder_repo, encoder_filename, device, hf_token=None):
         import onnxruntime as ort
@@ -146,12 +150,13 @@ class TurboGPUVieNeuTTS(BaseVieneuTTS):
                     repo_id=encoder_repo, filename=encoder_filename, token=hf_token
                 )
             except Exception:
-                logger.warning("Speaker encoder not found for Turbo GPU.")
+                logger.warning("Speaker encoder not found for Turbo.")
                 return
 
         providers = self._get_onnx_providers(device)
-        logger.info(f"Loading encoder ONNX on providers: {providers}")
+        logger.info(f"⏳ Loading speaker encoder ONNX from: {encoder_repo}...")
         self.encoder_sess = ort.InferenceSession(encoder_path, providers=providers)
+        logger.info("✅ Speaker encoder ONNX ready")
 
     def _get_voice_params(self, ref_codes: Any) -> np.ndarray:
         if isinstance(ref_codes, dict):
@@ -227,7 +232,13 @@ class TurboGPUVieNeuTTS(BaseVieneuTTS):
         voice_embedding = self._get_voice_params(voice)
 
         all_wavs = []
+        num_chunks = len(chunks)
+        if num_chunks > 1:
+            logger.info(f"🚀 Starting synthesis ({num_chunks} chunks)...")
+
         for i, chunk in enumerate(chunks):
+            if num_chunks > 1:
+                logger.info(f"  🔊 Chunk {i+1}/{num_chunks}...")
             prompt = self._format_turbo_prompt(chunk.text)
             
             if self.backend == "lmdeploy":
@@ -409,14 +420,14 @@ class TurboVieNeuTTS(BaseVieneuTTS):
             self.device = "cpu"
 
         # Load components
-        self._load_backbone(backbone_repo, backbone_filename, self.device, hf_token)
+        self._load_backbone(backbone_repo, backbone_filename, self.device, hf_token, **kwargs)
         self._load_decoder(decoder_repo, decoder_filename, self.device, hf_token)
         self._load_encoder(encoder_repo, encoder_filename, self.device, hf_token)
         
         # Load voices from the repository/directory (uses voices.json)
         self._load_voices(backbone_repo, hf_token)
 
-    def _load_backbone(self, backbone_repo, backbone_filename, device, hf_token=None):
+    def _load_backbone(self, backbone_repo, backbone_filename, device, hf_token=None, **kwargs):
         try:
             from llama_cpp import Llama
         except ImportError:
@@ -426,6 +437,7 @@ class TurboVieNeuTTS(BaseVieneuTTS):
             model_path = backbone_repo
         else:
             from huggingface_hub import hf_hub_download
+            logger.info(f"⏳ Downloading/Loading Turbo GGUF from: {backbone_repo}...")
             try:
                 model_path = hf_hub_download(
                     repo_id=backbone_repo, filename=backbone_filename, token=hf_token
@@ -437,16 +449,19 @@ class TurboVieNeuTTS(BaseVieneuTTS):
                     raise FileNotFoundError(f"Neither repo '{backbone_repo}' nor '{backbone_filename}' found.")
 
         # 'cuda' -> offload all layers to GPU; 'cpu' -> CPU only
-        # On macOS, llama-cpp uses Metal automatically when n_gpu_layers != 0
         use_gpu = device == "cuda"
+        
         self.backbone = Llama(
             model_path=model_path,
             n_ctx=self.max_context,
-            n_gpu_layers=-1 if use_gpu else 0,
+            n_gpu_layers=-1,
             mlock=True,
             flash_attn=use_gpu,
             verbose=False,
+            **kwargs # Allow user to pass n_threads, n_batch manually if needed
         )
+                
+        logger.info(f"✅ Turbo GGUF ready (GpuLayers: {'Metal' if sys.platform == 'darwin' else ('All' if use_gpu else 'None')})")
 
     def _get_onnx_providers(self, device: str) -> list:
         """Return appropriate ONNX Runtime providers.
@@ -593,13 +608,19 @@ class TurboVieNeuTTS(BaseVieneuTTS):
         voice_embedding = self._get_voice_params(voice)
 
         all_wavs = []
+        num_chunks = len(chunks)
+        if num_chunks > 1:
+            logger.info(f"🚀 Starting synthesis ({num_chunks} chunks)...")
+
         for i, chunk in enumerate(chunks):
+            if num_chunks > 1:
+                logger.info(f"  🔊 Chunk {i+1}/{num_chunks}...")
             prompt = self._format_turbo_prompt(chunk.text)
 
             self.backbone.reset()
             result = self.backbone(
                 prompt,
-                max_tokens=2048,
+                max_tokens=kwargs.get("max_tokens", 1024),
                 temperature=temperature,
                 top_k=top_k,
                 top_p=0.95,
