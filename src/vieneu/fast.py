@@ -32,6 +32,7 @@ class FastVieNeuTTS(BaseVieneuTTS):
         hf_token: Optional[str] = None,
     ):
         super().__init__()
+        self.device = backbone_device
 
         if backbone_device != "cuda" and not backbone_device.startswith("cuda:"):
             raise ValueError("LMDeploy backend requires CUDA device")

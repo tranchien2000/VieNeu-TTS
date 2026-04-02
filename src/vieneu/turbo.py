@@ -196,7 +196,8 @@ class TurboGPUVieNeuTTS(BaseVieneuTTS):
         - Calls .cpu() on output_tokens before decoding (required for MPS)
         """
         import torch
-        inputs = self.tokenizer(prompt, return_tensors="pt").to(self.device)
+        inputs = self.tokenizer(prompt, return_tensors="pt")
+        inputs = {k: v.to(self.device) for k, v in inputs.items()}
         with torch.no_grad():
             output_tokens = self.backbone.generate(
                 **inputs,
@@ -209,7 +210,7 @@ class TurboGPUVieNeuTTS(BaseVieneuTTS):
                 pad_token_id=self.tokenizer.eos_token_id,
             )
         # .cpu() mirrors standard.py line pattern: handles MPS tensors correctly
-        new_tokens = output_tokens[0, inputs.input_ids.shape[-1]:].cpu()
+        new_tokens = output_tokens[0, inputs['input_ids'].shape[-1]:].cpu()
         return self.tokenizer.decode(new_tokens, skip_special_tokens=True)
 
     def infer(self, text: str, voice: Optional[Any] = None, ref_codes: Optional[Any] = None, temperature: float = 0.4, top_k: int = 50, max_chars: int = 256, skip_normalize: bool = False, skip_phonemize: bool = False, **kwargs) -> np.ndarray:
