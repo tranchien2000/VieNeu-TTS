@@ -322,7 +322,7 @@ class TurboVieNeuTTS(BaseTurboVieNeuTTS):
             pbar.set_description(f"  🔊 Chunk {i+1}/{len(chunks)}")
             self.backbone.reset()
             result = self.backbone(
-                self._format_turbo_prompt(chunk.text), max_tokens=kwargs.get("max_tokens", 1024),
+                self._format_turbo_prompt(chunk.text), max_tokens=kwargs.get("max_tokens", 2048),
                 temperature=temperature, top_k=top_k, top_p=0.95, min_p=0.05,
                 stop=["<|SPEECH_GENERATION_END|>"], repeat_penalty=1.15, echo=False,
             )
