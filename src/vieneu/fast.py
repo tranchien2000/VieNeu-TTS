@@ -25,7 +25,7 @@ class FastVieNeuTTS(BaseVieneuTTS):
         codec_device: str = "cuda",
         memory_util: float = 0.3,
         tp: int = 1,
-        enable_prefix_caching: bool = True,
+        enable_prefix_caching: bool = False,
         quant_policy: int = 0,
         enable_triton: bool = True,
         max_batch_size: int = 4,
@@ -250,5 +250,5 @@ class FastVieNeuTTS(BaseVieneuTTS):
             'max_batch_size': self.max_batch_size,
             'cached_references': len(self._ref_cache),
             'active_sessions': len(self.stored_dict),
-            'prefix_caching': True,
+            'prefix_caching': False,
         }
