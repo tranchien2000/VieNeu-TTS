@@ -59,6 +59,13 @@ filtered_backbones["VieNeu-TTS-v2-Turbo (CPU)"] = {
     "description": "🚀 Turbo v2: Siêu nhanh, tối ưu tuyệt đối cho CPU & Thiết bị yếu"
 }
 
+filtered_backbones["VieNeu-TTS-0.3B (CPU)"] = {
+    "repo": "pnnbao-ump/VieNeu-TTS-0.3B",
+    "gguf_filename": "VieNeu-TTS-0.3B-Q4_K_M.gguf",
+    "supports_streaming": True,
+    "description": "⚡ 0.3B GGUF: Nhẹ, chạy tốt trên CPU"
+}
+
 BACKBONE_CONFIGS = filtered_backbones
 
 filtered_codecs = {
@@ -523,7 +530,8 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
                     backbone_device=backbone_device,
                     codec_repo=codec_config["repo"],
                     codec_device=codec_device,
-                    hf_token=custom_hf_token
+                    hf_token=custom_hf_token,
+                    gguf_filename=backbone_config.get("gguf_filename")
                 )
 
             # Perform LoRA Merge if needed (ONLY for Standard Backend)

@@ -26,6 +26,7 @@ class VieNeuTTS(BaseVieneuTTS):
         codec_repo: str = "neuphonic/distill-neucodec",
         codec_device: str = "cpu",
         hf_token: Optional[str] = None,
+        gguf_filename: Optional[str] = None,
     ):
         super().__init__()
 
@@ -46,7 +47,7 @@ class VieNeuTTS(BaseVieneuTTS):
         self.use_chat_format = backbone_repo.rstrip("/").endswith("pnnbao-ump/VieNeu-TTS")
 
         if backbone_repo:
-            self._load_backbone(backbone_repo, backbone_device, hf_token)
+            self._load_backbone(backbone_repo, backbone_device, hf_token, gguf_filename)
         self._load_codec(codec_repo, codec_device)
         self._load_voices(backbone_repo, hf_token)
         self._warmup_model()
@@ -83,11 +84,12 @@ class VieNeuTTS(BaseVieneuTTS):
         except Exception as e:
             logger.error(f"Error during VieNeuTTS closure: {e}")
 
-    def _load_backbone(self, backbone_repo: str, backbone_device: str, hf_token: Optional[str] = None) -> None:
+    def _load_backbone(self, backbone_repo: str, backbone_device: str, hf_token: Optional[str] = None, gguf_filename: Optional[str] = None) -> None:
         backbone_device = normalize_device(backbone_device)
         logger.info(f"Loading backbone from: {backbone_repo} on {backbone_device} ...")
 
-        if backbone_repo.lower().endswith("gguf") or "gguf" in backbone_repo.lower():
+        is_gguf = gguf_filename or backbone_repo.lower().endswith("gguf") or "gguf" in backbone_repo.lower()
+        if is_gguf:
             try:
                 from llama_cpp import Llama
             except ImportError as e:
@@ -96,7 +98,7 @@ class VieNeuTTS(BaseVieneuTTS):
                 ) from e
             self.backbone = Llama.from_pretrained(
                 repo_id=backbone_repo,
-                filename="*.gguf",
+                filename=gguf_filename or "*.gguf",
                 verbose=False,
                 n_gpu_layers=-1 if backbone_device in ("gpu", "cuda") else 0,
                 n_ctx=self.max_context,
