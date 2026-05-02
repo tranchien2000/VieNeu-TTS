@@ -375,12 +375,18 @@ class BaseVieneuTTS(ABC):
         ref_text: str,
         input_text: str,
         ref_phonemes: Optional[str] = None,
-        input_phonemes: Optional[str] = None
+        input_phonemes: Optional[str] = None,
+        use_chat_format: bool = False
     ) -> str:
         """
         Format the prompt for the TTS model.
         Common implementation for LMDeploy (Fast) and Remote backends.
         Standard backend uses a specialized chat template via tokenizer.
+
+        Args:
+            use_chat_format: If True, wraps the prompt with chat-style user/assistant
+                             tokens (used by VieNeu-TTS GPU model). If False (default),
+                             returns a compact prompt without those wrappers.
         """
         ref_codes_list = self.to_list(ref_codes)
 
@@ -392,9 +398,14 @@ class BaseVieneuTTS(ABC):
         input_text_phones = input_phonemes if input_phonemes else phonemize_with_dict(input_text, skip_normalize=True)
         codes_str = "".join([f"<|speech_{idx}|>" for idx in ref_codes_list])
 
+        if use_chat_format:
+            return (
+                f"user: Convert the text to speech:<|TEXT_PROMPT_START|>{ref_text_phones} {input_text_phones}"
+                f"<|TEXT_PROMPT_END|>\nassistant:<|SPEECH_GENERATION_START|>{codes_str}"
+            )
         return (
-            f"user: Convert the text to speech:<|TEXT_PROMPT_START|>{ref_text_phones} {input_text_phones}"
-            f"<|TEXT_PROMPT_END|>\nassistant:<|SPEECH_GENERATION_START|>{codes_str}"
+            f"<|TEXT_PROMPT_START|>{ref_text_phones} {input_text_phones}"
+            f"<|TEXT_PROMPT_END|><|SPEECH_GENERATION_START|>{codes_str}"
         )
 
     @abstractmethod

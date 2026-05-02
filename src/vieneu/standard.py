@@ -42,6 +42,9 @@ class VieNeuTTS(BaseVieneuTTS):
         self.backbone = None
         self.codec = None
 
+        # Only pnnbao-ump/VieNeu-TTS uses the full chat-format prompt
+        self.use_chat_format = backbone_repo.rstrip("/").endswith("pnnbao-ump/VieNeu-TTS")
+
         if backbone_repo:
             self._load_backbone(backbone_repo, backbone_device, hf_token)
         self._load_codec(codec_repo, codec_device)
@@ -295,23 +298,29 @@ class VieNeuTTS(BaseVieneuTTS):
         ref_codes_list = self.to_list(ref_codes)
         full_phonemes = f"{ref_phonemes} {chunk_phonemes}"
 
-        speech_replace = self.tokenizer.convert_tokens_to_ids("<|SPEECH_REPLACE|>")
         speech_gen_start = self.tokenizer.convert_tokens_to_ids("<|SPEECH_GENERATION_START|>")
-        text_replace = self.tokenizer.convert_tokens_to_ids("<|TEXT_REPLACE|>")
         text_prompt_start = self.tokenizer.convert_tokens_to_ids("<|TEXT_PROMPT_START|>")
         text_prompt_end = self.tokenizer.convert_tokens_to_ids("<|TEXT_PROMPT_END|>")
 
         input_ids = self.tokenizer.encode(full_phonemes, add_special_tokens=False)
-        chat = "user: Convert the text to speech:<|TEXT_REPLACE|>\nassistant:<|SPEECH_REPLACE|>"
-        ids = self.tokenizer.encode(chat)
-
-        text_replace_idx = ids.index(text_replace)
-        ids = ids[:text_replace_idx] + [text_prompt_start] + input_ids + [text_prompt_end] + ids[text_replace_idx + 1:]
-
-        speech_replace_idx = ids.index(speech_replace)
         codes_str = "".join([f"<|speech_{i}|>" for i in ref_codes_list])
         codes = self.tokenizer.encode(codes_str, add_special_tokens=False)
-        ids = ids[:speech_replace_idx] + [speech_gen_start] + list(codes)
+
+        if self.use_chat_format:
+            speech_replace = self.tokenizer.convert_tokens_to_ids("<|SPEECH_REPLACE|>")
+            text_replace = self.tokenizer.convert_tokens_to_ids("<|TEXT_REPLACE|>")
+
+            chat = "user: Convert the text to speech:<|TEXT_REPLACE|>\nassistant:<|SPEECH_REPLACE|>"
+            ids = self.tokenizer.encode(chat)
+
+            text_replace_idx = ids.index(text_replace)
+            ids = ids[:text_replace_idx] + [text_prompt_start] + input_ids + [text_prompt_end] + ids[text_replace_idx + 1:]
+
+            speech_replace_idx = ids.index(speech_replace)
+            ids = ids[:speech_replace_idx] + [speech_gen_start] + list(codes)
+        else:
+            ids = [text_prompt_start] + input_ids + [text_prompt_end, speech_gen_start] + list(codes)
+
         return ids
 
     def _infer_torch(self, prompt_ids: List[int], temperature: float = 1.0, top_k: int = 50) -> str:
@@ -335,10 +344,16 @@ class VieNeuTTS(BaseVieneuTTS):
     def _infer_ggml(self, ref_codes: Any, ref_phonemes: str, chunk_phonemes: str, temperature: float = 1.0, top_k: int = 50) -> str:
         ref_codes_list = self.to_list(ref_codes)
         codes_str = "".join([f"<|speech_{idx}|>" for idx in ref_codes_list])
-        prompt = (
-            f"user: Convert the text to speech:<|TEXT_PROMPT_START|>{ref_phonemes} {chunk_phonemes}"
-            f"<|TEXT_PROMPT_END|>\nassistant:<|SPEECH_GENERATION_START|>{codes_str}"
-        )
+        if self.use_chat_format:
+            prompt = (
+                f"user: Convert the text to speech:<|TEXT_PROMPT_START|>{ref_phonemes} {chunk_phonemes}"
+                f"<|TEXT_PROMPT_END|>\nassistant:<|SPEECH_GENERATION_START|>{codes_str}"
+            )
+        else:
+            prompt = (
+                f"<|TEXT_PROMPT_START|>{ref_phonemes} {chunk_phonemes}"
+                f"<|TEXT_PROMPT_END|><|SPEECH_GENERATION_START|>{codes_str}"
+            )
         output = self.backbone(prompt, max_tokens=self.max_context, temperature=temperature, top_k=top_k, stop=["<|SPEECH_GENERATION_END|>"])
         return output["choices"][0]["text"]
 
@@ -346,10 +361,16 @@ class VieNeuTTS(BaseVieneuTTS):
 
         ref_codes_list = self.to_list(ref_codes)
         codes_str = "".join([f"<|speech_{idx}|>" for idx in ref_codes_list])
-        prompt = (
-            f"user: Convert the text to speech:<|TEXT_PROMPT_START|>{ref_phonemes} {chunk_phonemes}"
-            f"<|TEXT_PROMPT_END|>\nassistant:<|SPEECH_GENERATION_START|>{codes_str}"
-        )
+        if self.use_chat_format:
+            prompt = (
+                f"user: Convert the text to speech:<|TEXT_PROMPT_START|>{ref_phonemes} {chunk_phonemes}"
+                f"<|TEXT_PROMPT_END|>\nassistant:<|SPEECH_GENERATION_START|>{codes_str}"
+            )
+        else:
+            prompt = (
+                f"<|TEXT_PROMPT_START|>{ref_phonemes} {chunk_phonemes}"
+                f"<|TEXT_PROMPT_END|><|SPEECH_GENERATION_START|>{codes_str}"
+            )
 
         audio_cache: List[np.ndarray] = []
         token_cache: List[str] = [f"<|speech_{idx}|>" for idx in ref_codes_list]

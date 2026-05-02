@@ -51,6 +51,8 @@ class FastVieNeuTTS(BaseVieneuTTS):
         self._is_onnx_codec = False
         self._triton_enabled = False
 
+        self.use_chat_format = backbone_repo.rstrip("/").endswith("pnnbao-ump/VieNeu-TTS")
+
         self._load_backbone_lmdeploy(backbone_repo, memory_util, tp, enable_prefix_caching, quant_policy, hf_token)
         self._load_codec(codec_repo, codec_device, enable_triton)
         self._load_voices(backbone_repo, hf_token)
@@ -96,7 +98,7 @@ class FastVieNeuTTS(BaseVieneuTTS):
         logger.info("🔥 Warming up model...")
         try:
             dummy_codes = list(range(10))
-            dummy_prompt = self._format_prompt(dummy_codes, "warmup", "test")
+            dummy_prompt = self._format_prompt(dummy_codes, "warmup", "test", use_chat_format=self.use_chat_format)
             _ = self.backbone([dummy_prompt], gen_config=self.gen_config, do_preprocess=False)
             logger.info("   ✅ Warmup complete")
         except Exception as e:
@@ -137,7 +139,7 @@ class FastVieNeuTTS(BaseVieneuTTS):
             return np.array([], dtype=np.float32)
 
         if len(chunks) == 1:
-            prompt = self._format_prompt(ref_codes, ref_text, chunks[0])
+            prompt = self._format_prompt(ref_codes, ref_text, chunks[0], use_chat_format=self.use_chat_format)
             responses = self.backbone([prompt], gen_config=self.gen_config, do_preprocess=False)
             wav = self._decode(responses[0].text)
             if apply_watermark:
@@ -170,7 +172,7 @@ class FastVieNeuTTS(BaseVieneuTTS):
         for i in range(0, len(texts), max_batch_size):
             batch_texts = texts[i : i + max_batch_size]
             batch_phonemes = chunk_phonemes[i : i + max_batch_size]
-            prompts = [self._format_prompt(ref_codes, ref_text, text, ref_phonemes=ref_phonemes, input_phonemes=ph)
+            prompts = [self._format_prompt(ref_codes, ref_text, text, ref_phonemes=ref_phonemes, input_phonemes=ph, use_chat_format=self.use_chat_format)
                       for text, ph in zip(batch_texts, batch_phonemes)]
             responses = self.backbone(prompts, gen_config=self.gen_config, do_preprocess=False)
             batch_codes = [response.text for response in responses]
@@ -196,7 +198,7 @@ class FastVieNeuTTS(BaseVieneuTTS):
 
     def _infer_stream_single(self, text: str, ref_codes: Any, ref_text: str) -> Generator[np.ndarray, None, None]:
         ref_codes_list = self.to_list(ref_codes)
-        prompt = self._format_prompt(ref_codes_list, ref_text, text)
+        prompt = self._format_prompt(ref_codes_list, ref_text, text, use_chat_format=self.use_chat_format)
         audio_cache = []
         token_cache = [f"<|speech_{idx}|>" for idx in ref_codes_list]
         n_decoded_samples = 0
