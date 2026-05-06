@@ -1717,15 +1717,15 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                             
                             if _i == 0:
                                 _default_name = "Phương"
-                                _default_voice = "Trúc Ly (nữ miền Bắc)"
+                                _default_voice = "Ly"
                                 _row_visible = True
                             elif _i == 1:
                                 _default_name = "Dũng"
-                                _default_voice = "Thanh Bình (nam miền Bắc)"
+                                _default_voice = "Binh"
                                 _row_visible = True
                             elif _i == 2:
                                 _default_name = "Hùng"
-                                _default_voice = "Thái Sơn (nam miền Nam)"
+                                _default_voice = "Sơn"
                                 _row_visible = True
                             elif _i < 2:
                                 _default_name = f"Nhân vật {_i+1}"
