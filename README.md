@@ -179,26 +179,33 @@ Deploy VieNeu-TTS as a high-performance API Server (powered by LMDeploy) with a 
 
 **Start the Server with a Public Tunnel (No port forwarding needed):**
 ```bash
-docker run --gpus all -p 23333:23333 pnnbao/vieneu-tts:serve --tunnel
+docker run --gpus all -p 23333:23333 -v huggingface_cache:/root/.cache/huggingface pnnbao/vieneu-tts:latest --tunnel
 ```
 
-*   **Default**: The server loads the `VieNeu-TTS` model for maximum quality.
+*   **Default**: The server loads the `VieNeu-TTS-v2` model for maximum quality.
 *   **Tunneling**: The Docker image includes a built-in `bore` tunnel. Check the container logs to find your public address (e.g., `bore.pub:31631`).
 
 ### 2. Using the SDK (Remote Mode)
 
-Once the server is running, you can connect from anywhere (Colab, Web Apps, etc.) without loading heavy models locally:
+Once the server is running, you can connect from anywhere (Colab, Web Apps, etc.) without loading heavy models locally.
 
+**Installation**:
+```bash
+pip install "vieneu[gpu]"
+```
+
+**Usage**:
 ```python
 from vieneu import Vieneu
 import os
 
 # Configuration
 REMOTE_API_BASE = 'http://your-server-ip:23333/v1'  # Or bore tunnel URL
-REMOTE_MODEL_ID = "pnnbao-ump/VieNeu-TTS"
+REMOTE_MODEL_ID = "pnnbao-ump/VieNeu-TTS-v2"
 
 # Initialization (LIGHTWEIGHT - only loads small codec locally)
-tts = Vieneu(mode='remote', api_base=REMOTE_API_BASE, model_name=REMOTE_MODEL_ID)
+# Default emotion is "natural" (conversational) - set emotion="storytelling" for storytelling mode
+tts = Vieneu(mode='remote', api_base=REMOTE_API_BASE, model_name=REMOTE_MODEL_ID, emotion="natural")
 os.makedirs("outputs", exist_ok=True)
 
 # List remote voices
