@@ -2249,7 +2249,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                             # Spell Check
                             audiobook_spell_check_level = gr.Dropdown(
                                 choices=["Tắt", "Nhẹ (Lọc ký tự)", "Trung bình (Sửa typo)", "Mạnh (Full check)"],
-                                value="Tắt",
+                                value=load_setting("audiobook_spell_check_level", "Tắt"),
                                 label="🔍 Kiểm tra chính tả",
                                 info="Lọc và sửa lỗi chính tả tiếng Việt trước khi đọc"
                             )
@@ -2326,7 +2326,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                             with gr.Row():
                                 audiobook_output_mode = gr.Radio(
                                     ["Single file", "Split by chapters"],
-                                    value="Split by chapters",
+                                    value=load_setting("audiobook_output_mode", "Single file"),
                                     label="Output format"
                                 )
                                 audiobook_voice = gr.Dropdown(

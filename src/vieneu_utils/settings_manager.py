@@ -121,7 +121,7 @@ class SettingsManager:
 
             # ========== Processing Settings ==========
             "spell_check_level": "Tắt",
-            "generation_mode": "Sequential (Từng đoạn)",
+            "generation_mode": "Standard (Một lần)",
             "use_batch": False,
             "max_batch_size": 16,
 
@@ -135,10 +135,10 @@ class SettingsManager:
             "conversation_auto_detect": True,  # Tự động quét nhân vật
 
             # ========== Audiobook Settings ==========
-            "audiobook_split_mode": "Tự động phát hiện chương",
-            "audiobook_output_mode": "Single file",
+            "audiobook_split_mode": "Auto detect",  # Match UI values
+            "audiobook_output_mode": "Single file",  # Match UI values
             "audiobook_spell_check_level": "Tắt",
-            "audiobook_words_per_chunk": 100,
+            "audiobook_words_per_chunk": 1000,  # Match UI default
             "audiobook_default_voice": "Ly",  # Giọng đọc mặc định
             "audiobook_output_directory": "audiobook_output",  # Thư mục output
             "audiobook_chapter_keywords": "Chương,Chapter,Chap,CHƯƠNG,CHAPTER",  # Keywords detect chapter
