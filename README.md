@@ -77,6 +77,12 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
    ```
    Access the UI at `http://127.0.0.1:7860`.
 
+   > 💡 **Tip:** For faster startup, use persistent server mode (models load once):
+   > - Windows: `run_server_persistent.bat`
+   > - Linux/Mac: `./run_server_persistent.sh`
+   > 
+   > See [QUICKSTART.md](QUICKSTART.md) for more options.
+
 ---
 
 ## 📦 2. Using the Python SDK (vieneu) <a name="sdk"></a>

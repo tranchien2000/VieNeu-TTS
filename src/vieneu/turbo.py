@@ -174,19 +174,19 @@ class TurboGPUVieNeuTTS(BaseTurboVieNeuTTS):
             self.backbone.eval()
             logger.info(f"✅ Turbo GPU (Standard) ready")
 
-    def _run_standard_generate(self, prompt: str, temperature: float, top_k: int) -> str:
+    def _run_standard_generate(self, prompt: str, temperature: float, top_k: int, top_p: float = 0.95, repetition_penalty: float = 1.1) -> str:
         import torch
         inputs = self.tokenizer(prompt, return_tensors="pt")
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
         with torch.no_grad():
             output_tokens = self.backbone.generate(
                 **inputs, max_new_tokens=2048, temperature=temperature, top_k=top_k,
-                do_sample=True, repetition_penalty=1.1, top_p=0.95, pad_token_id=self.tokenizer.eos_token_id,
+                do_sample=True, repetition_penalty=repetition_penalty, top_p=top_p, pad_token_id=self.tokenizer.eos_token_id,
             )
         new_tokens = output_tokens[0, inputs['input_ids'].shape[-1]:].cpu()
         return self.tokenizer.decode(new_tokens, skip_special_tokens=True)
 
-    def infer(self, text: str, voice: Optional[Any] = None, ref_codes: Optional[Any] = None, temperature: float = 0.4, top_k: int = 50, max_chars: int = 256, skip_normalize: bool = False, skip_phonemize: bool = False, show_progress: bool = True, apply_watermark: bool = True, **kwargs) -> np.ndarray:
+    def infer(self, text: str, voice: Optional[Any] = None, ref_codes: Optional[Any] = None, temperature: float = 0.4, top_k: int = 50, top_p: float = 1.0, repetition_penalty: float = 1.0, max_chars: int = 256, skip_normalize: bool = False, skip_phonemize: bool = False, show_progress: bool = True, apply_watermark: bool = True, **kwargs) -> np.ndarray:
         phonemes = phonemize_text(text) if not skip_phonemize else text
         chunks = split_into_chunks_v2(phonemes, max_chunk_size=max_chars)
 
@@ -204,7 +204,7 @@ class TurboGPUVieNeuTTS(BaseTurboVieNeuTTS):
                 responses = self.backbone([prompt], gen_config=self.gen_config, do_preprocess=False)
                 generated_text = responses[0].text
             else:
-                generated_text = self._run_standard_generate(prompt, temperature, top_k)
+                generated_text = self._run_standard_generate(prompt, temperature, top_k, top_p, repetition_penalty)
             
             wav = self._decode(generated_text, voice_embedding)
             all_wavs.append(wav)
@@ -255,7 +255,7 @@ class TurboGPUVieNeuTTS(BaseTurboVieNeuTTS):
                 responses = self.backbone([prompt], gen_config=self.gen_config, do_preprocess=False)
                 generated_text = responses[0].text
             else:
-                generated_text = self._run_standard_generate(prompt, temperature, top_k)
+                generated_text = self._run_standard_generate(prompt, temperature, top_k, top_p, repetition_penalty)
             
             yield self._apply_watermark(self._decode(generated_text, voice_embedding))
             if i < len(chunks) - 1:
@@ -308,7 +308,7 @@ class TurboVieNeuTTS(BaseTurboVieNeuTTS):
         )
         logger.info(f"✅ Turbo GGUF ready")
 
-    def infer(self, text: str, voice: Optional[Any] = None, ref_codes: Optional[Any] = None, temperature: float = 0.4, top_k: int = 50, max_chars: int = 256, skip_normalize: bool = False, skip_phonemize: bool = False, show_progress: bool = True, apply_watermark: bool = True, **kwargs) -> np.ndarray:
+    def infer(self, text: str, voice: Optional[Any] = None, ref_codes: Optional[Any] = None, temperature: float = 0.4, top_k: int = 50, top_p: float = 1.0, repetition_penalty: float = 1.0, max_chars: int = 256, skip_normalize: bool = False, skip_phonemize: bool = False, show_progress: bool = True, apply_watermark: bool = True, **kwargs) -> np.ndarray:
         phonemes = phonemize_text(text) if not skip_phonemize else text
         chunks = split_into_chunks_v2(phonemes, max_chunk_size=max_chars)
 

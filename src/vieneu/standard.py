@@ -193,7 +193,7 @@ class VieNeuTTS(BaseVieneuTTS):
             logger.error(f"   ⚠️ Error during unload: {e}")
             return False
 
-    def infer(self, text: str, ref_audio: Optional[Union[str, Path]] = None, ref_codes=None, ref_text: Optional[str] = None, max_chars: int = 256, silence_p: float = 0.15, crossfade_p: float = 0.0, voice: Optional[Dict[str, Any]] = None, temperature: float = 1.0, top_k: int = 50, skip_normalize: bool = False, apply_watermark: bool = True, **kwargs) -> np.ndarray:
+    def infer(self, text: str, ref_audio: Optional[Union[str, Path]] = None, ref_codes=None, ref_text: Optional[str] = None, max_chars: int = 256, silence_p: float = 0.15, crossfade_p: float = 0.0, voice: Optional[Dict[str, Any]] = None, temperature: float = 1.0, top_k: int = 50, top_p: float = 1.0, repetition_penalty: float = 1.0, skip_normalize: bool = False, apply_watermark: bool = True, **kwargs) -> np.ndarray:
 
         ref_codes, ref_text = self._resolve_ref_voice(voice, ref_audio, ref_codes, ref_text)
 
@@ -208,10 +208,10 @@ class VieNeuTTS(BaseVieneuTTS):
             ref_phonemes = self.get_ref_phonemes(ref_text)
             phonemes = phonemize_with_dict(chunks[0], skip_normalize=True)
             if self._is_quantized_model:
-                output_str = self._infer_ggml(ref_codes, ref_phonemes, phonemes, temperature, top_k, emotion_tag=kwargs.get('emotion_tag', self.default_emotion))
+                output_str = self._infer_ggml(ref_codes, ref_phonemes, phonemes, temperature, top_k, top_p, repetition_penalty, emotion_tag=kwargs.get('emotion_tag', self.default_emotion))
             else:
                 prompt_ids = self._apply_chat_template(ref_codes, ref_phonemes, phonemes, emotion_tag=kwargs.get('emotion_tag', self.default_emotion))
-                output_str = self._infer_torch(prompt_ids, temperature, top_k)
+                output_str = self._infer_torch(prompt_ids, temperature, top_k, top_p, repetition_penalty)
             wav = self._decode(output_str)
             if apply_watermark:
                 wav = self._apply_watermark(wav)
@@ -223,6 +223,8 @@ class VieNeuTTS(BaseVieneuTTS):
             ref_text=ref_text,
             temperature=temperature,
             top_k=top_k,
+            top_p=top_p,
+            repetition_penalty=repetition_penalty,
             skip_normalize=True,
             apply_watermark=False,
             **kwargs
@@ -232,7 +234,7 @@ class VieNeuTTS(BaseVieneuTTS):
             final_wav = self._apply_watermark(final_wav)
         return final_wav
 
-    def infer_batch(self, texts: List[str], ref_audio: Optional[Union[str, Path]] = None, ref_codes=None, ref_text: Optional[str] = None, voice: Optional[Dict[str, Any]] = None, temperature: float = 1.0, top_k: int = 50, skip_normalize: bool = False, apply_watermark: bool = True, **kwargs) -> List[np.ndarray]:
+    def infer_batch(self, texts: List[str], ref_audio: Optional[Union[str, Path]] = None, ref_codes=None, ref_text: Optional[str] = None, voice: Optional[Dict[str, Any]] = None, temperature: float = 1.0, top_k: int = 50, top_p: float = 1.0, repetition_penalty: float = 1.0, skip_normalize: bool = False, apply_watermark: bool = True, **kwargs) -> List[np.ndarray]:
         ref_codes, ref_text = self._resolve_ref_voice(voice, ref_audio, ref_codes, ref_text)
 
         if not skip_normalize:
@@ -245,7 +247,7 @@ class VieNeuTTS(BaseVieneuTTS):
         # If model is GGUF, we still process sequentially for now as llama-cpp-python batching for TTS is complex
         if self._is_quantized_model:
             for phonemes in chunk_phonemes:
-                output_str = self._infer_ggml(ref_codes, ref_phonemes, phonemes, temperature, top_k, emotion_tag=kwargs.get('emotion_tag', self.default_emotion))
+                output_str = self._infer_ggml(ref_codes, ref_phonemes, phonemes, temperature, top_k, top_p, repetition_penalty, emotion_tag=kwargs.get('emotion_tag', self.default_emotion))
                 wav = self._decode(output_str)
                 if apply_watermark:
                     wav = self._apply_watermark(wav)
@@ -275,6 +277,8 @@ class VieNeuTTS(BaseVieneuTTS):
                     do_sample=True,
                     temperature=temperature,
                     top_k=top_k,
+                    top_p=top_p,
+                    repetition_penalty=repetition_penalty,
                     use_cache=True,
                     min_new_tokens=50,
                 )
@@ -343,7 +347,7 @@ class VieNeuTTS(BaseVieneuTTS):
 
         return ids
 
-    def _infer_torch(self, prompt_ids: List[int], temperature: float = 1.0, top_k: int = 50) -> str:
+    def _infer_torch(self, prompt_ids: List[int], temperature: float = 1.0, top_k: int = 50, top_p: float = 1.0, repetition_penalty: float = 1.0) -> str:
         import torch
         prompt_tensor = torch.tensor(prompt_ids).unsqueeze(0).to(self.backbone.device)
         speech_end_id = self.tokenizer.convert_tokens_to_ids("<|SPEECH_GENERATION_END|>")
@@ -355,6 +359,8 @@ class VieNeuTTS(BaseVieneuTTS):
                 do_sample=True,
                 temperature=temperature,
                 top_k=top_k,
+                top_p=top_p,
+                repetition_penalty=repetition_penalty,
                 use_cache=True,
                 min_new_tokens=50,
             )
@@ -362,7 +368,7 @@ class VieNeuTTS(BaseVieneuTTS):
         output_str = self.tokenizer.decode(output_tokens[0, input_length:].cpu().numpy().tolist(), add_special_tokens=False)
         return output_str
 
-    def _infer_ggml(self, ref_codes: Any, ref_phonemes: str, chunk_phonemes: str, temperature: float = 1.0, top_k: int = 50, emotion_tag: Optional[str] = None) -> str:
+    def _infer_ggml(self, ref_codes: Any, ref_phonemes: str, chunk_phonemes: str, temperature: float = 1.0, top_k: int = 50, top_p: float = 1.0, repetition_penalty: float = 1.0, emotion_tag: Optional[str] = None) -> str:
         ref_codes_list = self.to_list(ref_codes)
         codes_str = "".join([f"<|speech_{idx}|>" for idx in ref_codes_list])
         emotion_prefix = emotion_tag if emotion_tag else ""
@@ -376,7 +382,7 @@ class VieNeuTTS(BaseVieneuTTS):
                 f"<|TEXT_PROMPT_START|>{emotion_prefix}{ref_phonemes} {chunk_phonemes}"
                 f"<|TEXT_PROMPT_END|><|SPEECH_GENERATION_START|>{codes_str}"
             )
-        output = self.backbone(prompt, max_tokens=self.max_context, temperature=temperature, top_k=top_k, stop=["<|SPEECH_GENERATION_END|>"])
+        output = self.backbone(prompt, max_tokens=self.max_context, temperature=temperature, top_k=top_k, top_p=top_p, repeat_penalty=repetition_penalty, stop=["<|SPEECH_GENERATION_END|>"])
         return output["choices"][0]["text"]
 
     def _infer_stream_ggml(self, ref_codes: Any, ref_phonemes: str, chunk_phonemes: str, temperature: float = 1.0, top_k: int = 50, emotion_tag: Optional[str] = None) -> Generator[np.ndarray, None, None]:
