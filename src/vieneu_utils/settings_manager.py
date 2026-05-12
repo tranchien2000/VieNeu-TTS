@@ -113,29 +113,59 @@ class SettingsManager:
     def _default_settings(self) -> Dict[str, Any]:
         """Return default settings (without metadata)."""
         return {
-            # Generation parameters
+            # ========== Generation Parameters ==========
             "temperature": 0.7,
             "max_chars_chunk": 256,
             "top_p": 1.0,
             "repetition_penalty": 1.0,
 
-            # Processing settings
+            # ========== Processing Settings ==========
             "spell_check_level": "Tắt",
             "generation_mode": "Sequential (Từng đoạn)",
             "use_batch": False,
             "max_batch_size": 16,
 
-            # Voice settings
+            # ========== Voice Settings ==========
             "last_voice_id": None,
             "last_voice_name": None,
 
-            # Audiobook settings
+            # ========== Conversation Settings ==========
+            "conversation_silence_duration": 0.1,  # Khoảng lặng giữa câu thoại (giây)
+            "conversation_speaker_mappings": {},  # Mapping nhân vật → giọng đọc
+            "conversation_auto_detect": True,  # Tự động quét nhân vật
+
+            # ========== Audiobook Settings ==========
             "audiobook_split_mode": "Tự động phát hiện chương",
             "audiobook_output_mode": "Single file",
             "audiobook_spell_check_level": "Tắt",
             "audiobook_words_per_chunk": 100,
+            "audiobook_default_voice": "Ly",  # Giọng đọc mặc định
+            "audiobook_output_directory": "audiobook_output",  # Thư mục output
+            "audiobook_chapter_keywords": "Chương,Chapter,Chap,CHƯƠNG,CHAPTER",  # Keywords detect chapter
+            "audiobook_auto_export_text": False,  # Tự động export text
 
-            # Model settings (read-only, for display)
+            # ========== UI/UX Settings ==========
+            "ui_theme": "default",  # Theme giao diện (default/dark/light)
+            "ui_default_tab": "preset",  # Tab mở mặc định
+            "ui_auto_play": True,  # Tự động play audio
+            "ui_show_advanced_settings": False,  # Hiển thị advanced settings
+
+            # ========== Performance Settings ==========
+            "cache_enabled": True,  # Bật/tắt cache
+            "cache_ttl_minutes": 60,  # Thời gian cache (phút)
+            "auto_cleanup_temp_files": True,  # Tự động xóa temp files
+
+            # ========== History/Logging Settings ==========
+            "history_enabled": True,  # Lưu lịch sử generation
+            "history_max_items": 50,  # Số lượng history items tối đa
+            "logging_level": "INFO",  # Mức độ logging (DEBUG/INFO/WARNING/ERROR)
+
+            # ========== Advanced Settings ==========
+            "custom_model_path": None,  # Path đến custom model
+            "gpu_memory_fraction": 0.9,  # Phần trăm VRAM sử dụng
+            "enable_experimental_features": False,  # Bật tính năng thử nghiệm
+
+            # ========== Model Settings (Read-only) ==========
             "last_backbone": None,
             "last_codec": None,
             "last_device": None,

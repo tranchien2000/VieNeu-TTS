@@ -2117,7 +2117,13 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                         
                         with gr.Row():
                             btn_detect_speakers = gr.Button("🔍 Quét nhân vật", size="sm", variant="secondary")
-                            silence_slider = gr.Slider(minimum=0, maximum=3, value=0.1, step=0.1, label="⏱️ Khoảng lặng (giây)")
+                            silence_slider = gr.Slider(
+                                minimum=0,
+                                maximum=3,
+                                value=load_setting("conversation_silence_duration", 0.1),
+                                step=0.1,
+                                label="⏱️ Khoảng lặng (giây)"
+                            )
 
                         gr.Markdown("### 🎭 Cấu hình giọng đọc")
                         gr.Markdown("*Nhấn **Quét nhân vật** để tự động phát hiện và ánh xạ giọng đọc. Tải model trước để có danh sách giọng.*")
@@ -2206,14 +2212,14 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                             # Split Settings
                             audiobook_split_mode = gr.Radio(
                                 ["Auto detect", "By keyword", "By word count"],
-                                value="Auto detect",
+                                value=load_setting("audiobook_split_mode", "Auto detect"),
                                 label="Chế độ phân tách",
                                 info="Auto detect: tự động phát hiện chapters từ cấu trúc text"
                             )
                             with gr.Row(visible=False) as keyword_row:
                                 audiobook_keywords = gr.Textbox(
                                     label="Keywords (phân cách bằng dấu phẩy)",
-                                    value="Chương,Chapter,Chap,CHƯƠNG,CHAPTER",
+                                    value=load_setting("audiobook_chapter_keywords", "Chương,Chapter,Chap,CHƯƠNG,CHAPTER"),
                                     placeholder="Chương,Chapter,Chap",
                                     info="Ví dụ: Chương,Chapter,Chap"
                                 )
@@ -2221,7 +2227,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                                 audiobook_words_per_chunk = gr.Slider(
                                     minimum=100,
                                     maximum=5000,
-                                    value=1000,
+                                    value=load_setting("audiobook_words_per_chunk", 1000),
                                     step=100,
                                     label="Số từ mỗi phần",
                                     info="Chia text thành các phần có số từ xấp xỉ bằng nhau"
@@ -3980,7 +3986,33 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             save_setting("max_batch_size", value)
             return value
 
-        # Attach change handlers
+        # Conversation settings
+        def save_silence_duration(value):
+            save_setting("conversation_silence_duration", value)
+            return value
+
+        # Audiobook settings
+        def save_audiobook_split_mode(value):
+            save_setting("audiobook_split_mode", value)
+            return value
+
+        def save_audiobook_keywords(value):
+            save_setting("audiobook_chapter_keywords", value)
+            return value
+
+        def save_audiobook_words_per_chunk(value):
+            save_setting("audiobook_words_per_chunk", value)
+            return value
+
+        def save_audiobook_spell_check(value):
+            save_setting("audiobook_spell_check_level", value)
+            return value
+
+        def save_audiobook_output_mode(value):
+            save_setting("audiobook_output_mode", value)
+            return value
+
+        # Attach change handlers - Generation
         temperature_slider.change(fn=save_temperature, inputs=[temperature_slider], outputs=[])
         max_chars_chunk_slider.change(fn=save_max_chars, inputs=[max_chars_chunk_slider], outputs=[])
         top_p_slider.change(fn=save_top_p, inputs=[top_p_slider], outputs=[])
@@ -3989,6 +4021,16 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
         generation_mode.change(fn=save_generation_mode, inputs=[generation_mode], outputs=[])
         use_batch.change(fn=save_use_batch, inputs=[use_batch], outputs=[])
         max_batch_size_run.change(fn=save_batch_size, inputs=[max_batch_size_run], outputs=[])
+
+        # Attach change handlers - Conversation
+        silence_slider.change(fn=save_silence_duration, inputs=[silence_slider], outputs=[])
+
+        # Attach change handlers - Audiobook
+        audiobook_split_mode.change(fn=save_audiobook_split_mode, inputs=[audiobook_split_mode], outputs=[])
+        audiobook_keywords.change(fn=save_audiobook_keywords, inputs=[audiobook_keywords], outputs=[])
+        audiobook_words_per_chunk.change(fn=save_audiobook_words_per_chunk, inputs=[audiobook_words_per_chunk], outputs=[])
+        audiobook_spell_check_level.change(fn=save_audiobook_spell_check, inputs=[audiobook_spell_check_level], outputs=[])
+        audiobook_output_mode.change(fn=save_audiobook_output_mode, inputs=[audiobook_output_mode], outputs=[])
 
         # Auto-preview when spell check level changes
         # Auto-preview when spell check level changes
