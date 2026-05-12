@@ -17,9 +17,14 @@ import uuid
 from pathlib import Path
 from vieneu_utils.core_utils import split_text_into_chunks, join_audio_chunks, env_bool, split_into_chunks_v2, get_silence_duration_v2
 from vieneu_utils.phonemize_text import phonemize_with_dict
+from vieneu_utils.settings_manager import get_settings_manager, load_setting, save_setting
 from sea_g2p import Normalizer
 from functools import lru_cache
 import gc
+
+# Initialize settings manager
+settings_mgr = get_settings_manager()
+print(f"✅ Loaded settings from: {settings_mgr.settings_path}")
 
 # --- CONSTANTS & CONFIG ---
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.yaml")
@@ -2084,14 +2089,14 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                         
                         generation_mode = gr.Radio(
                             ["Standard (Một lần)"],
-                            value="Standard (Một lần)",
+                            value=load_setting("generation_mode", "Standard (Một lần)"),
                             label="Chế độ sinh"
                         )
 
                         # Spell checking level
                         spell_check_level = gr.Dropdown(
                             choices=["Tắt", "Nhẹ (Lọc ký tự)", "Trung bình (Sửa typo)", "Mạnh (Full check)"],
-                            value="Tắt",
+                            value=load_setting("spell_check_level", "Tắt"),
                             label="🔍 Kiểm tra chính tả",
                             info="Lọc và sửa lỗi chính tả tiếng Việt trước khi đọc"
                         )
@@ -2359,14 +2364,14 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
 
                     with gr.Row():
                         use_batch = gr.Checkbox(
-                            value=True,
+                            value=load_setting("use_batch", True),
                             label="⚡ Batch Processing",
                             info="Xử lý nhiều đoạn cùng lúc (chỉ áp dụng khi sử dụng GPU và đã cài đặt LMDeploy)"
                         )
                         max_batch_size_run = gr.Slider(
                             minimum=1,
                             maximum=16,
-                            value=16,
+                            value=load_setting("max_batch_size", 16),
                             step=1,
                             label="📊 Batch Size (Generation)",
                             info="Số đoạn xử lý đồng thời. Cao = nhanh hơn nhưng tốn RAM. Khuyến nghị: 4-8"
@@ -2374,22 +2379,22 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
 
                     with gr.Row():
                         temperature_slider = gr.Slider(
-                            minimum=0.1, maximum=1.5, value=default_temp, step=0.1,
+                            minimum=0.1, maximum=1.5, value=load_setting("temperature", default_temp), step=0.1,
                             label="🌡️ Temperature",
                             info="Độ sáng tạo. Cao = đa dạng cảm xúc hơn nhưng dễ lỗi. Thấp = ổn định hơn."
                         )
                         max_chars_chunk_slider = gr.Slider(
-                            minimum=128, maximum=512, value=180, step=32,
+                            minimum=128, maximum=512, value=load_setting("max_chars_chunk", 180), step=32,
                             label="📝 Max Chars per Chunk",
                             info="Độ dài tối đa mỗi đoạn xử lý. Thấp hơn = chất lượng ổn định hơn."
                         )
                         top_p_slider = gr.Slider(
-                            minimum=0.7, maximum=1.0, value=0.9, step=0.05,
+                            minimum=0.7, maximum=1.0, value=load_setting("top_p", 0.9), step=0.05,
                             label="🎯 Top-p (Nucleus Sampling)",
                             info="Lọc token xác suất thấp. 0.9 = chất lượng tốt, 0.85 = rõ ràng hơn."
                         )
                         repetition_penalty_slider = gr.Slider(
-                            minimum=1.0, maximum=1.5, value=1.1, step=0.05,
+                            minimum=1.0, maximum=1.5, value=load_setting("repetition_penalty", 1.1), step=0.05,
                             label="🔁 Repetition Penalty",
                             info="Tránh lặp âm thanh. 1.0 = tắt, 1.1 = nhẹ, 1.2 = mạnh."
                         )
@@ -3940,6 +3945,50 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             inputs=[audiobook_text_display, audiobook_state, audiobook_split_mode, audiobook_keywords, audiobook_words_per_chunk],
             outputs=[text_update_status, audiobook_chapters, audiobook_state]
         )
+
+        # ========== AUTO-SAVE SETTINGS ==========
+        # Save settings when sliders/dropdowns change
+        def save_temperature(value):
+            save_setting("temperature", value)
+            return value
+
+        def save_max_chars(value):
+            save_setting("max_chars_chunk", value)
+            return value
+
+        def save_top_p(value):
+            save_setting("top_p", value)
+            return value
+
+        def save_repetition_penalty(value):
+            save_setting("repetition_penalty", value)
+            return value
+
+        def save_spell_check(value):
+            save_setting("spell_check_level", value)
+            return value
+
+        def save_generation_mode(value):
+            save_setting("generation_mode", value)
+            return value
+
+        def save_use_batch(value):
+            save_setting("use_batch", value)
+            return value
+
+        def save_batch_size(value):
+            save_setting("max_batch_size", value)
+            return value
+
+        # Attach change handlers
+        temperature_slider.change(fn=save_temperature, inputs=[temperature_slider], outputs=[])
+        max_chars_chunk_slider.change(fn=save_max_chars, inputs=[max_chars_chunk_slider], outputs=[])
+        top_p_slider.change(fn=save_top_p, inputs=[top_p_slider], outputs=[])
+        repetition_penalty_slider.change(fn=save_repetition_penalty, inputs=[repetition_penalty_slider], outputs=[])
+        spell_check_level.change(fn=save_spell_check, inputs=[spell_check_level], outputs=[])
+        generation_mode.change(fn=save_generation_mode, inputs=[generation_mode], outputs=[])
+        use_batch.change(fn=save_use_batch, inputs=[use_batch], outputs=[])
+        max_batch_size_run.change(fn=save_batch_size, inputs=[max_batch_size_run], outputs=[])
 
         # Auto-preview when spell check level changes
         # Auto-preview when spell check level changes

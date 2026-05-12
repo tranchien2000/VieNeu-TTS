@@ -8,3 +8,4 @@ from .chapter_detector import *
 from .audiobook_processor import *
 from .text_exporter import *
 from .spell_checker import *
+from .settings_manager import *
