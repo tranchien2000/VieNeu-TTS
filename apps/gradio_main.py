@@ -4149,12 +4149,30 @@ def main():
     # - Colab: share=True (convenient)
     # - Docker/local: share=False (safe)
     share = env_bool("GRADIO_SHARE", default=is_on_colab)
-    
+
     # If server_name is "0.0.0.0" and GRADIO_SHARE is not set, disable sharing
     if server_name == "0.0.0.0" and os.getenv("GRADIO_SHARE") is None:
         share = False
 
-    demo.queue().launch(server_name=server_name, server_port=server_port, share=share)
+    # Development mode detection
+    dev_mode = env_bool("VIENEU_DEV_MODE", default=False)
+
+    launch_kwargs = {
+        "server_name": server_name,
+        "server_port": server_port,
+        "share": share,
+    }
+
+    if dev_mode:
+        print("🔥 Development mode: Auto-reload enabled")
+        print("💡 Tip: Sửa code và save file, UI sẽ tự động reload")
+        launch_kwargs.update({
+            "debug": True,
+            "show_error": True,
+            "inbrowser": False,
+        })
+
+    demo.queue().launch(**launch_kwargs)
 
 if __name__ == "__main__":
     main()
