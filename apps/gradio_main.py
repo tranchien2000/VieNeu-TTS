@@ -2340,7 +2340,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                             with gr.Row():
                                 audiobook_output_dir = gr.Textbox(
                                     label="📁 Thư mục lưu file",
-                                    value="audiobook_output",
+                                    value=load_setting("audiobook_output_directory", "audiobook_output"),
                                     placeholder="audiobook_output",
                                     info="Đường dẫn thư mục lưu file audio",
                                     scale=4
@@ -4012,6 +4012,10 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             save_setting("audiobook_output_mode", value)
             return value
 
+        def save_audiobook_output_directory(value):
+            save_setting("audiobook_output_directory", value)
+            return value
+
         # Attach change handlers - Generation
         temperature_slider.change(fn=save_temperature, inputs=[temperature_slider], outputs=[])
         max_chars_chunk_slider.change(fn=save_max_chars, inputs=[max_chars_chunk_slider], outputs=[])
@@ -4031,6 +4035,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
         audiobook_words_per_chunk.change(fn=save_audiobook_words_per_chunk, inputs=[audiobook_words_per_chunk], outputs=[])
         audiobook_spell_check_level.change(fn=save_audiobook_spell_check, inputs=[audiobook_spell_check_level], outputs=[])
         audiobook_output_mode.change(fn=save_audiobook_output_mode, inputs=[audiobook_output_mode], outputs=[])
+        audiobook_output_dir.change(fn=save_audiobook_output_directory, inputs=[audiobook_output_dir], outputs=[])
 
         # Auto-preview when spell check level changes
         # Auto-preview when spell check level changes
