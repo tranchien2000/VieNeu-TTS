@@ -2035,29 +2035,6 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             btn_load = gr.Button("🔄 Tải Model", variant="primary")
             model_status = gr.Markdown("⏳ Chưa tải model.")
 
-        # ========== UNIFIED AUDIO PLAYER (SHARED BY ALL TABS) ==========
-        gr.Markdown("---")
-        with gr.Group(elem_classes="unified-audio-player"):
-            gr.Markdown("### 🎵 Audio Output")
-
-            with gr.Row():
-                audio_output = gr.Audio(
-                    label="Kết quả",
-                    type="filepath",
-                    autoplay=True,
-                    scale=3
-                )
-                status_output = gr.Textbox(
-                    label="Trạng thái",
-                    elem_classes="status-box",
-                    lines=4,
-                    max_lines=10,
-                    show_copy_button=True,
-                    scale=2
-                )
-
-        gr.Markdown("---")
-
         with gr.Row(elem_classes="container"):
             # --- INPUT ---
             with gr.Column(scale=3):
@@ -2433,6 +2410,24 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
 
             # --- OUTPUT ---
             with gr.Column(scale=2):
+                # ========== UNIFIED AUDIO OUTPUT ==========
+                gr.Markdown("### 🎵 Audio Output")
+                with gr.Row():
+                    audio_output = gr.Audio(
+                        label="Kết quả",
+                        type="filepath",
+                        autoplay=True,
+                        scale=3
+                    )
+                    status_output = gr.Textbox(
+                        label="Trạng thái",
+                        elem_classes="status-box",
+                        lines=4,
+                        max_lines=10,
+                        show_copy_button=True,
+                        scale=2
+                    )
+
                 # ========== AUDIOBOOK CONTROLS (visible only when Audiobook tab active) ==========
                 with gr.Group(visible=False) as audiobook_output_group:
                     # Process Control
