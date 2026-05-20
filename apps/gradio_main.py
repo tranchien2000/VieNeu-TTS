@@ -11,8 +11,8 @@ import queue
 import threading
 import yaml
 import uuid
-from vieneu_utils.core_utils import split_text_into_chunks, join_audio_chunks, env_bool, split_into_chunks_v2, get_silence_duration_v2
-from vieneu_utils.phonemize_text import phonemize_with_dict
+from vieneu_utils.core_utils import split_text_into_chunks, join_audio_chunks, env_bool, get_silence_duration_v2
+from vieneu_utils.phonemize_text import phonemize_to_chunks
 from sea_g2p import Normalizer
 from functools import lru_cache
 import gc
@@ -108,6 +108,93 @@ MAX_SPEAKERS = 8          # Max concurrent speakers in conversation tab
 
 # Normalizer (module-level singleton)
 _text_normalizer = Normalizer()
+
+def _format_duration(seconds: float) -> str:
+    seconds = max(0, int(round(seconds)))
+    minutes, secs = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours}h {minutes}m {secs}s"
+    if minutes:
+        return f"{minutes}m {secs}s"
+    return f"{secs}s"
+
+def _split_estimate_status(status: str) -> tuple[str, str]:
+    if not isinstance(status, str):
+        return status, ""
+
+    estimate_marker = " | Ước tính còn lại: "
+    if estimate_marker in status:
+        status_text, estimate_text = status.split(" | ", 1)
+        if status.endswith("...") and not status_text.endswith("..."):
+            status_text += "..."
+        return status_text, estimate_text.rstrip(". ")
+
+    if "batch mẫu:" in status and "ước tính còn lại:" in status:
+        start = status.find("(")
+        end = status.rfind(")")
+        if start != -1 and end != -1 and end > start:
+            status_text = status[:start].strip()
+            estimate_text = status[start + 1:end].replace(", ", "\n")
+            return status_text, estimate_text
+
+    return status, ""
+
+def _extract_progress(status: str) -> tuple[str, int, int] | None:
+    if not isinstance(status, str):
+        return None
+
+    for marker, label in (("Đang xử lý batch ", "batch"), ("Đang xử lý đoạn ", "đoạn")):
+        if marker not in status:
+            continue
+
+        progress_text = status.split(marker, 1)[1].split(" ", 1)[0].strip(".")
+        if "/" not in progress_text:
+            return None
+
+        current_text, total_text = progress_text.split("/", 1)
+        try:
+            current = int(current_text)
+            total = int(total_text)
+        except ValueError:
+            return None
+
+        if current > 0 and total > 0:
+            return label, current, total
+
+    return None
+
+def synthesize_speech_with_estimate(*args):
+    first_unit_duration = None
+    previous_progress_time = None
+
+    for audio_path, status in synthesize_speech(*args):
+        status_text, estimate_text = _split_estimate_status(status)
+
+        if not estimate_text:
+            progress = _extract_progress(status_text)
+            if progress:
+                unit_label, current, total = progress
+                now = time.time()
+                if previous_progress_time is not None and first_unit_duration is None:
+                    first_unit_duration = now - previous_progress_time
+                previous_progress_time = now
+
+                if first_unit_duration is None:
+                    estimate_text = f"Đang đo thời gian {unit_label} đầu tiên..."
+                else:
+                    estimated_total = first_unit_duration * total
+                    estimated_remaining = first_unit_duration * max(0, total - current + 1)
+                    estimate_text = (
+                        f"Ước tính còn lại: {_format_duration(estimated_remaining)}\n"
+                        f"Tổng: {_format_duration(estimated_total)}"
+                    )
+
+        yield audio_path, status_text, estimate_text
+
+def synthesize_conversation_with_empty_estimate(*args):
+    for audio_path, status in synthesize_conversation(*args):
+        yield audio_path, status, ""
 
 # --- CANCELLATION ---
 # threading.Event is a mutable object: never reassigned, always the same reference.
@@ -837,15 +924,15 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
     if generation_mode == "Standard (Một lần)":
         backend_name = "LMDeploy" if using_lmdeploy else "Standard"
 
-        normalized_text = _text_normalizer.normalize(raw_text)
         is_v2_turbo = "v2-Turbo" in (current_backbone or "")
         
         if is_v2_turbo:
-            # Phoneme-based splitting for accurate progress reporting
-            phonemes = phonemize_with_dict(normalized_text, skip_normalize=True)
-            text_chunks = split_into_chunks_v2(phonemes, max_chunk_size=max_chars_chunk)
+            text_chunks = phonemize_to_chunks(raw_text, max_chars=max_chars_chunk)
         else:
-            text_chunks = split_text_into_chunks(normalized_text, max_chars=max_chars_chunk)
+            text_chunks = []
+            for raw_chunk in split_text_into_chunks(raw_text, max_chars=max_chars_chunk):
+                normalized_chunk = _text_normalizer.normalize(raw_chunk)
+                text_chunks.extend(split_text_into_chunks(normalized_chunk, max_chars=max_chars_chunk))
             
         total_chunks = len(text_chunks)
 
@@ -894,6 +981,7 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
             elif use_batch and using_lmdeploy and hasattr(tts, 'infer_batch') and total_chunks > 1:
                 # Process in mini-batches to allow cancellation between batches
                 num_batches = (total_chunks + max_batch_size_run - 1) // max_batch_size_run
+                first_batch_duration = None
                 
                 for i in range(0, total_chunks, max_batch_size_run):
                     if _STOP_EVENT.is_set():
@@ -902,9 +990,19 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                         return
                     
                     batch_idx = i // max_batch_size_run
-                    yield None, f"⚡ Đang xử lý batch {batch_idx+1}/{num_batches} (đoạn {i+1}-{min(i+max_batch_size_run, total_chunks)})..."
+                    estimate_info = ""
+                    if first_batch_duration is not None:
+                        elapsed = time.time() - start_time
+                        estimated_total = first_batch_duration * num_batches
+                        estimated_remaining = max(0, estimated_total - elapsed)
+                        estimate_info = (
+                            f" | Ước tính còn lại: {_format_duration(estimated_remaining)}"
+                            f" / tổng: {_format_duration(estimated_total)}"
+                        )
+                    yield None, f"⚡ Đang xử lý batch {batch_idx+1}/{num_batches} (đoạn {i+1}-{min(i+max_batch_size_run, total_chunks)}){estimate_info}..."
                     
                     current_batch = text_chunks[i : i + max_batch_size_run]
+                    batch_start_time = time.time()
                     batch_wavs = tts.infer_batch(
                         current_batch, 
                         ref_codes=ref_codes, 
@@ -913,9 +1011,21 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                         temperature=temperature,
                         skip_normalize=True
                     )
+                    batch_duration = time.time() - batch_start_time
+                    if first_batch_duration is None:
+                        first_batch_duration = batch_duration
+                    elapsed = time.time() - start_time
+                    estimated_total = first_batch_duration * num_batches
+                    estimated_remaining = max(0, estimated_total - elapsed)
                     for chunk_wav in batch_wavs:
                         if chunk_wav is not None and len(chunk_wav) > 0:
                             all_wavs.append(chunk_wav)
+                    yield None, (
+                        f"✅ Xong batch {batch_idx+1}/{num_batches} "
+                        f"(batch mẫu: {_format_duration(first_batch_duration)}, "
+                        f"ước tính còn lại: {_format_duration(estimated_remaining)}, "
+                        f"tổng: {_format_duration(estimated_total)})"
+                    )
 
             else:
                 # Sequential processing (PyTorch or GGUF v1)
@@ -994,13 +1104,14 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
         error_event = threading.Event()
         error_msg = ""
         
-        normalized_text = _text_normalizer.normalize(raw_text)
         is_v2_turbo = "v2-Turbo" in (current_backbone or "")
         if is_v2_turbo:
-            phonemes = phonemize_with_dict(normalized_text, skip_normalize=True)
-            text_chunks = split_into_chunks_v2(phonemes, max_chunk_size=max_chars_chunk)
+            text_chunks = phonemize_to_chunks(raw_text, max_chars=max_chars_chunk)
         else:
-            text_chunks = split_text_into_chunks(normalized_text, max_chars=max_chars_chunk)
+            text_chunks = []
+            for raw_chunk in split_text_into_chunks(raw_text, max_chars=max_chars_chunk):
+                normalized_chunk = _text_normalizer.normalize(raw_chunk)
+                text_chunks.extend(split_text_into_chunks(normalized_chunk, max_chars=max_chars_chunk))
         
         def producer_thread():
             nonlocal error_msg
@@ -1013,7 +1124,7 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                     
                     if is_v2_turbo:
                         stream_gen = tts.infer_stream(
-                            chunk_text, 
+                            chunk_text.text,
                             ref_codes=ref_codes, 
                             temperature=temperature,
                             max_chars=max_chars_chunk,
@@ -1426,6 +1537,20 @@ css = """
     text-align: center;
     font-family: inherit;
 }
+.estimate-box {
+    font-weight: 600;
+    margin-top: 1rem;
+    padding: 0.75rem 1.25rem 1rem;
+    border: 1px solid rgba(34, 211, 238, 0.18);
+    background: rgba(34, 211, 238, 0.06);
+    border-radius: 8px;
+}
+.estimate-box textarea {
+    text-align: center;
+    font-family: inherit;
+    min-height: 5rem !important;
+    padding: 1rem !important;
+}
 .model-card-content {
     display: flex;
     flex-wrap: wrap;
@@ -1827,6 +1952,13 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                     max_lines=10,
                     show_copy_button=True
                 )
+                estimate_output = gr.Textbox(
+                    label="Ước tính thời gian",
+                    elem_classes="estimate-box",
+                    lines=2,
+                    max_lines=4,
+                    show_copy_button=True
+                )
                 gr.Markdown("<div style='text-align: center; color: #64748b; font-size: 0.8rem;'>🔒 Audio được đóng dấu bản quyền ẩn (Watermarker) để bảo mật và định danh AI.</div>")
         
         # # --- EVENT HANDLERS ---
@@ -1967,13 +2099,13 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
         )
         
         conv_gen_event = btn_generate_conv.click(
-            fn=synthesize_conversation,
+            fn=synthesize_conversation_with_empty_estimate,
             inputs=[conv_script_input,
                     *speaker_name_boxes,
                     *speaker_voice_dds,
                     silence_slider, temperature_slider, max_chars_chunk_slider,
                     session_id_state],
-            outputs=[audio_output, status_output]
+            outputs=[audio_output, status_output, estimate_output]
         )
         btn_generate_conv.click(lambda: gr.update(interactive=True), outputs=btn_stop)
         conv_gen_event.then(lambda: gr.update(interactive=False), outputs=btn_stop)
@@ -1990,11 +2122,11 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
         
         # --- Standard Generation Handlers ---
         gen_event = btn_generate.click(
-            fn=synthesize_speech,
+            fn=synthesize_speech_with_estimate,
             inputs=[text_input, voice_select, custom_audio, custom_text, current_mode_state, 
                     generation_mode, use_batch, max_batch_size_run,
                     temperature_slider, max_chars_chunk_slider, session_id_state],
-            outputs=[audio_output, status_output]
+            outputs=[audio_output, status_output, estimate_output]
         )
         btn_generate.click(lambda: gr.update(interactive=True), outputs=btn_stop)
         gen_event.then(lambda: gr.update(interactive=False), outputs=btn_stop)
@@ -2003,12 +2135,12 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
         def request_stop():
             print("🛑 STOP REQUESTED via button click.")
             _STOP_EVENT.set()
-            return None, "⏹️ Đã dừng tạo giọng nói.", gr.update(interactive=False)
+            return None, "⏹️ Đã dừng tạo giọng nói.", "", gr.update(interactive=False)
 
         # Handler: set stop event + update UI
         # Note: We avoid cancels= here to prevent internal Gradio KeyError crashes,
         # relying instead on the frequent _STOP_EVENT.is_set() checks in the code.
-        btn_stop.click(fn=request_stop, outputs=[audio_output, status_output, btn_stop])
+        btn_stop.click(fn=request_stop, outputs=[audio_output, status_output, estimate_output, btn_stop])
 
         # Persistence: Restore UI state on load
         demo.load(

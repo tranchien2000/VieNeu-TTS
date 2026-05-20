@@ -353,11 +353,30 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
         
         if use_batch and total_chunks > 1:
             try:
+                num_batches = (
+                    total_chunks + max_batch_size_run - 1
+                ) // max_batch_size_run
+                first_batch_duration = None
+
                 for i in range(0, len(text_chunks), max_batch_size_run):
-                    yield None, f"⏳ Đang xử lý batch {i//max_batch_size_run + 1} ..."
+                    batch_idx = i // max_batch_size_run
+                    estimate_info = ""
+                    if first_batch_duration is not None:
+                        elapsed = time.time() - start_time
+                        estimated_total = first_batch_duration * num_batches
+                        estimated_remaining = max(0, estimated_total - elapsed)
+                        estimate_info = (
+                            f" | Ước tính còn lại: {_format_duration(estimated_remaining)}"
+                            f" / tổng: {_format_duration(estimated_total)}"
+                        )
+                    yield (
+                        None,
+                        f"⏳ Đang xử lý batch {batch_idx + 1}/{num_batches}{estimate_info} ...",
+                    )
                     batch_chunks = text_chunks[i : i + max_batch_size_run]
                     
                     # Gọi hàm infer_batch đã viết ở trên
+                    batch_start_time = time.time()
                     batch_results = tts.infer_batch(
                         texts = batch_chunks,  
                         ref_codes=ref_codes, 
@@ -365,9 +384,24 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                         temperature=temperature,
                         skip_normalize=True
                     )
-                    
+                    batch_duration = time.time() - batch_start_time
+                    if first_batch_duration is None:
+                        first_batch_duration = batch_duration
+                    elapsed = time.time() - start_time
+                    estimated_total = first_batch_duration * num_batches
+                    estimated_remaining = max(0, estimated_total - elapsed)
+
                     if batch_results is not None and len(batch_results) > 0:
                         all_wavs.extend(batch_results)
+                    yield (
+                        None,
+                        (
+                            f"✅ Xong batch {batch_idx + 1}/{num_batches} "
+                            f"(batch mẫu: {_format_duration(first_batch_duration)}, "
+                            f"ước tính còn lại: {_format_duration(estimated_remaining)}, "
+                            f"tổng: {_format_duration(estimated_total)})"
+                        ),
+                    )
 
                 if not all_wavs:
                     yield None, "❌ Không sinh được audio nào."
@@ -594,6 +628,20 @@ css = """
 .status-box textarea {
     text-align: center;
     font-family: inherit;
+}
+.estimate-box {
+    font-weight: 600;
+    margin-top: 1rem;
+    padding: 0.75rem 1.25rem 1rem;
+    border: 1px solid rgba(34, 211, 238, 0.18);
+    background: rgba(34, 211, 238, 0.06);
+    border-radius: 8px;
+}
+.estimate-box textarea {
+    text-align: center;
+    font-family: inherit;
+    min-height: 5rem !important;
+    padding: 1rem !important;
 }
 .model-card-content {
     display: flex;
