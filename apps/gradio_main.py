@@ -130,7 +130,7 @@ def _split_estimate_status(status: str) -> tuple[str, str]:
             status_text += "..."
         return status_text, estimate_text.rstrip(". ")
 
-    if "batch mẫu:" in status and "ước tính còn lại:" in status:
+    if ("batch mẫu:" in status or "trung bình batch:" in status) and "ước tính còn lại:" in status:
         start = status.find("(")
         end = status.rfind(")")
         if start != -1 and end != -1 and end > start:
@@ -165,8 +165,9 @@ def _extract_progress(status: str) -> tuple[str, int, int] | None:
     return None
 
 def synthesize_speech_with_estimate(*args):
-    first_unit_duration = None
     previous_progress_time = None
+    total_unit_duration = 0.0
+    completed_units = 0
 
     for audio_path, status in synthesize_speech(*args):
         status_text, estimate_text = _split_estimate_status(status)
@@ -176,15 +177,17 @@ def synthesize_speech_with_estimate(*args):
             if progress:
                 unit_label, current, total = progress
                 now = time.time()
-                if previous_progress_time is not None and first_unit_duration is None:
-                    first_unit_duration = now - previous_progress_time
+                if previous_progress_time is not None:
+                    total_unit_duration += now - previous_progress_time
+                    completed_units += 1
                 previous_progress_time = now
 
-                if first_unit_duration is None:
+                if completed_units == 0:
                     estimate_text = f"Đang đo thời gian {unit_label} đầu tiên..."
                 else:
-                    estimated_total = first_unit_duration * total
-                    estimated_remaining = first_unit_duration * max(0, total - current + 1)
+                    average_unit_duration = total_unit_duration / completed_units
+                    estimated_total = average_unit_duration * total
+                    estimated_remaining = average_unit_duration * max(0, total - current + 1)
                     estimate_text = (
                         f"Ước tính còn lại: {_format_duration(estimated_remaining)}\n"
                         f"Tổng: {_format_duration(estimated_total)}"
@@ -981,7 +984,8 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
             elif use_batch and using_lmdeploy and hasattr(tts, 'infer_batch') and total_chunks > 1:
                 # Process in mini-batches to allow cancellation between batches
                 num_batches = (total_chunks + max_batch_size_run - 1) // max_batch_size_run
-                first_batch_duration = None
+                total_batch_duration = 0.0
+                completed_batches = 0
                 
                 for i in range(0, total_chunks, max_batch_size_run):
                     if _STOP_EVENT.is_set():
@@ -991,10 +995,10 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                     
                     batch_idx = i // max_batch_size_run
                     estimate_info = ""
-                    if first_batch_duration is not None:
-                        elapsed = time.time() - start_time
-                        estimated_total = first_batch_duration * num_batches
-                        estimated_remaining = max(0, estimated_total - elapsed)
+                    if completed_batches > 0:
+                        average_batch_duration = total_batch_duration / completed_batches
+                        estimated_total = average_batch_duration * num_batches
+                        estimated_remaining = average_batch_duration * max(0, num_batches - batch_idx)
                         estimate_info = (
                             f" | Ước tính còn lại: {_format_duration(estimated_remaining)}"
                             f" / tổng: {_format_duration(estimated_total)}"
@@ -1012,17 +1016,17 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                         skip_normalize=True
                     )
                     batch_duration = time.time() - batch_start_time
-                    if first_batch_duration is None:
-                        first_batch_duration = batch_duration
-                    elapsed = time.time() - start_time
-                    estimated_total = first_batch_duration * num_batches
-                    estimated_remaining = max(0, estimated_total - elapsed)
+                    total_batch_duration += batch_duration
+                    completed_batches += 1
+                    average_batch_duration = total_batch_duration / completed_batches
+                    estimated_total = average_batch_duration * num_batches
+                    estimated_remaining = average_batch_duration * max(0, num_batches - completed_batches)
                     for chunk_wav in batch_wavs:
                         if chunk_wav is not None and len(chunk_wav) > 0:
                             all_wavs.append(chunk_wav)
                     yield None, (
                         f"✅ Xong batch {batch_idx+1}/{num_batches} "
-                        f"(batch mẫu: {_format_duration(first_batch_duration)}, "
+                        f"(trung bình batch: {_format_duration(average_batch_duration)}, "
                         f"ước tính còn lại: {_format_duration(estimated_remaining)}, "
                         f"tổng: {_format_duration(estimated_total)})"
                     )
@@ -1538,18 +1542,14 @@ css = """
     font-family: inherit;
 }
 .estimate-box {
-    font-weight: 600;
-    margin-top: 1rem;
-    padding: 0.75rem 1.25rem 1rem;
-    border: 1px solid rgba(34, 211, 238, 0.18);
-    background: rgba(34, 211, 238, 0.06);
+    font-weight: 500;
+    border: 1px solid rgba(99, 102, 241, 0.1);
+    background: rgba(99, 102, 241, 0.03);
     border-radius: 8px;
 }
 .estimate-box textarea {
     text-align: center;
     font-family: inherit;
-    min-height: 5rem !important;
-    padding: 1rem !important;
 }
 .model-card-content {
     display: flex;
@@ -1945,20 +1945,22 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                     type="filepath",
                     autoplay=True
                 )
-                status_output = gr.Textbox(
-                    label="Trạng thái", 
-                    elem_classes="status-box",
-                    lines=2,
-                    max_lines=10,
-                    show_copy_button=True
-                )
-                estimate_output = gr.Textbox(
-                    label="Ước tính thời gian",
-                    elem_classes="estimate-box",
-                    lines=2,
-                    max_lines=4,
-                    show_copy_button=True
-                )
+                with gr.Group():
+                    status_output = gr.Textbox(
+                        label="Trạng thái", 
+                        elem_classes="status-box",
+                        lines=2,
+                        max_lines=10,
+                        show_copy_button=True
+                    )
+                with gr.Group():
+                    estimate_output = gr.Textbox(
+                        label="Ước tính thời gian",
+                        elem_classes="estimate-box",
+                        lines=2,
+                        max_lines=4,
+                        show_copy_button=True
+                    )
                 gr.Markdown("<div style='text-align: center; color: #64748b; font-size: 0.8rem;'>🔒 Audio được đóng dấu bản quyền ẩn (Watermarker) để bảo mật và định danh AI.</div>")
         
         # # --- EVENT HANDLERS ---

@@ -66,6 +66,92 @@ model_loaded = False
 # Normalizer (module-level singleton)
 _text_normalizer = Normalizer()
 
+def _format_duration(seconds: float) -> str:
+    seconds = max(0, int(round(seconds)))
+    minutes, secs = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return f"{hours}h {minutes}m {secs}s"
+    if minutes:
+        return f"{minutes}m {secs}s"
+    return f"{secs}s"
+
+def _split_estimate_status(status: str) -> tuple[str, str]:
+    if not isinstance(status, str):
+        return status, ""
+
+    estimate_marker = " | Ước tính còn lại: "
+    if estimate_marker in status:
+        status_text, estimate_text = status.split(" | ", 1)
+        if status.endswith("...") and not status_text.endswith("..."):
+            status_text += "..."
+        return status_text, estimate_text.rstrip(". ")
+
+    if ("batch mẫu:" in status or "trung bình batch:" in status) and "ước tính còn lại:" in status:
+        start = status.find("(")
+        end = status.rfind(")")
+        if start != -1 and end != -1 and end > start:
+            status_text = status[:start].strip()
+            estimate_text = status[start + 1:end].replace(", ", "\n")
+            return status_text, estimate_text
+
+    return status, ""
+
+def _extract_progress(status: str) -> tuple[str, int, int] | None:
+    if not isinstance(status, str):
+        return None
+
+    for marker, label in (("Đang xử lý batch ", "batch"), ("Đang xử lý đoạn ", "đoạn")):
+        if marker not in status:
+            continue
+
+        progress_text = status.split(marker, 1)[1].split(" ", 1)[0].strip(".")
+        if "/" not in progress_text:
+            return None
+
+        current_text, total_text = progress_text.split("/", 1)
+        try:
+            current = int(current_text)
+            total = int(total_text)
+        except ValueError:
+            return None
+
+        if current > 0 and total > 0:
+            return label, current, total
+
+    return None
+
+def synthesize_speech_with_estimate(*args):
+    previous_progress_time = None
+    total_unit_duration = 0.0
+    completed_units = 0
+
+    for audio_path, status in synthesize_speech(*args):
+        status_text, estimate_text = _split_estimate_status(status)
+
+        if not estimate_text:
+            progress = _extract_progress(status_text)
+            if progress:
+                unit_label, current, total = progress
+                now = time.time()
+                if previous_progress_time is not None:
+                    total_unit_duration += now - previous_progress_time
+                    completed_units += 1
+                previous_progress_time = now
+
+                if completed_units == 0:
+                    estimate_text = f"Đang đo thời gian {unit_label} đầu tiên..."
+                else:
+                    average_unit_duration = total_unit_duration / completed_units
+                    estimated_total = average_unit_duration * total
+                    estimated_remaining = average_unit_duration * max(0, total - current + 1)
+                    estimate_text = (
+                        f"Ước tính còn lại: {_format_duration(estimated_remaining)}\n"
+                        f"Tổng: {_format_duration(estimated_total)}"
+                    )
+
+        yield audio_path, status_text, estimate_text
+
 def get_available_devices() -> list[str]:
     """Chỉ trả về XPU cho phiên bản này."""
     return ["XPU"]
@@ -356,15 +442,16 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                 num_batches = (
                     total_chunks + max_batch_size_run - 1
                 ) // max_batch_size_run
-                first_batch_duration = None
+                total_batch_duration = 0.0
+                completed_batches = 0
 
                 for i in range(0, len(text_chunks), max_batch_size_run):
                     batch_idx = i // max_batch_size_run
                     estimate_info = ""
-                    if first_batch_duration is not None:
-                        elapsed = time.time() - start_time
-                        estimated_total = first_batch_duration * num_batches
-                        estimated_remaining = max(0, estimated_total - elapsed)
+                    if completed_batches > 0:
+                        average_batch_duration = total_batch_duration / completed_batches
+                        estimated_total = average_batch_duration * num_batches
+                        estimated_remaining = average_batch_duration * max(0, num_batches - batch_idx)
                         estimate_info = (
                             f" | Ước tính còn lại: {_format_duration(estimated_remaining)}"
                             f" / tổng: {_format_duration(estimated_total)}"
@@ -385,11 +472,11 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                         skip_normalize=True
                     )
                     batch_duration = time.time() - batch_start_time
-                    if first_batch_duration is None:
-                        first_batch_duration = batch_duration
-                    elapsed = time.time() - start_time
-                    estimated_total = first_batch_duration * num_batches
-                    estimated_remaining = max(0, estimated_total - elapsed)
+                    total_batch_duration += batch_duration
+                    completed_batches += 1
+                    average_batch_duration = total_batch_duration / completed_batches
+                    estimated_total = average_batch_duration * num_batches
+                    estimated_remaining = average_batch_duration * max(0, num_batches - completed_batches)
 
                     if batch_results is not None and len(batch_results) > 0:
                         all_wavs.extend(batch_results)
@@ -397,7 +484,7 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                         None,
                         (
                             f"✅ Xong batch {batch_idx + 1}/{num_batches} "
-                            f"(batch mẫu: {_format_duration(first_batch_duration)}, "
+                            f"(trung bình batch: {_format_duration(average_batch_duration)}, "
                             f"ước tính còn lại: {_format_duration(estimated_remaining)}, "
                             f"tổng: {_format_duration(estimated_total)})"
                         ),
@@ -630,18 +717,14 @@ css = """
     font-family: inherit;
 }
 .estimate-box {
-    font-weight: 600;
-    margin-top: 1rem;
-    padding: 0.75rem 1.25rem 1rem;
-    border: 1px solid rgba(34, 211, 238, 0.18);
-    background: rgba(34, 211, 238, 0.06);
+    font-weight: 500;
+    border: 1px solid rgba(99, 102, 241, 0.1);
+    background: rgba(99, 102, 241, 0.03);
     border-radius: 8px;
 }
 .estimate-box textarea {
     text-align: center;
     font-family: inherit;
-    min-height: 5rem !important;
-    padding: 1rem !important;
 }
 .model-card-content {
     display: flex;
@@ -868,13 +951,22 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS (XPU)", head=head_html) a
                     type="filepath",
                     autoplay=True
                 )
-                status_output = gr.Textbox(
-                    label="Trạng thái", 
-                    elem_classes="status-box",
-                    lines=2,
-                    max_lines=10,
-                    show_copy_button=True
-                )
+                with gr.Group():
+                    status_output = gr.Textbox(
+                        label="Trạng thái", 
+                        elem_classes="status-box",
+                        lines=2,
+                        max_lines=10,
+                        show_copy_button=True
+                    )
+                with gr.Group():
+                    estimate_output = gr.Textbox(
+                        label="Ước tính thời gian",
+                        elem_classes="estimate-box",
+                        lines=2,
+                        max_lines=4,
+                        show_copy_button=True
+                    )
                 gr.Markdown("<div style='text-align: center; color: #64748b; font-size: 0.8rem;'>🔒 Audio được đóng dấu bản quyền ẩn (Watermarker) để bảo mật và định danh AI.</div>")
         
         # --- EVENT HANDLERS ---
@@ -942,18 +1034,18 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS (XPU)", head=head_html) a
         )
         
         generate_event = btn_generate.click(
-            fn=synthesize_speech,
+            fn=synthesize_speech_with_estimate,
             inputs=[text_input, voice_select, custom_audio, custom_text, current_mode_state, 
                     generation_mode, use_batch, max_batch_size_run,
                     temperature_slider, max_chars_chunk_slider],
-            outputs=[audio_output, status_output]
+            outputs=[audio_output, status_output, estimate_output]
         )
         
         btn_generate.click(lambda: gr.update(interactive=True), outputs=btn_stop)
         generate_event.then(lambda: gr.update(interactive=False), outputs=btn_stop)
         
         btn_stop.click(fn=None, cancels=[generate_event])
-        btn_stop.click(lambda: (None, "⏹️ Đã dừng tạo giọng nói."), outputs=[audio_output, status_output])
+        btn_stop.click(lambda: (None, "⏹️ Đã dừng tạo giọng nói.", ""), outputs=[audio_output, status_output, estimate_output])
         btn_stop.click(lambda: gr.update(interactive=False), outputs=btn_stop)
 
         demo.load(
