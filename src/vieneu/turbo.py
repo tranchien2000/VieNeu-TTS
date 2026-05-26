@@ -5,7 +5,7 @@ from typing import Optional, List, Any, Generator, Dict
 from pathlib import Path
 from .base import BaseVieneuTTS
 from .utils import normalize_device
-from vieneu_utils.phonemize_text import phonemize_batch, phonemize_to_chunks
+from vieneu_utils.phonemize_text import phonemize_text, phonemize_batch, phonemize_to_chunks
 from vieneu_utils.core_utils import split_into_chunks_v2, get_silence_duration_v2
 from tqdm import tqdm
 import sys

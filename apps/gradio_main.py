@@ -23,8 +23,25 @@ import uuid
 from vieneu_utils.core_utils import split_text_into_chunks, join_audio_chunks, env_bool, get_silence_duration_v2
 from vieneu_utils.phonemize_text import phonemize_to_chunks
 from sea_g2p import Normalizer
-from functools import lru_cache
 import gc
+
+from apps.ui_utils import (
+    _format_duration,
+    _split_estimate_status,
+    wrap_with_estimate,
+    cleanup_gpu_memory,
+    get_ref_text_cached,
+    on_codec_change,
+    validate_audio_duration,
+    on_custom_id_change
+)
+from apps.ui_constants import (
+    theme,
+    css,
+    head_html,
+    DEFAULT_TEXT_GPU,
+    DEFAULT_TEXT_TURBO
+)
 
 # --- CONSTANTS & CONFIG ---
 CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "config.yaml")
@@ -117,104 +134,6 @@ MAX_SPEAKERS = 8          # Max concurrent speakers in conversation tab
 
 # Normalizer (module-level singleton)
 _text_normalizer = Normalizer()
-
-def _format_duration(seconds: float) -> str:
-    seconds = max(0, int(round(seconds)))
-    minutes, secs = divmod(seconds, 60)
-    hours, minutes = divmod(minutes, 60)
-    if hours:
-        return f"{hours}h {minutes}m {secs}s"
-    if minutes:
-        return f"{minutes}m {secs}s"
-    return f"{secs}s"
-
-def _split_estimate_status(status: str) -> tuple[str, str]:
-    if not isinstance(status, str):
-        return status, ""
-
-    estimate_marker = " | Ước tính còn lại: "
-    if estimate_marker in status:
-        status_text, estimate_text = status.split(" | ", 1)
-        if status.endswith("...") and not status_text.endswith("..."):
-            status_text += "..."
-        return status_text, estimate_text.rstrip(". ")
-
-    if ("batch mẫu:" in status or "trung bình batch:" in status) and "ước tính còn lại:" in status:
-        start = status.find("(")
-        end = status.rfind(")")
-        if start != -1 and end != -1 and end > start:
-            status_text = status[:start].strip()
-            estimate_text = status[start + 1:end].replace(", ", "\n")
-            return status_text, estimate_text
-
-    return status, ""
-
-def _extract_progress(status: str) -> tuple[str, int, int] | None:
-    if not isinstance(status, str):
-        return None
-
-    for marker, label in (("Đang xử lý batch ", "batch"), ("Đang xử lý đoạn ", "đoạn")):
-        if marker not in status:
-            continue
-
-        progress_text = status.split(marker, 1)[1].split(" ", 1)[0].strip(".")
-        if "/" not in progress_text:
-            return None
-
-        current_text, total_text = progress_text.split("/", 1)
-        try:
-            current = int(current_text)
-            total = int(total_text)
-        except ValueError:
-            return None
-
-        if current > 0 and total > 0:
-            return label, current, total
-
-    return None
-
-def synthesize_speech_with_estimate(*args):
-    previous_progress_time = None
-    total_unit_duration = 0.0
-    completed_units = 0
-
-    for audio_path, status in synthesize_speech(*args):
-        status_text, estimate_text = _split_estimate_status(status)
-
-        if not estimate_text:
-            progress = _extract_progress(status_text)
-            if progress:
-                unit_label, current, total = progress
-                now = time.time()
-                if previous_progress_time is not None:
-                    total_unit_duration += now - previous_progress_time
-                    completed_units += 1
-                previous_progress_time = now
-
-                if completed_units == 0:
-                    estimate_text = f"Đang đo thời gian {unit_label} đầu tiên..."
-                else:
-                    average_unit_duration = total_unit_duration / completed_units
-                    estimated_total = average_unit_duration * total
-                    estimated_remaining = average_unit_duration * max(0, total - current + 1)
-                    estimate_text = (
-                        f"Ước tính còn lại: {_format_duration(estimated_remaining)}\n"
-                        f"Tổng: {_format_duration(estimated_total)}"
-                    )
-
-        yield audio_path, status_text, estimate_text
-
-def synthesize_conversation_with_empty_estimate(*args):
-    for audio_path, status in synthesize_conversation(*args):
-        yield audio_path, status, ""
-
-# --- CANCELLATION ---
-# threading.Event is a mutable object: never reassigned, always the same reference.
-# All threads share the exact same object — no scoping/serialization issues.
-_STOP_EVENT = threading.Event()
-
-# Cache for reference texts
-_ref_text_cache = {}
 
 def get_available_devices() -> list[str]:
     """Get list of available devices for current platform."""
@@ -311,23 +230,6 @@ def should_use_lmdeploy(backbone_choice: str, device_choice: str) -> bool:
         return has_gpu
     except ImportError:
         return False
-
-@lru_cache(maxsize=32)
-def get_ref_text_cached(text_path: str) -> str:
-    """Cache reference text loading"""
-    with open(text_path, "r", encoding="utf-8") as f:
-        return f.read()
-
-def cleanup_gpu_memory():
-    """Aggressively cleanup GPU memory"""
-    if 'torch' in sys.modules:
-        import torch
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            torch.cuda.synchronize()
-        elif torch.backends.mps.is_available():
-            torch.mps.empty_cache()
-    gc.collect()
 
 def load_model(backbone_choice: str, codec_choice: str, device_choice: str, 
                force_lmdeploy: bool, custom_model_id: str = "", custom_base_model: str = "", 
@@ -1260,6 +1162,16 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
             
             cleanup_gpu_memory()
 
+synthesize_speech_with_estimate = wrap_with_estimate(synthesize_speech)
+
+def synthesize_conversation_with_empty_estimate(*args):
+    for audio_path, status in synthesize_conversation(*args):
+        yield audio_path, status, ""
+
+# --- CANCELLATION ---
+# threading.Event is a mutable object: never reassigned, always the same reference.
+# All threads share the exact same object — no scoping/serialization issues.
+_STOP_EVENT = threading.Event()
 
 # --- 3. CONVERSATION LOGIC ---
 
@@ -1505,159 +1417,10 @@ def extract_speakers_from_script(script):
 
     return name_updates + dd_updates + row_updates
 
-
-# --- 4. UI SETUP ---
-theme = gr.themes.Soft(
-    primary_hue="indigo",
-    secondary_hue="cyan",
-    neutral_hue="slate",
-    font=[gr.themes.GoogleFont('Inter'), 'ui-sans-serif', 'system-ui'],
-).set(
-    button_primary_background_fill="linear-gradient(90deg, #6366f1 0%, #0ea5e9 100%)",
-    button_primary_background_fill_hover="linear-gradient(90deg, #4f46e5 0%, #0284c7 100%)",
-)
-
-css = """
-.container { max-width: 1400px; margin: auto; }
-.header-box {
-    text-align: center;
-    margin-bottom: 25px;
-    padding: 25px;
-    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-    border-radius: 12px;
-    color: white !important;
-}
-.header-title {
-    font-size: 2.5rem;
-    font-weight: 800;
-    color: white !important;
-}
-.gradient-text {
-    background: -webkit-linear-gradient(45deg, #60A5FA, #22D3EE);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-}
-.header-icon {
-    color: white;
-}
-.status-box {
-    font-weight: 500;
-    border: 1px solid rgba(99, 102, 241, 0.1);
-    background: rgba(99, 102, 241, 0.03);
-    border-radius: 8px;
-}
-.status-box textarea {
-    text-align: center;
-    font-family: inherit;
-}
-.estimate-box {
-    font-weight: 500;
-    border: 1px solid rgba(99, 102, 241, 0.1);
-    background: rgba(99, 102, 241, 0.03);
-    border-radius: 8px;
-}
-.estimate-box textarea {
-    text-align: center;
-    font-family: inherit;
-}
-.model-card-content {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    align-items: center;
-    gap: 15px;
-    font-size: 0.9rem;
-    text-align: center;
-    color: white !important;
-}
-.model-card-item {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    color: white !important;
-}
-.model-card-item strong {
-    color: white !important;
-}
-.model-card-item span {
-    color: white !important;
-}
-.model-card-link {
-    color: #60A5FA;
-    text-decoration: none;
-    font-weight: 500;
-    transition: color 0.2s;
-}
-.model-card-link:hover {
-    color: #22D3EE;
-    text-decoration: underline;
-}
-.warning-banner {
-    background-color: #fffbeb;
-    border: 1px solid #fef3c7;
-    border-radius: 12px;
-    padding: 16px;
-    margin-bottom: 20px;
-}
-.warning-banner-title {
-    color: #92400e;
-    font-weight: 700;
-    font-size: 1.1rem;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 12px;
-}
-.warning-banner-grid {
-    display: flex;
-    gap: 15px;
-    flex-wrap: wrap;
-}
-.warning-banner-item {
-    flex: 1;
-    min-width: 240px;
-    background: #fef3c7;
-    padding: 12px;
-    border-radius: 8px;
-    border: 1px solid #fde68a;
-}
-.warning-banner-item strong {
-    color: #b45309;
-    display: block;
-    margin-bottom: 4px;
-    font-size: 0.95rem;
-}
-.warning-banner-content {
-    color: #78350f;
-    font-size: 0.9rem;
-    line-height: 1.5;
-}
-.warning-banner-content b {
-    color: #451a03;
-    background: rgba(251, 191, 36, 0.2);
-    padding: 1px 4px;
-    border-radius: 4px;
-}
-.script-box textarea {
-    font-family: 'Inter', sans-serif;
-    line-height: 1.6;
-}
-.speaker-table {
-    margin-top: 10px;
-}
-"""
-
 EXAMPLES_LIST = [
     ["Về miền Tây không chỉ để ngắm nhìn sông nước hữu tình, mà còn để cảm nhận tấm chân tình của người dân nơi đây.", "Vĩnh (nam miền Nam)"],
     ["Hà Nội những ngày vào thu mang một vẻ đẹp trầm mặc và cổ kính đến lạ thường.", "Bình (nam miền Bắc)"],
 ]
-
-
-# Favicon (Parrot Emoji)
-head_html = """
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦜</text></svg>">
-"""
 
 with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo:
     # Session ID for cancellation tracking
@@ -1696,13 +1459,6 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
         # --- CONFIGURATION ---
         with gr.Group():
             with gr.Row():
-                # --- DEFAULT VALUES ---
-                DEFAULT_TEXT_GPU = "Hà Nội, trái tim của Việt Nam, là một thành phố ngàn năm văn hiến với bề dày lịch sử và văn hóa độc đáo. Bước chân trên những con phố cổ kính quanh Hồ Hoàn Kiếm, du khách như được du hành ngược thời gian, chiêm ngưỡng kiến trúc Pháp cổ điển hòa quyện với nét kiến trúc truyền thống Việt Nam. Mỗi con phố trong khu phố cổ mang một tên gọi đặc trưng, phản ánh nghề thủ công truyền thống từng thịnh hành nơi đây như phố Hàng Bạc, Hàng Đào, Hàng Mã. Ẩm thực Hà Nội cũng là một điểm nhấn đặc biệt, từ tô phở nóng hổi buổi sáng, bún chả thơm lừng trưa hè, đến chè Thái ngọt ngào chiều thu. Những món ăn dân dã này đã trở thành biểu tượng của văn hóa ẩm thực Việt, được cả thế giới yêu mến. Người Hà Nội nổi tiếng với tính cách hiền hòa, lịch thiệp nhưng cũng rất cầu toàn trong từng chi tiết nhỏ, từ cách pha trà sen cho đến cách chọn hoa sen tây để thưởng trà."
-                DEFAULT_TEXT_TURBO = (
-                    "Trước đây, hệ thống điện chủ yếu sử dụng direct current, nhưng Tesla đã chứng minh rằng alternating current is more efficient for long-distance transmission. Nhờ đó, điện có thể được truyền đi xa hơn với ít tổn thất năng lượng hơn. Đây là một bước tiến cực kỳ quan trọng trong ngành điện.\n\n"
-                    "Một trong những phát minh nổi tiếng của ông là Tesla coil, một thiết bị có thể tạo ra điện áp rất cao và những tia sét nhân tạo. This device is still used today in demonstrations và trong một số ứng dụng nghiên cứu. Khi nhìn thấy những tia điện này, nhiều người cảm thấy vừa ấn tượng vừa hơi đáng sợ."
-                )
-
                 # --- BACKBONE & CODEC DEFAULT LOGIC ---
                 if "VieNeu-TTS-v2 (GPU)" in BACKBONE_CONFIGS:
                     default_backbone = "VieNeu-TTS-v2 (GPU)"
@@ -1972,20 +1728,6 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                     )
                 gr.Markdown("<div style='text-align: center; color: #64748b; font-size: 0.8rem;'>🔒 Audio được đóng dấu bản quyền ẩn (Watermarker) để bảo mật và định danh AI.</div>")
         
-        # # --- EVENT HANDLERS ---
-        # def update_info(backbone: str) -> str:
-        #     return f"Streaming: {'✅' if BACKBONE_CONFIGS[backbone]['supports_streaming'] else '❌'}"
-        
-        # backbone_select.change(update_info, backbone_select, model_status)
-        
-        # Handler to show/hide Voice Cloning tab
-        def on_codec_change(codec: str, current_mode: str):
-            is_onnx = "onnx" in codec.lower()
-            # If switching to ONNX and we are on custom mode, switch back to preset
-            if is_onnx and current_mode == "custom_mode":
-                return gr.update(visible=False), gr.update(selected="preset_mode"), "preset_mode"
-            return gr.update(visible=not is_onnx), gr.update(), current_mode
-        
         codec_select.change(
             on_codec_change, 
             inputs=[codec_select, current_mode_state], 
@@ -1996,20 +1738,6 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
         tab_preset.select(lambda: "preset_mode", outputs=current_mode_state)
         tab_custom.select(lambda: "custom_mode", outputs=current_mode_state)
         
-        def validate_audio_duration(audio_path):
-            if not audio_path:
-                return gr.update(visible=False)
-            try:
-                info = sf.info(audio_path)
-                if info.duration > 5.1:
-                    return gr.update(
-                        value=f"⚠️ **Cảnh báo:** Audio mẫu hiện tại dài {info.duration:.1f} giây. Để có kết quả clone giọng tối ưu, bạn nên sử dụng đoạn audio có độ dài lý tưởng từ **3 đến 5 giây**.",
-                        visible=True
-                    )
-            except Exception:
-                pass
-            return gr.update(visible=False)
-
         custom_audio.change(validate_audio_duration, inputs=[custom_audio], outputs=[cloning_warning_msg])
         
         # --- Custom Model Event Handlers ---
@@ -2065,26 +1793,6 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             ]
         )
         
-        def on_custom_id_change(model_id):
-            # Auto detect LoRA and base model
-            if model_id and "lora" in model_id.lower():
-                # Detect base model
-                if "0.3" in model_id:
-                    base_model = "VieNeu-TTS-0.3B (GPU)"
-                else:
-                    base_model = "VieNeu-TTS (GPU)"
-                
-                return (
-                    gr.update(visible=True, value=base_model),
-                    gr.update(), gr.update()
-                )
-            
-            return (
-                gr.update(visible=False),
-                gr.update(),
-                gr.update()
-            )
-            
         custom_backbone_model_id.change(
             on_custom_id_change,
             inputs=[custom_backbone_model_id],
