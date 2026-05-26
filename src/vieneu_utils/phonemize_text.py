@@ -3,8 +3,10 @@ Phonemization module for VieNeu-TTS.
 Delegates all normalization and G2P logic to the sea-g2p library,
 which provides a unified, tested, and maintained Vietnamese G2P pipeline.
 """
+
 import functools
 import logging
+from typing import Optional
 from sea_g2p import SEAPipeline, G2P, Normalizer
 
 logger = logging.getLogger("Vieneu.Phonemizer")
@@ -99,6 +101,55 @@ def phonemize_with_dict(
     if skip_normalize:
         return _get_g2p().phonemize_batch([text])[0]
     return _phonemize_cached(text)
+
+
+def phonemize_to_chunks(
+    text: str,
+    max_chars: int = 256,
+    min_chunk_size: int = 10,
+    source_max_chars: Optional[int] = None,
+    skip_normalize: bool = False,
+    phoneme_dict: dict = None,
+):
+    """
+    Convert long raw text into bounded phoneme chunks.
+
+    Some dependencies in the normalization/tokenization stack use Rust regex
+    engines with backtracking limits. Split before those stages so DOCX-sized
+    inputs are never passed to a single regex operation.
+    """
+    from vieneu_utils.core_utils import split_text_into_chunks, split_into_chunks_v2
+
+    if not text:
+        return []
+
+    source_limit = source_max_chars or max_chars
+    raw_chunks = split_text_into_chunks(text, max_chars=source_limit)
+    if not raw_chunks:
+        return []
+
+    if skip_normalize:
+        normalized_chunks = raw_chunks
+    else:
+        normalizer = _get_normalizer()
+        normalized_chunks = [normalizer.normalize(chunk) for chunk in raw_chunks]
+
+    phonemes = phonemize_batch(
+        normalized_chunks,
+        skip_normalize=True,
+        phoneme_dict=phoneme_dict,
+    )
+
+    phone_chunks = []
+    for chunk_phonemes in phonemes:
+        phone_chunks.extend(
+            split_into_chunks_v2(
+                chunk_phonemes,
+                max_chunk_size=max_chars,
+                min_chunk_size=min_chunk_size,
+            )
+        )
+    return phone_chunks
 
 
 # ---------------------------------------------------------------------------
