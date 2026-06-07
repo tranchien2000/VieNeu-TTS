@@ -74,6 +74,8 @@ filtered_backbones["VieNeu-TTS-v3-Turbo (Thử nghiệm)"] = {
     "description": "🆕 v3 Turbo (early access) — 48kHz. Giọng mặc định dùng speaker token (ổn định hơn); Voice Cloning clone từ audio mẫu. Hỗ trợ tag cảm xúc [cười]/[hắng giọng]/[thở dài] (thử nghiệm). Bản dùng thử trước; v3 đầy đủ sẽ ra mắt trong vài tuần tới."
 }
 
+# GPU-only extras. v3 Turbo above is the default for BOTH CPU (ONNX) and GPU (PyTorch).
+# CPU machines get ONLY v3 Turbo (the v2/v1 GGUF CPU builds were removed).
 if HAS_GPU:
     filtered_backbones["VieNeu-TTS-v2 (GPU)"] = {
         "repo": "pnnbao-ump/VieNeu-TTS-v2",
@@ -85,24 +87,6 @@ if HAS_GPU:
         "supports_streaming": False,
         "description": "VieNeu-TTS Version 1 - ổn định, production-ready"
     }
-    filtered_backbones["VieNeu-TTS-0.3B-ngoc-huyen (GPU)"] = {
-        "repo": "pnnbao-ump/VieNeu-TTS-0.3B-ngoc-huyen",
-        "supports_streaming": False,
-        "description": "VieNeu-TTS-0.3B - Ngọc Huyền"
-    }
-
-filtered_backbones["VieNeu-TTS-v2 (CPU)"] = {
-    "repo": "pnnbao-ump/VieNeu-TTS-v2",
-    "gguf_filename": "VieNeu-TTS-v2-Q4-K-M.gguf",
-    "supports_streaming": False,
-    "description": "VieNeu-TTS-v2 (CPU) - GGUF Q4_K_M, hỗ trợ song ngữ & podcast"
-}
-
-filtered_backbones["VieNeu-TTS-v2-Turbo (CPU)"] = {
-    "repo": "pnnbao-ump/VieNeu-TTS-v2-Turbo-GGUF",
-    "supports_streaming": True,
-    "description": "VieNeu-TTS-v2-Turbo - Siêu nhanh, tối ưu tuyệt đối cho CPU & Thiết bị yếu"
-}
 
 BACKBONE_CONFIGS = filtered_backbones
 
@@ -559,9 +543,10 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
             print(f"   Codec: {codec_config['repo']} on {codec_device}")
             
             if "v3-Turbo" in backbone_choice:
-                # VieNeu v3 Turbo (PyTorch). Uses its own MOSS codec internally and
-                # clones from reference audio — no external decoder/codec needed.
-                print("   🆕 Mode: v3 Turbo (PyTorch)")
+                # VieNeu v3 Turbo. CPU → ONNX Runtime; GPU → PyTorch. The backend is
+                # auto-selected from the device inside Vieneu(mode="v3turbo"); ONNX
+                # graphs are fetched from the model repo's onnx/ subfolder.
+                print("   🆕 Mode: v3 Turbo (CPU=ONNX / GPU=PyTorch)")
                 # Map the app's device string to what the v3 engine understands.
                 v3_device = "cpu" if str(backbone_device).lower() == "cpu" else "auto"
                 tts = Vieneu(
@@ -907,7 +892,7 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                         reqs = [{"phonemes": phonemize_text_with_emotions(c), "ref_codes": ref_codes,
                                  "voice_token_id": v3_voice_token_id} for c in group]
                         v3_wavs.extend(tts._v3_batch_engine.generate_batch(
-                            reqs, temperature=temperature, max_new_frames=500))
+                            reqs, temperature=temperature, max_new_frames=300))
                     wav = join_audio_chunks(v3_wavs, sr=sr_v3, silence_p=0.15)
                 else:
                     if mode_tab == "preset_mode":
@@ -1308,6 +1293,39 @@ def _synthesize_conversation_v3(lines, mapping, temperature, max_chars_chunk, si
                 rc = rc.cpu().numpy()
         return np.asarray(rc), vd.get('reserved_id')
 
+    # CPU (ONNX) has no batched engine → run sequentially, one turn at a time.
+    dev = getattr(getattr(tts, "engine", None), "device", None)
+    is_cuda = dev is not None and getattr(dev, "type", None) == "cuda"
+    if not is_cuda:
+        all_wavs = []
+        for li, line in enumerate(lines):
+            if _STOP_EVENT.is_set():
+                yield None, "⏹️ Đã dừng hội thoại."
+                return
+            cfg = mapping.get(line['speaker'].lower())
+            v_id = (cfg or {}).get('voice') or tts._default_voice
+            yield None, f"⏳ [{li+1}/{len(lines)}] {line['speaker']}: {line['text'][:30]}..."
+            try:
+                wav = tts.infer(line['text'], voice=v_id, temperature=temperature,
+                                max_chars=max_chars_chunk)
+            except Exception as e:
+                print(f"❌ Lỗi câu {li+1}: {e}")
+                continue
+            if wav is not None and len(wav):
+                all_wavs.append(wav)
+                if li < len(lines) - 1 and silence_duration > 0:
+                    all_wavs.append(np.zeros(int(sr * silence_duration), dtype=np.float32))
+        if not all_wavs:
+            yield None, "❌ Không thể tạo được âm thanh nào!"
+            return
+        yield None, "🪄 Đang ghép nối âm thanh..."
+        final_wav = np.concatenate(all_wavs)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+            sf.write(tmp.name, final_wav, sr)
+            yield tmp.name, f"✅ Hoàn tất hội thoại! ({len(lines)} câu, {time.time()-t0:.1f}s, CPU tuần tự)"
+        cleanup_gpu_memory()
+        return
+
     voice_cache = {}
     reqs, req_line = [], []
     for li, line in enumerate(lines):
@@ -1338,7 +1356,7 @@ def _synthesize_conversation_v3(lines, mapping, temperature, max_chars_chunk, si
         group = reqs[i:i + BS]
         yield None, f"⚡ v3 Turbo hội thoại: lô {bi + 1}/{total_batches} ({len(group)} đoạn, batch 32)..."
         wavs_flat.extend(tts._v3_batch_engine.generate_batch(
-            group, temperature=temperature, max_new_frames=500))
+            group, temperature=temperature, max_new_frames=300))
 
     # Reassemble per turn (in order), then join turns with inter-turn silence.
     by_line = defaultdict(list)
@@ -1658,11 +1676,9 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
         with gr.Group():
             with gr.Row():
                 # --- BACKBONE & CODEC DEFAULT LOGIC ---
-                if "VieNeu-TTS-v2 (GPU)" in BACKBONE_CONFIGS:
-                    default_backbone = "VieNeu-TTS-v2 (GPU)"
-                elif "VieNeu-TTS-v2-Turbo (CPU)" in BACKBONE_CONFIGS:
-                    default_backbone = "VieNeu-TTS-v2-Turbo (CPU)"
-                else:
+                # v3 Turbo is the default for everyone (CPU via ONNX, GPU via PyTorch).
+                default_backbone = "VieNeu-TTS-v3-Turbo (Thử nghiệm)"
+                if default_backbone not in BACKBONE_CONFIGS:
                     default_backbone = list(BACKBONE_CONFIGS.keys())[0]
                 
                 # Default parameters based on backbone
@@ -1742,13 +1758,13 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                     <div class="warning-banner-item">
                         <strong>🐆 Hệ máy GPU</strong>
                         <div class="warning-banner-content">
-                            Chế độ podcast và song ngữ Anh Việt đã được hỗ trợ bắt đầu từ phiên bản <b>VieNeu-TTS-v2</b>, tuy nhiên quá trình kiểm thử vẫn đang tiếp tục, có thể sẽ xảy ra lỗi không mong muốn, nếu có lỗi các bạn hãy thông báo với chúng tôi tại: https://discord.com/invite/yJt8kzjzWZ. Trong trường hợp bạn cần sự ổn định hãy sử dụng <b>VieNeu-TTS (GPU)</b>. 
+                            <b>VieNeu-TTS-v3-Turbo (early access)</b> đã được phát hành để dùng thử trước, đã hỗ trợ các tag cảm xúc `[cười]` `[hắng giọng]` `[thở dài]`, tuy nhiên những tính năng này vẫn đang được thử nghiệm và chưa thực sự ổn định, có thể sẽ xảy ra lỗi không mong muốn, nếu có lỗi các bạn hãy thông báo với chúng tôi tại: https://discord.com/invite/yJt8kzjzWZ. Trong trường hợp bạn cần sự ổn định hãy sử dụng <b>VieNeu-TTS-v2 (GPU)</b>. 
                         </div>
                     </div>
                     <div class="warning-banner-item" style="background: #dcfce7; border-color: #86efac;">
                         <strong style="color: #15803d;">🐢 Hệ máy CPU</strong>
                         <div class="warning-banner-content" style="color: #166534;">
-                            Mặc định là <b>VieNeu-TTS-v2-Turbo (CPU)</b> để tốc độ tổng hợp nhanh nhất có thể, tuy nhiên có hạn chế về chất lượng âm thanh. Trong trường hợp bạn cần chất lượng tốt nhất hãy sử dụng <b>VieNeu-TTS-v2 (CPU)</b>.
+                            Mặc định là <b>VieNeu-TTS-v3-Turbo (CPU)</b> phiên bản ONNX - chất lượng sẽ không tốt bằng bản Pytorch chạy trên GPU - nhưng là đánh đổi để có tốc độ tổng hợp nhanh nhất có thể.
                         </div>
                     </div>
                 </div>

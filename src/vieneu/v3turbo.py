@@ -24,26 +24,54 @@ class V3TurboVieNeuTTS(BaseVieneuTTS):
 
     def __init__(
         self,
-        backbone_repo: str = "pnnbao-ump/VieNeu-TTS-v3-Turbo-Fixed-vi-emotion",
+        backbone_repo: str = "pnnbao-ump/VieNeu-TTS-v3-Turbo",
         moss_tokenizer: str = "OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano",
         device: str = "auto",
         dtype: str = "auto",
-        hf_token: Optional[str] = None,  # noqa: ARG002 (engine tự xử lý token HF)
+        backend: str = "auto",   # "auto" → ONNX on CPU, PyTorch on GPU; "onnx"|"pytorch" to force
+        onnx_repo: Optional[str] = None,  # HF repo holding onnx/ (default = backbone_repo)
+        onnx_dir: Optional[str] = None,   # local dir with the 4 onnx files (skips HF download)
+        hf_token: Optional[str] = None,
         **kwargs: Any,
     ):
         # KHÔNG truyền codec_repo → bỏ qua NeuCodec của base; v3 có codec MOSS riêng.
         super().__init__()
         self.sample_rate = 48_000  # v3 = 48 kHz (ghi đè 24 kHz của base)
 
-        from ._v3_turbo_engine import VieNeuTTSv3Turbo
-        logger.info(f"⏳ Loading VieNeu-TTS v3 Turbo (PyTorch) from: {backbone_repo} ...")
-        self.engine = VieNeuTTSv3Turbo(
-            checkpoint_path=backbone_repo,
-            moss_tokenizer_path=moss_tokenizer,
-            device=device,
-            dtype=dtype,
-        )
-        logger.info("✅ VieNeu-TTS v3 Turbo ready")
+        # Pick engine by device: CPU → torch-free ONNX engine (fast + light), GPU →
+        # PyTorch. Device is resolved WITHOUT hard-requiring torch, so a torch-free
+        # CPU install (onnxruntime only) still works.
+        if device in (None, "auto"):
+            try:
+                import torch
+                dev_type = "cuda" if torch.cuda.is_available() else "cpu"
+            except Exception:
+                dev_type = "cpu"
+        else:
+            dev_type = "cuda" if "cuda" in str(device).lower() else str(device).lower()
+        use_onnx = backend == "onnx" or (backend == "auto" and dev_type == "cpu")
+
+        if use_onnx:
+            from ._v3_turbo_engine.onnx_runtime_lite import OnnxV3LiteEngine
+            logger.info(f"⏳ Loading VieNeu-TTS v3 Turbo (ONNX/CPU, torch-free) from: {backbone_repo} ...")
+            self.engine = OnnxV3LiteEngine(
+                checkpoint_path=backbone_repo,
+                onnx_repo=onnx_repo,
+                onnx_dir=onnx_dir,
+                hf_token=hf_token,
+            )
+            self.backend = "onnx"
+        else:
+            from ._v3_turbo_engine import VieNeuTTSv3Turbo
+            logger.info(f"⏳ Loading VieNeu-TTS v3 Turbo (PyTorch) from: {backbone_repo} ...")
+            self.engine = VieNeuTTSv3Turbo(
+                checkpoint_path=backbone_repo,
+                moss_tokenizer_path=moss_tokenizer,
+                device=device,
+                dtype=dtype,
+            )
+            self.backend = "pytorch"
+        logger.info(f"✅ VieNeu-TTS v3 Turbo ready (backend={self.backend})")
 
         # Built-in default voices. The emotion checkpoint identifies each default
         # speaker by a reserved token (``reserved_id``, ids 13..42) plus that
@@ -147,7 +175,7 @@ class V3TurboVieNeuTTS(BaseVieneuTTS):
         temperature: float = 0.8,
         top_k: int = 25,
         top_p: float = 0.95,
-        max_new_frames: int = 500,
+        max_new_frames: int = 300,
         repetition_penalty: float = 1.2,
         max_chars: int = 256,
         silence_p: float = 0.15,
@@ -186,7 +214,7 @@ class V3TurboVieNeuTTS(BaseVieneuTTS):
         temperature: float = 0.8,
         top_k: int = 25,
         top_p: float = 0.95,
-        max_new_frames: int = 500,
+        max_new_frames: int = 300,
         repetition_penalty: float = 1.2,
         max_chars: int = 256,
         apply_watermark: bool = True,

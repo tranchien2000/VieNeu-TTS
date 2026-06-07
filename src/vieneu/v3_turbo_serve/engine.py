@@ -66,7 +66,7 @@ class V3TurboBatchEngine:
         top_k: int = 25,
         top_p: float = 0.95,
         repetition_penalty: float = 1.2,
-        max_new_frames: int = 500,
+        max_new_frames: int = 300,
         use_cudagraph: bool = False,
     ) -> List[np.ndarray]:
         """Generate a waveform for each request in one batched run.

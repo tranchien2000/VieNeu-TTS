@@ -1,12 +1,15 @@
 
 
-def Vieneu(mode="standard", **kwargs):
+def Vieneu(mode="v3turbo", **kwargs):
     """
     Factory function for VieNeu-TTS.
 
     Args:
-        mode: 'standard' (CPU/GPU-GGUF), 'fast' (GPU-LMDeploy), 'turbo'/'turbo_gpu',
-              'v3turbo' (PyTorch, VieNeu-TTS v3), 'remote' (API), 'xpu' (Intel GPU)
+        mode: 'v3turbo' (DEFAULT) — VieNeu-TTS v3 Turbo, 48 kHz. CPU runs torch-free
+              via ONNX Runtime; GPU uses PyTorch. Works with the minimal install.
+              Other modes need extras (``pip install vieneu[gpu]``):
+              'standard' (CPU/GPU-GGUF), 'fast' (GPU-LMDeploy), 'turbo'/'turbo_gpu',
+              'remote' (API), 'xpu' (Intel GPU).
         **kwargs: Arguments for chosen class
 
     Returns:
