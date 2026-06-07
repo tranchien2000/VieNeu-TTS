@@ -892,15 +892,41 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                             reqs, temperature=temperature, max_new_frames=300))
                     wav = join_audio_chunks(v3_wavs, sr=sr_v3, silence_p=0.15)
                 else:
-                    if mode_tab == "preset_mode":
-                        # Built-in default voice: drive the emotion path via the voice
-                        # name so v3turbo resolves the reserved token + fixed codes.
-                        wav = tts.infer(raw_text, voice=v_id,
-                                        temperature=temperature, max_chars=max_chars_chunk)
-                    else:
-                        # Voice cloning: emotion-tag path with the cloned ref codes.
-                        wav = tts.infer(raw_text, ref_codes=ref_codes,
-                                        temperature=temperature, max_chars=max_chars_chunk)
+                    # CPU (ONNX) hoặc GPU khi tắt batch: xử lý TUẦN TỰ từng đoạn.
+                    # Dùng infer_stream (yield 1 wav / đoạn) thay vì infer (chạy toàn
+                    # bộ trong 1 lần, im lặng) để báo cho người dùng đang xử lý đến
+                    # đoạn thứ mấy + ước tính thời gian còn lại — quan trọng trên CPU
+                    # vì mỗi đoạn có thể mất nhiều giây.
+                    total_v3 = len(v3_chunks)
+                    # preset_mode → emotion path qua tên voice (reserved token + fixed
+                    # codes); voice cloning → emotion-tag path với ref codes đã clone.
+                    stream_kwargs = ({"voice": v_id} if mode_tab == "preset_mode"
+                                     else {"ref_codes": ref_codes})
+                    v3_wavs = []
+                    chunk_durations = []
+                    last_t = time.time()
+                    yield None, f"⏳ v3 Turbo: Đang xử lý đoạn 1/{total_v3}..."
+                    for i, chunk_wav in enumerate(tts.infer_stream(
+                            raw_text, temperature=temperature,
+                            max_chars=max_chars_chunk, **stream_kwargs)):
+                        if _STOP_EVENT.is_set():
+                            yield None, "⏹️ Đã dừng tạo giọng nói."
+                            return
+                        now = time.time()
+                        chunk_durations.append(now - last_t)
+                        last_t = now
+                        if chunk_wav is not None and len(chunk_wav) > 0:
+                            v3_wavs.append(chunk_wav)
+                        done = i + 1
+                        if done < total_v3:
+                            avg = sum(chunk_durations) / len(chunk_durations)
+                            eta = avg * (total_v3 - done)
+                            yield None, (
+                                f"⏳ v3 Turbo: Đã xong {done}/{total_v3} đoạn "
+                                f"(ước tính còn lại: {_format_duration(eta)})... "
+                                f"đang xử lý đoạn {done + 1}/{total_v3}"
+                            )
+                    wav = join_audio_chunks(v3_wavs, sr=sr_v3, silence_p=0.15)
             except Exception as e:
                 yield None, f"❌ Lỗi tổng hợp (v3 Turbo): {str(e)}"
                 return
@@ -1270,7 +1296,9 @@ def _synthesize_conversation_v3(lines, mapping, temperature, max_chars_chunk, si
     from collections import defaultdict
     from vieneu_utils.core_utils import split_text_into_chunks, join_audio_chunks
     from vieneu_utils.phonemize_text import phonemize_text_with_emotions
-    from vieneu.v3_turbo_serve import V3TurboBatchEngine
+    # NOTE: KHÔNG import vieneu.v3_turbo_serve ở đây — module đó import torch ở cấp
+    # module, nên trên bản cài CPU/macOS không-torch (ONNX) sẽ lỗi "No module named
+    # 'torch'". Chỉ import bên trong nhánh CUDA bên dưới (nơi thực sự cần batch engine).
 
     sr = getattr(tts, "sample_rate", 48000)
     t0 = time.time()
@@ -1341,6 +1369,8 @@ def _synthesize_conversation_v3(lines, mapping, temperature, max_chars_chunk, si
         return
 
     if getattr(tts, "_v3_batch_engine", None) is None:
+        # Chỉ tới đây khi chạy trên CUDA → torch chắc chắn có sẵn.
+        from vieneu.v3_turbo_serve import V3TurboBatchEngine
         tts._v3_batch_engine = V3TurboBatchEngine(tts.engine)
 
     BS = 32

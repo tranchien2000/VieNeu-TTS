@@ -105,6 +105,12 @@ gpu = [
 dev = [
     "pytest",
     "pytest-asyncio",
+    # Test-only deps for the GPU/standard/xpu backend tests (NOT in the runtime
+    # install — `pip install vieneu` stays minimal/torch-free). CI installs the dev
+    # group, so these tests can import librosa/transformers/neucodec-based engines.
+    "librosa>=0.11.0",
+    "transformers",
+    "neucodec>=0.0.4",
 ]
 gpu = [
     "neucodec>=0.0.4",
