@@ -94,7 +94,7 @@ class VieNeuTTSv3Turbo:
 
     SAMPLE_RATE = 48000
 
-    def __init__(self, checkpoint_path: str='pnnbao-ump/VieNeu-TTS-v3-Turbo', tokenizer_path: Optional[str]=None, moss_tokenizer_path: str='OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano', device: str='auto', dtype: str='auto', compile_acoustic: bool=False):
+    def __init__(self, checkpoint_path: str='pnnbao-ump/VieNeu-TTS-v3-Turbo', tokenizer_path: Optional[str]=None, moss_tokenizer_path: str='OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano', device: str='auto', dtype: str='auto', compile_acoustic: bool=False, hf_token: Optional[str]=None):
         """Load the v3 Turbo checkpoint and the MOSS audio codec.
 
         Args:
@@ -110,11 +110,13 @@ class VieNeuTTSv3Turbo:
         self.dtype = self._resolve_dtype(dtype)
         from transformers import AutoTokenizer
         tok_path = tokenizer_path or checkpoint_path
-        self.tokenizer = AutoTokenizer.from_pretrained(tok_path, trust_remote_code=True)
-        self.config = VieNeuV3TurboConfig.from_pretrained(checkpoint_path)
-        self.model = load_v3_turbo_checkpoint(checkpoint_path, device=self.device, dtype=self.dtype).eval()
+        # token=None → anonymous download for public repos, while still honouring
+        # a token passed explicitly (or the HF_TOKEN env var) for gated/private ones.
+        self.tokenizer = AutoTokenizer.from_pretrained(tok_path, trust_remote_code=True, token=hf_token)
+        self.config = VieNeuV3TurboConfig.from_pretrained(checkpoint_path, token=hf_token)
+        self.model = load_v3_turbo_checkpoint(checkpoint_path, token=hf_token, device=self.device, dtype=self.dtype).eval()
         from transformers import AutoModel
-        self.audio_tokenizer = AutoModel.from_pretrained(moss_tokenizer_path, trust_remote_code=True).to(self.device).eval()
+        self.audio_tokenizer = AutoModel.from_pretrained(moss_tokenizer_path, trust_remote_code=True, token=hf_token).to(self.device).eval()
         self.default_emotion = '<|emotion_0|>'
         if compile_acoustic:
             # Compile the acoustic decoder's cached step (the inner-loop hot path).
