@@ -866,9 +866,6 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
             sr_v3 = getattr(tts, "sample_rate", 48000)
             try:
                 from vieneu_utils.phonemize_text import phonemize_text_with_emotions
-                from vieneu_utils.core_utils import (
-                    split_text_into_chunks, join_audio_chunks,
-                )
 
                 v3_chunks = split_text_into_chunks(raw_text, max_chars=max_chars_chunk) or [raw_text]
                 v3_bs = max(1, int(max_batch_size_run)) if use_batch else 1
