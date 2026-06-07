@@ -69,7 +69,7 @@ filtered_backbones = {}
 # NOTE: this hardcoded `filtered_backbones` dict OVERRIDES config.yaml's
 # backbone_configs (see the reassignment below), so the model list is edited here.
 filtered_backbones["VieNeu-TTS-v3-Turbo (Thử nghiệm)"] = {
-    "repo": "pnnbao-ump/VieNeu-TTS-v3-Turbo-Fixed-vi-emotion",
+    "repo": "pnnbao-ump/VieNeu-TTS-v3-Turbo",
     "supports_streaming": False,
     "description": "🆕 v3 Turbo (early access) — 48kHz. Giọng mặc định dùng speaker token (ổn định hơn); Voice Cloning clone từ audio mẫu. Hỗ trợ tag cảm xúc [cười]/[hắng giọng]/[thở dài] (thử nghiệm). Bản dùng thử trước; v3 đầy đủ sẽ ra mắt trong vài tuần tới."
 }
