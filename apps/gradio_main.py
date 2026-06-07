@@ -1726,6 +1726,11 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                     default_temp = 0.7
                     default_text = DEFAULT_TEXT_GPU
 
+                # v3 Turbo batches chunks through the serving engine → default 32.
+                # Must be set at creation: v3 is the default backbone, so the
+                # on_backbone_change handler (which also sets 32) never fires on load.
+                default_batch_size = 32 if "v3" in default_backbone.lower() else 4
+
                 backbone_select = gr.Dropdown(
                     list(BACKBONE_CONFIGS.keys()) + ["Custom Model"], 
                     value=default_backbone, 
@@ -1941,7 +1946,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                     max_batch_size_run = gr.Slider(
                         minimum=1,
                         maximum=32,
-                        value=4,
+                        value=default_batch_size,
                         step=1,
                         label="📊 Batch Size (Generation)",
                         info="Số lượng đoạn văn bản xử lý cùng lúc. Giá trị cao = nhanh hơn nhưng tốn VRAM hơn. Giảm xuống nếu gặp lỗi Out of Memory."
