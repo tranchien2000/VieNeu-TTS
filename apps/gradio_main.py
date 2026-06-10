@@ -22,7 +22,8 @@ import yaml
 import uuid
 from vieneu_utils.core_utils import split_text_into_chunks, join_audio_chunks, env_bool, get_silence_duration_v2
 from vieneu_utils.phonemize_text import phonemize_to_chunks
-from sea_g2p import Normalizer
+# PuncNormalizer = sea_g2p.Normalizer luôn bật punc_norm=True.
+from vieneu_utils.phonemize_text import PuncNormalizer as Normalizer
 import gc
 
 from apps.ui_utils import (

@@ -50,11 +50,31 @@ def _emotion_tag_token(tag: str) -> Optional[str]:
     return f"<|emotion_{k}|>" if k is not None else None
 
 # ---------------------------------------------------------------------------
+# Always-punc_norm normalizer wrapper
+# ---------------------------------------------------------------------------
+# VieNeu-TTS LUÔN bật punc_norm (sea-g2p >= 0.7.6): câu ngắn (<5 từ) ép dấu cuối
+# về ".", câu dài thiếu dấu kết thúc thì thêm ".". Dùng wrapper này thay cho
+# sea_g2p.Normalizer ở mọi nơi để không phải truyền punc_norm=True rải rác và để
+# bảo đảm hành vi "luôn luôn" kể cả ở các call-site tương lai.
+class PuncNormalizer:
+    """``sea_g2p.Normalizer`` với punc_norm mặc định True."""
+
+    def __init__(self, lang: str = "vi") -> None:
+        self._n = Normalizer(lang=lang)
+
+    def normalize(self, text, punc_norm: bool = True):
+        return self._n.normalize(text, punc_norm=punc_norm)
+
+    def normalize_batch(self, texts, punc_norm: bool = True):
+        return self._n.normalize_batch(texts, punc_norm=punc_norm)
+
+
+# ---------------------------------------------------------------------------
 # Shared singletons (instantiation is lazy-safe and thread-safe via GIL)
 # ---------------------------------------------------------------------------
 _pipeline: SEAPipeline = None
 _g2p: G2P = None
-_normalizer: Normalizer = None
+_normalizer: PuncNormalizer = None
 
 def _get_pipeline() -> SEAPipeline:
     global _pipeline
@@ -68,10 +88,10 @@ def _get_g2p() -> G2P:
         _g2p = G2P(lang="vi")
     return _g2p
 
-def _get_normalizer() -> Normalizer:
+def _get_normalizer() -> PuncNormalizer:
     global _normalizer
     if _normalizer is None:
-        _normalizer = Normalizer()
+        _normalizer = PuncNormalizer()
     return _normalizer
 
 # ---------------------------------------------------------------------------
@@ -79,14 +99,37 @@ def _get_normalizer() -> Normalizer:
 # ---------------------------------------------------------------------------
 
 @functools.lru_cache(maxsize=1024)
-def _phonemize_cached(text: str) -> str:
-    """Cached single-text phonemization (normalize + G2P)."""
-    return _get_pipeline().run(text)
+def _phonemize_cached(text: str, punc_norm: bool = True) -> str:
+    """Cached single-text phonemization (normalize + G2P), punc_norm bật mặc định."""
+    return _get_pipeline().run(text, punc_norm=punc_norm)
 
 
 def phonemize_text(text: str) -> str:
     """Normalize and phonemize a single Vietnamese/bilingual text string."""
     return _phonemize_cached(text)
+
+
+# Dấu kết thúc câu hợp lệ ở tầng phoneme.
+_TERMINAL_PUNCT = ".!?"
+# Dấu ngắt yếu ở cuối cần thay bằng "." (mirror punc_norm cho câu).
+_WEAK_TRAILING = ",;:… \t"
+
+
+def _ensure_terminal_punct(phones: str) -> str:
+    """Đảm bảo chuỗi phoneme của MỘT chunk kết thúc bằng một dấu câu hợp lệ.
+
+    Dùng cho đường emotion: các fragment được phonemize với punc_norm=False để
+    không chèn "." vào giữa câu, nên cần chốt dấu cuối ở mức cả chunk. Nếu chunk
+    kết thúc bằng emotion token (``...|>``) thì thành ``...|>.`` — khớp format
+    training ("<|emotion_k|>."). Dấu ngắt yếu cuối (",;:…") được thay bằng ".".
+    """
+    s = phones.rstrip()
+    if not s:
+        return s
+    if s[-1] in _TERMINAL_PUNCT:
+        return s
+    s = s.rstrip(_WEAK_TRAILING)
+    return (s + ".") if s else phones
 
 
 def phonemize_text_with_emotions(text: str) -> str:
@@ -107,7 +150,10 @@ def phonemize_text_with_emotions(text: str) -> str:
         if token is not None:
             out = (out + " " + token) if out else token
             continue
-        ph = _phonemize_cached(part) if part and part.strip() else ""
+        # Fragment giữa các emotion token: KHÔNG ép punc_norm để tránh chèn "."
+        # vào giữa câu — giữ đúng spacing/format khớp dữ liệu train của checkpoint
+        # emotion. (Toàn chunk đã được split sentence-aware trước đó.)
+        ph = _phonemize_cached(part, punc_norm=False) if part and part.strip() else ""
         if not ph:
             continue
         if not out:
@@ -116,7 +162,8 @@ def phonemize_text_with_emotions(text: str) -> str:
             out += ph          # punctuation attaches to the previous token/phones
         else:
             out += " " + ph
-    return out
+    # Chốt dấu cuối ở mức cả chunk (fragment bên trong đã punc_norm=False).
+    return _ensure_terminal_punct(out)
 
 
 def phonemize_batch(
@@ -140,14 +187,16 @@ def phonemize_batch(
 
     g2p = _get_g2p()
 
+    # punc_norm LUÔN bật ở tầng G2P: kể cả text đã normalize sẵn (skip_normalize)
+    # hay thiếu dấu câu, chuỗi phones vẫn kết thúc bằng "." hợp lệ.
     if skip_normalize:
         # Texts are pre-normalized — only run the G2P layer
-        return g2p.phonemize_batch(texts, phoneme_dict=phoneme_dict)
+        return g2p.phonemize_batch(texts, punc_norm=True, phoneme_dict=phoneme_dict)
     else:
-        # Full pipeline: normalize then G2P
+        # Full pipeline: normalize (punc_norm) then G2P (punc_norm)
         normalizer = _get_normalizer()
         normalized = [normalizer.normalize(t) for t in texts]
-        return g2p.phonemize_batch(normalized, phoneme_dict=phoneme_dict)
+        return g2p.phonemize_batch(normalized, punc_norm=True, phoneme_dict=phoneme_dict)
 
 
 def phonemize_with_dict(
@@ -167,8 +216,34 @@ def phonemize_with_dict(
             [text], skip_normalize=skip_normalize, phoneme_dict=phoneme_dict
         )[0]
     if skip_normalize:
-        return _get_g2p().phonemize_batch([text])[0]
+        # punc_norm vẫn bật ở tầng G2P dù text đã normalize sẵn.
+        return _get_g2p().phonemize_batch([text], punc_norm=True)[0]
     return _phonemize_cached(text)
+
+
+def normalize_to_chunks(
+    text: str,
+    max_chars: int = 256,
+    skip_normalize: bool = False,
+) -> list[str]:
+    """Split raw text into chunks FIRST, then normalize each chunk (punc_norm=True).
+
+    Tách chunk TRƯỚC khi normalize để mỗi chunk là một đơn vị độc lập và — nhờ
+    punc_norm — luôn kết thúc bằng dấu câu hợp lệ (câu ngắn ép ".", câu dài thiếu
+    dấu thì thêm "."). Nếu normalize cả câu rồi mới cắt thì một chunk có thể kết
+    thúc lửng hoặc bằng dấu ",". Trả về list text đã chuẩn hóa.
+    """
+    from vieneu_utils.core_utils import split_text_into_chunks
+
+    if not text:
+        return []
+
+    raw_chunks = split_text_into_chunks(text, max_chars=max_chars)
+    if skip_normalize:
+        return raw_chunks
+
+    normalizer = _get_normalizer()
+    return [normalizer.normalize(chunk, punc_norm=True) for chunk in raw_chunks]
 
 
 def phonemize_to_chunks(
@@ -185,6 +260,10 @@ def phonemize_to_chunks(
     Some dependencies in the normalization/tokenization stack use Rust regex
     engines with backtracking limits. Split before those stages so DOCX-sized
     inputs are never passed to a single regex operation.
+
+    Thứ tự: split raw -> normalize từng chunk (punc_norm=True) -> phonemize
+    (punc_norm=True) -> split lại ở tầng phoneme. Mỗi chunk vì thế luôn có dấu
+    câu kết thúc hợp lệ.
     """
     from vieneu_utils.core_utils import split_text_into_chunks, split_into_chunks_v2
 
@@ -200,7 +279,7 @@ def phonemize_to_chunks(
         normalized_chunks = raw_chunks
     else:
         normalizer = _get_normalizer()
-        normalized_chunks = [normalizer.normalize(chunk) for chunk in raw_chunks]
+        normalized_chunks = [normalizer.normalize(chunk, punc_norm=True) for chunk in raw_chunks]
 
     phonemes = phonemize_batch(
         normalized_chunks,

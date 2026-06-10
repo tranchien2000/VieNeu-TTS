@@ -23,7 +23,8 @@ import gc
 
 from vieneu.core_xpu import XPUVieNeuTTS
 from vieneu_utils.core_utils import split_text_into_chunks, join_audio_chunks, env_bool
-from sea_g2p import Normalizer
+# PuncNormalizer = sea_g2p.Normalizer luôn bật punc_norm=True.
+from vieneu_utils.phonemize_text import PuncNormalizer as Normalizer
 
 from apps.ui_utils import (
     _format_duration,
@@ -337,8 +338,11 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
         yield None, f"❌ Lỗi xử lý Reference Audio: {str(e)}"
         return
     
-    normalized_text = _text_normalizer.normalize(raw_text)
-    text_chunks = split_text_into_chunks(normalized_text, max_chars=max_chars_chunk)
+    # Split TRƯỚC rồi normalize (punc_norm=True) từng chunk độc lập.
+    text_chunks = []
+    for raw_chunk in split_text_into_chunks(raw_text, max_chars=max_chars_chunk):
+        normalized_chunk = _text_normalizer.normalize(raw_chunk)
+        text_chunks.extend(split_text_into_chunks(normalized_chunk, max_chars=max_chars_chunk))
     total_chunks = len(text_chunks)
     
     if not text_chunks:

@@ -5,7 +5,8 @@ import json
 import numpy as np
 import logging
 from huggingface_hub import hf_hub_download
-from sea_g2p import Normalizer
+# PuncNormalizer = sea_g2p.Normalizer luôn bật punc_norm=True (xem phonemize_text).
+from vieneu_utils.phonemize_text import PuncNormalizer as Normalizer
 
 # Configure logging
 logger = logging.getLogger("Vieneu")
