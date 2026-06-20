@@ -11,6 +11,28 @@ from vieneu_utils.phonemize_text import PuncNormalizer as Normalizer
 # Configure logging
 logger = logging.getLogger("Vieneu")
 
+
+def _load_ref_mono(ref_audio_path: Union[str, Path], target_sr: int) -> np.ndarray:
+    """Load a reference clip as mono float32 resampled to ``target_sr``.
+
+    Prefers ``librosa`` when present, but falls back to ``soundfile`` + ``soxr``
+    (both core deps) so voice cloning works without the optional ``[gpu]`` extra
+    that ships librosa.
+    """
+    try:
+        import librosa
+        wav, _ = librosa.load(ref_audio_path, sr=target_sr, mono=True)
+        return wav
+    except ImportError:
+        import soundfile as sf
+        import soxr
+        wav, sr = sf.read(str(ref_audio_path), dtype="float32", always_2d=False)
+        if wav.ndim > 1:  # downmix to mono
+            wav = wav.mean(axis=1)
+        if sr != target_sr:
+            wav = soxr.resample(wav, sr, target_sr)
+        return np.ascontiguousarray(wav, dtype=np.float32)
+
 class BaseVieneuTTS(ABC):
     """
     Abstract base class for VieNeu-TTS implementations.
@@ -264,9 +286,8 @@ class BaseVieneuTTS(ABC):
         Returns:
             Union[np.ndarray, torch.Tensor]: Encoded codes.
         """
-        import librosa
-        wav, _ = librosa.load(ref_audio_path, sr=16000, mono=True)
-        
+        wav = _load_ref_mono(ref_audio_path, target_sr=16000)
+
         # If we have an ONNX encoder or specialized turbo encoder, handle it here
         # For now, default backends still use torch
         try:

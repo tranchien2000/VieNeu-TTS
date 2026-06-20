@@ -146,6 +146,16 @@ def get_available_devices() -> list[str]:
 
     return devices
 
+def _supports_cloning(backbone_choice: str) -> bool:
+    """Voice Cloning availability by model.
+
+    v3+ clones directly from a sample audio; VieNeu-TTS-v2 (GPU) clones from
+    audio plus a reference transcript. v1 and the CPU/Turbo builds stay
+    preset-only.
+    """
+    c = (backbone_choice or "").lower()
+    return "v3" in c or c == "vieneu-tts-v2 (gpu)"
+
 def get_model_status_message() -> str:
     """Reconstruct status message from global state"""
     global model_loaded, tts, using_lmdeploy, current_backbone, current_codec
@@ -697,7 +707,7 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
             
             # Show Standard Tabs
             tab_p = gr.update(visible=True)
-            tab_c = gr.update(visible=True)
+            tab_c = gr.update(visible=_supports_cloning(backbone_choice))
             tab_sel = gr.update(selected="preset_mode")
             mode_state = "preset_mode"
         else:
@@ -708,7 +718,7 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
             
             # Show Preset Tab (to see message) and Custom Tab
             tab_p = gr.update(visible=True)
-            tab_c = gr.update(visible=True)
+            tab_c = gr.update(visible=_supports_cloning(backbone_choice))
             tab_sel = gr.update(selected="preset_mode")
             mode_state = "preset_mode"
 
@@ -1838,9 +1848,9 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                             # default and toggled on by on_backbone_change when a v3
                             # model is selected.
                             with gr.TabItem("🦜 Voice Cloning", id="custom_mode", visible=False) as tab_custom:
-                                gr.Markdown(
-                                    "ℹ️ **Voice Cloning chỉ hỗ trợ từ VieNeu-TTS v3 trở lên.** "
-                                    "Các phiên bản v1/v2 không hỗ trợ clone — hãy dùng giọng mẫu ở tab **Preset**."
+                                clone_info_md = gr.Markdown(
+                                    "ℹ️ **Voice Cloning (VieNeu-TTS v3).** Chỉ cần tải lên audio mẫu "
+                                    "3–5 giây; v3 clone trực tiếp từ audio, không cần nhập nội dung."
                                 )
                                 with gr.Group(visible=True) as cloning_elements_group:
                                     custom_audio = gr.Audio(label="Audio giọng mẫu (3-5 giây) (.wav)", type="filepath")
@@ -2013,7 +2023,11 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
 
         def on_backbone_change(choice):
             is_custom = (choice == "Custom Model")
-            is_v3 = "v3" in (choice or "").lower()  # voice cloning is v3+ only
+            is_v3 = "v3" in (choice or "").lower()
+            is_v2_gpu = (choice == "VieNeu-TTS-v2 (GPU)")
+            # Voice Cloning: v3 clones from audio only; v2 (GPU) clones from
+            # audio + a reference transcript. Both expose the cloning tab.
+            clone_ok = is_v3 or is_v2_gpu
             print(f"   🔄 Backbone changed to: {choice}")
             
             # 1. Device logic
@@ -2045,17 +2059,32 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                 codec_update = gr.update(value="NeuCodec (Distill)", interactive=False)
                 text_update = gr.update(value=DEFAULT_TEXT_GPU)
                 temp_update = gr.update(value=0.7)
-                
+
+            # Reference-transcript box + info text differ between v2 and v3 clone.
+            if is_v2_gpu:
+                clone_info_update = gr.update(value=(
+                    "ℹ️ **Voice Cloning (VieNeu-TTS v2).** Tải lên audio mẫu 3–5 giây "
+                    "và **nhập đúng nội dung** của audio đó (kể cả dấu câu) — v2 cần "
+                    "reference transcript để clone giọng."
+                ))
+            else:
+                clone_info_update = gr.update(value=(
+                    "ℹ️ **Voice Cloning (VieNeu-TTS v3).** Chỉ cần tải lên audio mẫu "
+                    "3–5 giây; v3 clone trực tiếp từ audio, không cần nhập nội dung."
+                ))
+
             return (
                 gr.update(visible=is_custom),
                 codec_update,
                 text_update,
                 temp_update,
                 gr.update(choices=dev_choices, value=initial_dev),
-                gr.update(visible=is_v3),   # cloning_elements_group
-                gr.update(visible=is_v3),   # tab_custom — clone tab only on v3+
+                gr.update(visible=clone_ok),   # cloning_elements_group
+                gr.update(visible=clone_ok),   # tab_custom — clone tab (v3 + v2 GPU)
                 gr.update(value=32 if is_v3 else 4),  # max_batch_size_run — v3 batches chunks
                 gr.update(visible=not is_v3),  # use_lmdeploy_cb — irrelevant for v3 (PyTorch, no LMDeploy)
+                gr.update(visible=is_v2_gpu),  # custom_text — only v2 needs a reference transcript
+                clone_info_update,             # clone_info_md
             )
 
         backbone_select.change(
@@ -2071,6 +2100,8 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                 tab_custom,
                 max_batch_size_run,
                 use_lmdeploy_cb,
+                custom_text,
+                clone_info_md,
             ]
         )
         
