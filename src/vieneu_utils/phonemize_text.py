@@ -248,23 +248,38 @@ def normalize_to_chunks(
     ]
 
 
-def chunk_phonemes(phonemes: str, max_chars: int = 256) -> list[str]:
-    """Chia chuỗi phoneme (đã normalize + G2P, giữ inline cues) thành các chunk
-    <= ``max_chars`` bằng CÁCH CHIA THƯỜNG (gộp câu tham lam, không vụn từng câu
-    như ``split_into_chunks_v2``). Mỗi chunk được chốt dấu câu kết thúc hợp lệ
-    (``.`` ``!`` ``?``) — kể cả khi một câu quá dài bị cắt theo cụm/từ.
+def normalize_to_chunks_v3(text: str, max_chars: int = 256) -> list[str]:
+    """Chia chunk cho đường v3 GIỐNG HỆT v2-gpu: cắt theo độ dài TEXT ĐÃ normalize.
 
-    Dùng cho các đường phoneme-level (v3 Turbo, inline emotion) để chunk vừa
-    không phình quá giới hạn vừa luôn kết thúc bằng dấu câu.
+    Đường v3 trước đây cắt ở tầng PHONEME (``chunk_phonemes``), mà phoneme dài hơn
+    text ~1.2-1.4x nên cùng ``max_chars`` lại cắt vụn hơn v2-gpu. Hàm này cắt theo
+    text-length như ``normalize_to_chunks`` (v2-gpu) để số chunk khớp nhau, ĐỒNG
+    THỜI giữ inline emotion cue (``[cười]``/``<|emotion_k|>`` -> ``<|emotion_k|>``)
+    mà ``normalize_to_chunks`` thường sẽ nuốt mất (dấu ``[...]`` bị xoá khi normalize).
+
+    Trả về list TEXT chunk (mỗi chunk có thể chứa ``<|emotion_k|>``); caller
+    phonemize từng chunk bằng :func:`phonemize_text_with_emotions`.
     """
     from vieneu_utils.core_utils import split_text_into_chunks
 
-    if not phonemes:
+    if not text:
         return []
-    return [
-        punc_norm(c)
-        for c in split_text_into_chunks(phonemes, max_chars=max_chars)
-    ]
+    # Không có emotion cue -> dùng thẳng đường v2-gpu (kết quả giống hệt).
+    if "[" not in text and "<|emotion_" not in text:
+        return normalize_to_chunks(text, max_chars=max_chars)
+
+    # Có cue: normalize từng đoạn text giữa các cue, chèn lại token cảm xúc, rồi
+    # cắt theo text-length (token <|emotion_k|> được splitter giữ nguyên là 1 từ).
+    normalizer = _get_normalizer()
+    rebuilt = []
+    for i, part in enumerate(_EMOTION_SPLIT_RE.split(text)):
+        if i % 2 == 1:                       # emotion tag
+            tok = _emotion_tag_token(part)
+            rebuilt.append(tok if tok is not None else part)
+        elif part.strip():                   # đoạn text: normalize, giữ dấu (không ép câu)
+            rebuilt.append(normalizer.normalize(part, punc_norm=False))
+    normalized = " ".join(p for p in rebuilt if p)
+    return [punc_norm(c) for c in split_text_into_chunks(normalized, max_chars=max_chars)]
 
 
 def phonemize_to_chunks(

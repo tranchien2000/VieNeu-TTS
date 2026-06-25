@@ -13,7 +13,7 @@ from typing import Any, Generator, List, Optional, Union
 import numpy as np
 
 from .base import BaseVieneuTTS
-from vieneu_utils.phonemize_text import phonemize_text_with_emotions, chunk_phonemes
+from vieneu_utils.phonemize_text import phonemize_text_with_emotions, normalize_to_chunks_v3
 from vieneu_utils.core_utils import join_audio_chunks
 
 logger = logging.getLogger("Vieneu.V3Turbo")
@@ -186,16 +186,15 @@ class V3TurboVieNeuTTS(BaseVieneuTTS):
     ) -> np.ndarray:
         ref_codes, voice_token_id = self._resolve_v3_ref(voice, ref_audio, ref_codes)
 
-        # Chia chunk SAU normalize: phonemize CẢ văn bản trước (normalize + G2P +
-        # giữ inline cues), rồi cắt ở tầng PHONEME bằng cách chia thường (gộp câu
-        # tham lam) — mỗi chunk luôn kết thúc bằng dấu câu (. ! ?).
-        phonemes_full = phonemize_text_with_emotions(text)  # SEAPipeline + inline cues
-        chunks = chunk_phonemes(phonemes_full, max_chars=max_chars)
+        # Chia chunk theo TEXT đã normalize (giống v2-gpu, không vụn như cắt ở
+        # tầng phoneme), giữ inline cues, rồi phonemize TỪNG chunk.
+        chunks = normalize_to_chunks_v3(text, max_chars=max_chars)
         if not chunks:
             return np.array([], dtype=np.float32)
 
         all_wavs: List[np.ndarray] = []
-        for ph in chunks:
+        for chunk in chunks:
+            ph = phonemize_text_with_emotions(chunk)
             wav = self.engine.infer(
                 text="", phonemes=ph, ref_codes=ref_codes,
                 emotion=emotion, voice_token_id=voice_token_id,
@@ -224,10 +223,10 @@ class V3TurboVieNeuTTS(BaseVieneuTTS):
         **kwargs: Any,
     ) -> Generator[np.ndarray, None, None]:
         ref_codes, voice_token_id = self._resolve_v3_ref(voice, ref_audio, ref_codes)
-        # Chia chunk SAU normalize: phonemize cả văn bản rồi chia thường (gộp câu).
-        phonemes_full = phonemize_text_with_emotions(text)
-        chunks = chunk_phonemes(phonemes_full, max_chars=max_chars)
-        for ph in chunks:
+        # Chia chunk theo TEXT đã normalize (giống v2-gpu), giữ inline cues.
+        chunks = normalize_to_chunks_v3(text, max_chars=max_chars)
+        for chunk in chunks:
+            ph = phonemize_text_with_emotions(chunk)
             wav = self.engine.infer(
                 text="", phonemes=ph, ref_codes=ref_codes,
                 emotion=emotion, voice_token_id=voice_token_id,

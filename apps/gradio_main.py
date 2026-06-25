@@ -21,7 +21,7 @@ import threading
 import yaml
 import uuid
 from vieneu_utils.core_utils import join_audio_chunks, env_bool, get_silence_duration_v2
-from vieneu_utils.phonemize_text import phonemize_to_chunks, normalize_to_chunks, chunk_phonemes
+from vieneu_utils.phonemize_text import phonemize_to_chunks, normalize_to_chunks, normalize_to_chunks_v3
 # PuncNormalizer = sea_g2p.Normalizer luôn bật punc_norm=True.
 from vieneu_utils.phonemize_text import PuncNormalizer as Normalizer
 import gc
@@ -878,11 +878,9 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
             try:
                 from vieneu_utils.phonemize_text import phonemize_text_with_emotions
 
-                # Chia chunk SAU normalize: phonemize CẢ văn bản trước (normalize +
-                # G2P + giữ inline cues) rồi chia thường (gộp câu, mỗi chunk kết
-                # thúc bằng . ! ?).
-                v3_phonemes = phonemize_text_with_emotions(raw_text)
-                v3_chunks = chunk_phonemes(v3_phonemes, max_chars=max_chars_chunk)
+                # Chia chunk theo TEXT đã normalize (giống v2-gpu, không vụn), giữ
+                # inline cues; phonemize TỪNG chunk khi dựng request.
+                v3_chunks = normalize_to_chunks_v3(raw_text, max_chars=max_chars_chunk)
                 v3_bs = max(1, int(max_batch_size_run)) if use_batch else 1
                 v3_engine_dev = getattr(getattr(tts, "engine", None), "device", None)
                 v3_can_batch = (
@@ -901,9 +899,9 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                             return
                         group = v3_chunks[i:i + v3_bs]
                         yield None, f"⚡ v3 Turbo: lô {i // v3_bs + 1} ({len(group)} đoạn, batch size {v3_bs})..."
-                        # group là các chuỗi phoneme đã sẵn sàng (đã normalize+G2P).
-                        reqs = [{"phonemes": ph, "ref_codes": ref_codes,
-                                 "voice_token_id": v3_voice_token_id} for ph in group]
+                        # group là các TEXT chunk -> phonemize từng cái (giữ inline cues).
+                        reqs = [{"phonemes": phonemize_text_with_emotions(c), "ref_codes": ref_codes,
+                                 "voice_token_id": v3_voice_token_id} for c in group]
                         v3_wavs.extend(tts._v3_batch_engine.generate_batch(
                             reqs, temperature=temperature, max_new_frames=300))
                     wav = join_audio_chunks(v3_wavs, sr=sr_v3, silence_p=0.15)
@@ -1309,7 +1307,7 @@ def _synthesize_conversation_v3(lines, mapping, temperature, max_chars_chunk, si
     global tts
     from collections import defaultdict
     from vieneu_utils.core_utils import join_audio_chunks
-    from vieneu_utils.phonemize_text import phonemize_text_with_emotions, chunk_phonemes
+    from vieneu_utils.phonemize_text import phonemize_text_with_emotions, normalize_to_chunks_v3
     # NOTE: KHÔNG import vieneu.v3_turbo_serve ở đây — module đó import torch ở cấp
     # module, nên trên bản cài CPU/macOS không-torch (ONNX) sẽ lỗi "No module named
     # 'torch'". Chỉ import bên trong nhánh CUDA bên dưới (nơi thực sự cần batch engine).
@@ -1372,10 +1370,10 @@ def _synthesize_conversation_v3(lines, mapping, temperature, max_chars_chunk, si
         if key not in voice_cache:
             voice_cache[key] = _voice_for(line['speaker'])
         ref_codes, vtok = voice_cache[key]
-        # Chia chunk SAU normalize: phonemize cả lượt thoại trước rồi chia thường.
-        line_phonemes = phonemize_text_with_emotions(line['text'])
-        for ph in chunk_phonemes(line_phonemes, max_chars=max_chars_chunk):
-            reqs.append({"phonemes": ph,
+        # Chia chunk theo TEXT đã normalize (giống v2-gpu), giữ inline cues, rồi
+        # phonemize từng chunk.
+        for chunk in normalize_to_chunks_v3(line['text'], max_chars=max_chars_chunk):
+            reqs.append({"phonemes": phonemize_text_with_emotions(chunk),
                          "ref_codes": ref_codes, "voice_token_id": vtok})
             req_line.append(li)
 
