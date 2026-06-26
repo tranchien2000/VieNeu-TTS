@@ -75,8 +75,8 @@ filtered_backbones["VieNeu-TTS-v3-Turbo (Thử nghiệm)"] = {
     "description": "🆕 v3 Turbo (early access) — 48kHz. Giọng mặc định dùng speaker token (ổn định hơn); Voice Cloning clone từ audio mẫu. Hỗ trợ tag cảm xúc [cười]/[hắng giọng]/[thở dài] (thử nghiệm). Bản dùng thử trước; v3 đầy đủ sẽ ra mắt trong vài tuần tới."
 }
 
-# GPU-only extras. v3 Turbo above is the default for BOTH CPU (ONNX) and GPU (PyTorch).
-# CPU machines get ONLY v3 Turbo (the v2/v1 GGUF CPU builds were removed).
+# GPU-only extras. On GPU the default is VieNeu-TTS-v2 (GPU); v3 Turbo stays the
+# default (and only option) on CPU machines (the v2/v1 GGUF CPU builds were removed).
 if HAS_GPU:
     filtered_backbones["VieNeu-TTS-v2 (GPU)"] = {
         "repo": "pnnbao-ump/VieNeu-TTS-v2",
@@ -1716,8 +1716,12 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
         with gr.Group():
             with gr.Row():
                 # --- BACKBONE & CODEC DEFAULT LOGIC ---
-                # v3 Turbo is the default for everyone (CPU via ONNX, GPU via PyTorch).
-                default_backbone = "VieNeu-TTS-v3-Turbo (Thử nghiệm)"
+                # GPU users default to VieNeu-TTS-v2 (GPU); CPU-only users get v3 Turbo
+                # (the only CPU backbone). v2 (GPU) is registered solely when HAS_GPU.
+                if HAS_GPU and "VieNeu-TTS-v2 (GPU)" in BACKBONE_CONFIGS:
+                    default_backbone = "VieNeu-TTS-v2 (GPU)"
+                else:
+                    default_backbone = "VieNeu-TTS-v3-Turbo (Thử nghiệm)"
                 if default_backbone not in BACKBONE_CONFIGS:
                     default_backbone = list(BACKBONE_CONFIGS.keys())[0]
                 
@@ -1850,7 +1854,16 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                             # default and toggled on by on_backbone_change when a v3
                             # model is selected.
                             with gr.TabItem("🦜 Voice Cloning", id="custom_mode", visible=False) as tab_custom:
+                                # Initial clone-tab state must match the DEFAULT backbone:
+                                # on_backbone_change only fires when the dropdown changes, so a
+                                # v2-GPU default would otherwise keep v3's "no transcript" copy
+                                # and a hidden reference-text box (-> false "missing ref text").
+                                _default_is_v2_gpu = (default_backbone == "VieNeu-TTS-v2 (GPU)")
                                 clone_info_md = gr.Markdown(
+                                    "ℹ️ **Voice Cloning (VieNeu-TTS v2).** Tải lên audio mẫu 3–5 giây "
+                                    "và **nhập đúng nội dung** của audio đó (kể cả dấu câu) — v2 cần "
+                                    "reference transcript để clone giọng."
+                                    if _default_is_v2_gpu else
                                     "ℹ️ **Voice Cloning (VieNeu-TTS v3).** Chỉ cần tải lên audio mẫu "
                                     "3–5 giây; v3 clone trực tiếp từ audio, không cần nhập nội dung."
                                 )
@@ -1859,7 +1872,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                                     cloning_warning_msg = gr.Markdown(visible=False, elem_id="cloning-warning")
                                     # v3 clones from audio only — the reference transcript box
                                     # is hidden for v3 (toggled by on_backbone_change).
-                                    custom_text = gr.Textbox(label="Nội dung audio mẫu - vui lòng gõ đúng nội dung của audio mẫu - kể cả dấu câu vì model rất nhạy cảm với dấu câu (.,?!)", visible=False)
+                                    custom_text = gr.Textbox(label="Nội dung audio mẫu - vui lòng gõ đúng nội dung của audio mẫu - kể cả dấu câu vì model rất nhạy cảm với dấu câu (.,?!)", visible=_default_is_v2_gpu)
                                     gr.Examples(
                                         examples=[
                                             [os.path.join(os.path.dirname(os.path.dirname(__file__)), "examples", "audio_ref", "example.wav"), "Ví dụ 2. Tính trung bình của dãy số."],
@@ -1973,9 +1986,10 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                             info="Độ sáng tạo. Cao = đa dạng cảm xúc hơn nhưng dễ lỗi. Thấp = ổn định hơn."
                         )
                         max_chars_chunk_slider = gr.Slider(
-                            minimum=128, maximum=512, value=256, step=32,
+                            minimum=128, maximum=512,
+                            value=(384 if "v3" in default_backbone.lower() else 256), step=32,
                             label="📝 Max Chars per Chunk",
-                            info="Độ dài tối đa mỗi đoạn xử lý."
+                            info="Độ dài tối đa mỗi đoạn xử lý (mặc định v3 Turbo: 384, v2: 256)."
                         )
                 
                 # State to track current mode
@@ -2087,6 +2101,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                 gr.update(visible=not is_v3),  # use_lmdeploy_cb — irrelevant for v3 (PyTorch, no LMDeploy)
                 gr.update(visible=is_v2_gpu),  # custom_text — only v2 needs a reference transcript
                 clone_info_update,             # clone_info_md
+                gr.update(value=384 if is_v3 else 256),  # max_chars_chunk_slider — v3 chunks longer
             )
 
         backbone_select.change(
@@ -2104,6 +2119,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                 use_lmdeploy_cb,
                 custom_text,
                 clone_info_md,
+                max_chars_chunk_slider,
             ]
         )
         

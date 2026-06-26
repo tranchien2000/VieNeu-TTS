@@ -178,7 +178,7 @@ class V3TurboVieNeuTTS(BaseVieneuTTS):
         top_p: float = 0.95,
         max_new_frames: int = 300,
         repetition_penalty: float = 1.2,
-        max_chars: int = 256,
+        max_chars: int = 384,
         silence_p: float = 0.15,
         crossfade_p: float = 0.0,
         apply_watermark: bool = True,
@@ -218,7 +218,7 @@ class V3TurboVieNeuTTS(BaseVieneuTTS):
         top_p: float = 0.95,
         max_new_frames: int = 300,
         repetition_penalty: float = 1.2,
-        max_chars: int = 256,
+        max_chars: int = 384,
         apply_watermark: bool = True,
         **kwargs: Any,
     ) -> Generator[np.ndarray, None, None]:

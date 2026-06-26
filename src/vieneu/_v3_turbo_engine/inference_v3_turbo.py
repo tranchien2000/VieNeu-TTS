@@ -24,7 +24,6 @@ Credits
 """
 from __future__ import annotations
 import math
-import re
 import threading
 import time
 from pathlib import Path
@@ -36,52 +35,12 @@ from .configuration_v3_turbo import VieNeuV3TurboConfig
 from .hub_load_v3_turbo import load_v3_turbo_checkpoint
 from .modeling_v3_turbo import VieNeuV3TurboForTTS, _sample_token
 
-# ── Inline non-verbal cues (emotion tokens) ───────────────────────────────────
-# The emotion checkpoint embeds three non-verbal cues directly in the phoneme
-# stream as special tokens. In the text they appear as bracketed tags; when
-# phonemizing we leave them as the matching <|emotion_k|> token rather than
-# spelling the bracketed words out. Spacing matches the training data exactly.
-#   [chuckle]/[cười] -> <|emotion_1|>, [sigh]/[thở dài] -> <|emotion_2|>,
-#   [clear throat]/[hắng giọng] -> <|emotion_3|>
-_EMOTION_TAG_TO_K = {
-    'chuckle': 1, 'cười': 1, 'cuoi': 1,
-    'sigh': 2, 'thở dài': 2, 'tho dai': 2,
-    'clear throat': 3, 'hắng giọng': 3, 'hang giong': 3,
-}
-_EMOTION_SPLIT_RE = re.compile(r'(\[[^\]]+\]|<\|emotion_\d+\|>)')
-_ATTACHING_PUNCT = set('.,!?;:…)]}"\'’”')
-
-
-def _emotion_tag_token(tag: str) -> Optional[str]:
-    t = tag.strip()
-    if t.startswith('<|'):
-        return t
-    inner = t[1:-1].strip().lower()
-    k = _EMOTION_TAG_TO_K.get(inner)
-    return f'<|emotion_{k}|>' if k is not None else None
-
-
-def _phonemize_with_emotions(text: str, pipeline) -> str:
-    """Phonemize ``text`` with ``pipeline.run`` while keeping inline cues as
-    ``<|emotion_k|>`` tokens (see module note)."""
-    if '[' not in text and '<|emotion_' not in text:
-        return pipeline.run(text)
-    out = ''
-    for i, part in enumerate(_EMOTION_SPLIT_RE.split(text)):
-        token = _emotion_tag_token(part) if i % 2 == 1 else None
-        if token is not None:
-            out = (out + ' ' + token) if out else token
-            continue
-        ph = pipeline.run(part) if part and part.strip() else ''
-        if not ph:
-            continue
-        if not out:
-            out = ph
-        elif ph[0] in _ATTACHING_PUNCT:
-            out += ph
-        else:
-            out += ' ' + ph
-    return out
+# Inline non-verbal cues ([cười]/[thở dài]/[hắng giọng] -> <|emotion_1/2/3|>) are
+# phonemized by the canonical helper in ``vieneu_utils.phonemize_text``, shared with
+# the gradio and ONNX paths. Keeping a single implementation guarantees identical
+# emotion-token spacing and punc_norm across all three back-ends: fragments between
+# cues are phonemized with punc_norm=False (no spurious '.' injected right before an
+# emotion token), with one punc_norm closing the whole chunk.
 
 class VieNeuTTSv3Turbo:
     """High-level text-to-speech interface (48 kHz, instant voice cloning).
@@ -354,20 +313,13 @@ class VieNeuTTSv3Turbo:
             except Exception:
                 pass
 
-    def _get_sea_pipeline(self):
-        """Lazily build and cache the sea-g2p Vietnamese pipeline (reused per call)."""
-        pipe = getattr(self, '_sea_pipeline', None)
-        if pipe is None:
-            from sea_g2p import SEAPipeline
-            pipe = SEAPipeline(lang='vi')
-            self._sea_pipeline = pipe
-        return pipe
-
     def _build_prompt_2d(self, text: str, ref_codes: Optional[np.ndarray], ref_text: Optional[str], emotion_token_id: int, phonemes: Optional[str]=None, ref_phonemes: Optional[str]=None) -> torch.LongTensor:
         from .prompt_v3_turbo import build_prompt_2d
         if phonemes is None:
             # Keep inline cues [cười]/[thở dài]/[hắng giọng] as <|emotion_1/2/3|>.
-            text_phones = _phonemize_with_emotions(text, self._get_sea_pipeline())
+            # Canonical phonemizer (shared with gradio + ONNX paths) — see module note.
+            from vieneu_utils.phonemize_text import phonemize_text_with_emotions
+            text_phones = phonemize_text_with_emotions(text)
         else:
             text_phones = phonemes
         if ref_phonemes is not None:
