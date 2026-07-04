@@ -34,7 +34,6 @@ class V3TurboVieNeuTTS(BaseVieneuTTS):
         onnx_repo: Optional[str] = None,
         onnx_dir: Optional[str] = None,
         onnx_subfolder: str = "onnx_update",
-        hf_token: Optional[str] = None,
         **kwargs: Any,
     ):
         super().__init__()
@@ -60,7 +59,6 @@ class V3TurboVieNeuTTS(BaseVieneuTTS):
                 onnx_repo=onnx_repo,
                 onnx_dir=onnx_dir,
                 onnx_subfolder=onnx_subfolder,
-                hf_token=hf_token,
             )
             self.backend = "onnx"
         else:
@@ -72,7 +70,6 @@ class V3TurboVieNeuTTS(BaseVieneuTTS):
                 moss_tokenizer_path=moss_tokenizer,
                 device=device,
                 dtype=dtype,
-                hf_token=hf_token,
             )
             self.backend = "pytorch"
         logger.info(f"✅ VieNeu-TTS v3 Turbo ready (backend={self.backend})")

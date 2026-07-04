@@ -44,7 +44,7 @@ class VieNeuTTSv3Turbo:
 
     SAMPLE_RATE = 48000
 
-    def __init__(self, checkpoint_path: str='pnnbao-ump/VieNeu-TTS-v3-Turbo', model_subfolder: Optional[str]='update', tokenizer_path: Optional[str]=None, moss_tokenizer_path: str='OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano', denoiser_filename: str='denoiser.onnx', device: str='auto', dtype: str='auto', hf_token: Optional[str]=None):
+    def __init__(self, checkpoint_path: str='pnnbao-ump/VieNeu-TTS-v3-Turbo', model_subfolder: Optional[str]='update', tokenizer_path: Optional[str]=None, moss_tokenizer_path: str='OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano', denoiser_filename: str='denoiser.onnx', device: str='auto', dtype: str='auto'):
         """Load the v3 Turbo checkpoint, the MOSS codec, and (for cloning) the
         ONNX speaker encoder + denoiser.
 
@@ -61,10 +61,19 @@ class VieNeuTTSv3Turbo:
         from transformers import AutoTokenizer, AutoModel
         tok_path = tokenizer_path or checkpoint_path
         tok_sub = None if tokenizer_path else (model_subfolder or None)
-        self.tokenizer = AutoTokenizer.from_pretrained(tok_path, subfolder=tok_sub or "", trust_remote_code=True, token=hf_token)
-        self.config = VieNeuV3TurboConfig.from_pretrained(checkpoint_path, subfolder=model_subfolder or "", token=hf_token)
-        self.model = load_v3_turbo_checkpoint(checkpoint_path, token=hf_token, device=self.device, dtype=self.dtype, subfolder=model_subfolder).eval()
-        self.audio_tokenizer = AutoModel.from_pretrained(moss_tokenizer_path, trust_remote_code=True, token=hf_token).to(self.device).eval()
+        self.tokenizer = AutoTokenizer.from_pretrained(tok_path, subfolder=tok_sub or "", trust_remote_code=True)
+        self.config = VieNeuV3TurboConfig.from_pretrained(checkpoint_path, subfolder=model_subfolder or "")
+        # Weights live in a subfolder, so the Hub's download counter (which keys on the
+        # root config.json) wouldn't register the load — touch the root file once so each
+        # load counts like a normal download. Best-effort, never fatal.
+        if model_subfolder:
+            try:
+                from huggingface_hub import hf_hub_download
+                hf_hub_download(checkpoint_path, "config.json")
+            except Exception:
+                pass
+        self.model = load_v3_turbo_checkpoint(checkpoint_path, device=self.device, dtype=self.dtype, subfolder=model_subfolder).eval()
+        self.audio_tokenizer = AutoModel.from_pretrained(moss_tokenizer_path, trust_remote_code=True).to(self.device).eval()
 
         self.default_style = "tu_nhien"
 
@@ -83,7 +92,7 @@ class VieNeuTTSv3Turbo:
                 try:
                     from huggingface_hub import hf_hub_download
                     from .onnx_denoiser import OnnxDenoiser
-                    dn_path = hf_hub_download(checkpoint_path, denoiser_filename, token=hf_token)
+                    dn_path = hf_hub_download(checkpoint_path, denoiser_filename)
                     self.denoiser = OnnxDenoiser(dn_path)
                 except Exception:
                     self.denoiser = None
