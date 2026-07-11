@@ -87,6 +87,13 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 SDK `vieneu` **mặc định dùng VieNeu-TTS v3 Turbo (48 kHz)**. Bản cài tối giản **không cần torch**: trên CPU mọi thứ chạy bằng **ONNX Runtime** (PyTorch không bao giờ được import), còn trên máy CUDA nó tự chuyển sang engine PyTorch. Các model cũ (v1/v2) có trong extra `[gpu]`.
 
+> ⚡ **Trên CPU, backbone chạy `int8` theo mặc định** — nhanh ~1.6× và nhẹ ~4× so với fp32, chất giọng vẫn giữ nguyên. Cần chất lượng tối đa? Truyền `Vieneu(precision="fp32")` (chậm hơn trên CPU). `precision` chỉ ảnh hưởng đường CPU/ONNX; trên GPU nó bị bỏ qua (PyTorch).
+>
+> ```python
+> tts = Vieneu()                    # backbone int8 (mặc định, nhanh nhất trên CPU)
+> tts = Vieneu(precision="fp32")    # backbone fp32 (chất lượng tối đa, chậm hơn trên CPU)
+> ```
+
 ### Bắt đầu nhanh
 ```bash
 # Cài tối giản, KHÔNG TORCH — chạy v3 Turbo trên CPU bằng ONNX Runtime

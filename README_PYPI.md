@@ -8,6 +8,7 @@
 ## ✨ Key Features
 - **v3 Turbo, 48 kHz** — high-fidelity, natural Vietnamese speech (default).
 - **Torch-free on CPU** — minimal install runs on ONNX Runtime; PyTorch is never imported.
+- **int8 backbone by default on CPU** — ~1.6× faster & ~4× smaller than fp32, quality preserved. Use `Vieneu(precision="fp32")` for max fidelity.
 - **Built-in default voices** — call them by name, no reference clip needed.
 - **Instant voice cloning** — clone any voice from 3–5s of audio.
 - **Emotion cues** *(experimental)* — drop `[cười]`, `[thở dài]`, `[hắng giọng]` into the text.
@@ -33,7 +34,9 @@ pip install "vieneu[gpu]"
 from vieneu import Vieneu
 
 # Default = v3 Turbo (48 kHz). GPU → PyTorch (auto-detected).
-tts = Vieneu()
+# On CPU the backbone runs int8 by default (fastest); pass precision="fp32" for max quality.
+tts = Vieneu()                    # int8 backbone (default, fastest on CPU)
+# tts = Vieneu(precision="fp32")  # fp32 backbone (max quality, slower on CPU)
 
 # 1. Built-in voice by name — no reference needed
 print("🔊 Generating speech...")
