@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import threading
 import time
 from pathlib import Path
@@ -140,12 +141,21 @@ class OnnxV3LiteEngine:
 
         # ── ONNX sessions ──────────────────────────────────────────────────────
         so = ort.SessionOptions()
-        # Full graph-opt + tắt inter-op parallel: các graph chạy TUẦN TỰ, nhiều inter-op
-        # thread chỉ tranh core. intra-op = số thread cho matmul (backbone fp32 lợi 2–4).
+        # Threading: model này mỗi op cực nhỏ (1 token / 1-layer acoustic) nên RẤT nhạy
+        # với oversubscription. Nếu để ORT tự chọn (mặc định = mọi core), trên cloud
+        # nhiều vCPU (32/64...) nó spawn cả pool intra LẪN inter cỡ số core → hàng trăm
+        # thread tranh nhau cho phép tính vài chục µs → chậm GẤP NHIỀU LẦN. Vì vậy:
+        #   • inter_op = 1  (graph chạy tuần tự, không cần inter-op pool)
+        #   • intra_op = số nhân vật lý, cap ở 8  (sweet spot đo được là 4–8; >12 tụt dốc)
+        # Người dùng vẫn override được qua tham số `threads`.
         so.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
         so.inter_op_num_threads = 1
         if threads and threads > 0:
-            so.intra_op_num_threads = threads
+            intra = int(threads)
+        else:
+            intra = min(max((os.cpu_count() or 8) // 2, 1), 8)   # ~nhân vật lý, tối đa 8
+        so.intra_op_num_threads = intra
+        self.ort_intra_op_threads = intra
         prov = ["CPUExecutionProvider"]
         self.sess_pre = ort.InferenceSession(str(vd / "vieneu_prefill.onnx"), so, providers=prov)
         self.sess_dec = ort.InferenceSession(str(vd / "vieneu_decode_step.onnx"), so, providers=prov)
