@@ -109,21 +109,27 @@ async function streamViaFetch(text, voice){
     while(true){
       const {done, value} = await reader.read();
       if(done) break;
-      let chunk = value;
+      // prepend any bytes carried over from the previous read
+      let combined = value;
+      if(leftover.length){
+        combined = new Uint8Array(leftover.length + value.length);
+        combined.set(leftover, 0);
+        combined.set(value, leftover.length);
+        leftover = new Uint8Array(0);
+      }
       if(!headerConsumed){
         // accumulate until we have the full 44-byte WAV header
-        const combined = new Uint8Array(leftover.length + chunk.length);
-        combined.set(leftover, 0);
-        combined.set(chunk, leftover.length);
         if(combined.length < 44){ leftover = combined; continue; }
-        // strip header
-        const data = combined.slice(44);
+        combined = combined.slice(44);   // strip header, keep remaining data
         headerConsumed = true;
-        processPCM(data, SAMPLE_RATE);
-      }else{
-        processPCM(chunk, SAMPLE_RATE);
       }
-      if(!got){ got = true; const ms = Math.round(performance.now()-t0); ttfa.textContent='⚡ '+ms+' ms'; busy(false); setStatus('play','Đang phát'); }
+      // only decode whole PCM16 samples; carry the odd trailing byte forward
+      const usable = combined.length - (combined.length % 2);
+      if(usable < combined.length){ leftover = combined.slice(usable); }
+      if(usable > 0){
+        processPCM(combined.subarray(0, usable), SAMPLE_RATE);
+        if(!got){ got = true; const ms = Math.round(performance.now()-t0); ttfa.textContent='⚡ '+ms+' ms'; busy(false); setStatus('play','Đang phát'); }
+      }
     }
     setStatus('','Xong');
   }catch(e){ setStatus('err','Stream error: '+e); }
