@@ -64,9 +64,14 @@ audio{width:100%;margin-top:16px;border-radius:12px}
     <span class="badge b2">🔊 48 kHz</span>
     <span class="badge">🖥️ CPU · không cần GPU</span>
   </div>
-  <div class="row"><label>Giọng đọc</label><select id="voice"><option>Đang tải…</option></select></div>
-  <div class="row"><label>Nội dung <span class="count" id="cnt">0</span></label>
-    <textarea id="text" placeholder="Nhập văn bản tiếng Việt…">Xin chào các bạn, đây là bản stream thời gian thực chạy trên CPU bằng backbone int8. Nghe thử xem có mượt và tự nhiên không nhé!</textarea></div>
+  <div class="row">
+    <label for="voice">Giọng đọc</label>
+    <select id="voice"><option>Đang tải…</option></select>
+  </div>
+  <div class="row">
+    <label for="text">Nội dung <span class="count" id="cnt">0</span></label>
+    <textarea id="text" placeholder="Nhập văn bản tiếng Việt…">Xin chào các bạn, đây là bản stream thời gian thực chạy trên CPU bằng backbone int8. Nghe thử xem có mượt và tự nhiên không nhé!</textarea>
+  </div>
   <button class="btn" id="btn" onclick="go()"><span class="spin" id="spin"></span><span id="btxt">▶ Đọc (Stream)</span></button>
   <div class="status"><span class="dot" id="dot"></span><span id="st">Sẵn sàng</span><span class="ttfa" id="ttfa"></span></div>
   <audio id="au" controls></audio>
