@@ -68,6 +68,26 @@ audio = tts.infer("Bản tin sáng nay.", voice="Phạm Tuyên", style="tin_tuc"
 
 # 3. Emotion / non-verbal cues — EXPERIMENTAL: [cười] [thở dài] [hắng giọng]
 audio = tts.infer("Nghe hay quá đi [cười].", voice="Trúc Ly")
+
+# 4. ⚡ Batch on GPU: infer_batch() runs many texts in ONE batched forward — same API.
+#    On a CUDA GPU the chunks from every text share each forward step (big throughput
+#    win); on CPU it still works (no error), just sequentially. Batch caps at
+#    max_batch_size (default 32; or infer_batch(..., batch_size=64); batch_size=1
+#    disables). A single long infer() also auto-batches its own chunks. Uncomment to try:
+#
+# import time
+# texts = [
+#     "Chào cả nhà, hôm nay mình sẽ hướng dẫn các bạn cách cài đặt và sử dụng bộ giọng đọc mới.",
+#     "Giọng nghe cực kỳ tự nhiên và truyền cảm, lại có thể chuyển đổi biểu cảm một cách linh hoạt.",
+#     "Nếu thấy hữu ích, các bạn nhớ để lại một lượt thích và chia sẻ video này cho mọi người nhé!",
+# ] * 10   # 30 texts — enough to fill the batch and really show the GPU throughput win
+# t0 = time.time()
+# audios = tts.infer_batch(texts, voice="Phạm Tuyên")
+# elapsed = time.time() - t0
+# total_audio = sum(len(a) for a in audios) / 48_000
+# print(f"⚡ {len(texts)} texts | audio {total_audio:.1f}s | wall {elapsed:.1f}s | RTF {elapsed/total_audio:.3f}")
+# for i, a in enumerate(audios):
+#     tts.save(a, f"batch_{i}.wav")
 ```
 
 ### 🔊 Real-time streaming

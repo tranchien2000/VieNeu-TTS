@@ -160,6 +160,27 @@ voices = tts.list_preset_voices()
 print(f"\n🎙️  {len(voices)} built-in voices available:")
 for label, voice_id in voices:
     print(f"  - {label} ({voice_id})")
+
+# 2. ⚡ Batch on GPU: infer_batch() runs many texts in ONE batched forward — same API.
+#    On a CUDA GPU the chunks from every text share each forward step (big throughput
+#    win). On CPU it still WORKS (no error) — just sequentially, so there's no batch
+#    gain. Batch caps at max_batch_size (default 32; tune via Vieneu(max_batch_size=64)
+#    or infer_batch(..., batch_size=64), or batch_size=1 to disable). A single long
+#    infer() also auto-batches its own chunks. Uncomment to try (GPU recommended):
+#
+# import time
+# texts = [
+#     "Chào cả nhà, hôm nay mình sẽ hướng dẫn các bạn cách cài đặt và sử dụng bộ giọng đọc mới.",
+#     "Giọng nghe cực kỳ tự nhiên và truyền cảm, lại có thể chuyển đổi biểu cảm một cách linh hoạt.",
+#     "Nếu thấy hữu ích, các bạn nhớ để lại một lượt thích và chia sẻ video này cho mọi người nhé!",
+# ] * 10   # 30 texts — enough to fill the batch and really show the GPU throughput win
+# t0 = time.time()
+# audios = tts.infer_batch(texts, voice="Phạm Tuyên")
+# elapsed = time.time() - t0
+# total_audio = sum(len(a) for a in audios) / 48_000
+# print(f"⚡ {len(texts)} texts | audio {total_audio:.1f}s | wall {elapsed:.1f}s | RTF {elapsed/total_audio:.3f}")
+# for i, a in enumerate(audios):
+#     tts.save(a, f"batch_{i}.wav")
 ```
 
 #### Streaming (real-time) 🔊
