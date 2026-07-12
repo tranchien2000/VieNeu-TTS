@@ -5,11 +5,11 @@ Stream 48 kHz audio ngay khi generate, qua `V3TurboVieNeuTTS.infer_stream` (đư
 ONNX/CPU int8 mặc định). Vì RTF < 1 (int8 nhanh hơn realtime), stream chạy mượt
 không underrun — chỉ cần player prebuffer ~300–500ms.
 
-    uv run python -m apps.web_stream        # http://localhost:8001
+    uv run python -m apps.web_stream        # http://127.0.0.1:8001
 
 Public API dùng ở đây:
     tts = Vieneu()                                  # v3 Turbo int8, CPU
-    for chunk in tts.infer_stream(text, voice="Trúc Ly"):
+    for chunk in tts.infer_stream(text, voice="Minh Đức"):
         ...                                         # np.float32 @ 48kHz, phát/ghi dần
 """
 import time
@@ -49,8 +49,6 @@ def load_html_content() -> str:
 def load_model():
     global tts
     print("⏳ Loading VieNeu-TTS v3 Turbo (int8, CPU)...")
-    # Mặc định: mode=v3turbo, precision=int8, device=auto→cpu. Truyền precision="fp32"
-    # để đối chứng chất lượng (chậm hơn trên CPU).
     tts = Vieneu()  # == Vieneu(mode="v3turbo", precision="int8")
     print(f"✅ Ready. Backbone: int8 | intra_op threads: {getattr(tts.engine, 'ort_intra_op_threads', '?')}")
 
@@ -65,7 +63,6 @@ async def ui():
 
 @app.get("/favicon.ico")
 async def favicon():
-    # SVG emoji favicon → tab hiện 🐆, và hết log 404 favicon.
     svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y="82" font-size="82">🐆</text></svg>'
     return Response(svg, media_type="image/svg+xml")
 
