@@ -109,6 +109,12 @@ pip install "transformers>=4.51"   # Qwen3 backbone + MOSS codec
 pip install vieneu
 ```
 
+> ℹ️ **Khi nào GPU thật sự đáng dùng?** Lợi thế của GPU đến từ **batch**, nên chỉ
+> đáng khi **text dài** (nhiều chunk chạy chung một forward — đọc dài, tổng hợp hàng
+> loạt). Với **text ngắn**, đường **CPU/ONNX** không-torch thường *nhanh hơn* (không
+> có gì để lấp batch). Dùng CPU cho câu ngắn, tương tác; dùng GPU cho đọc dài hoặc
+> khối lượng lớn.
+
 ```python
 from vieneu import Vieneu
 

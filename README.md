@@ -115,15 +115,19 @@ The `vieneu` SDK **defaults to VieNeu-TTS v3 Turbo (48 kHz)**. The minimal insta
 pip install vieneu
 ```
 
-**GPU (CUDA)** — only if you have an NVIDIA GPU. Install a CUDA build of PyTorch
-**yourself first** (there is no `[gpu]` extra — pip can't pull a CUDA torch from an
-extra). Batching then turns on automatically on CUDA — same API, no code change:
+**GPU (CUDA)** — only if you have an NVIDIA GPU. 
 
 ```bash
 pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
-pip install "transformers>=4.51"   # Qwen3 backbone + MOSS codec
+pip install "transformers>=4.51"
 pip install vieneu
 ```
+
+> ℹ️ **When is GPU actually worth it?** The GPU win comes from **batching**, so it
+> only pays off on **long text** (many chunks generated together in one forward —
+> long-form or bulk synthesis). For **short text** the torch-free **CPU/ONNX** path
+> is usually *faster* (there's no batch to fill, and no kernel-launch overhead). Use
+> CPU for short, interactive calls; reach for GPU for long-form or high-throughput work.
 
 ```python
 import time

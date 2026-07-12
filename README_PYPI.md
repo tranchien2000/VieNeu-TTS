@@ -33,6 +33,12 @@ pip install "transformers>=4.51"   # Qwen3 backbone + MOSS codec
 pip install vieneu
 ```
 
+> ℹ️ **When is GPU actually worth it?** The GPU win comes from **batching**, so it
+> only pays off on **long text** (many chunks generated together in one forward —
+> long-form or bulk synthesis). For **short text** the torch-free **CPU/ONNX** path
+> is usually *faster* (there's no batch to fill). Use CPU for short, interactive
+> calls; reach for GPU for long-form or high-throughput work.
+
 ---
 
 ## 🚀 Quick Start (Python SDK)
