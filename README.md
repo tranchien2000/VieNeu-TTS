@@ -81,8 +81,8 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
      ```bash
      uv sync
      ```
-   - **Option 2: GPU** — **v3 Turbo (PyTorch) + VieNeu-TTS v2 (GPU)**
-     > 💡 *Requires a CUDA NVIDIA GPU (CUDA ≥ 12.8) or Apple Silicon MPS. [NVIDIA Toolkit](https://developer.nvidia.com/cuda-downloads) recommended. Adds the PyTorch stack so **v3 Turbo runs on GPU** and the **v1 / v2 (GPU)** models become available.*
+   - **Option 2: GPU** — **v3 Turbo on GPU (PyTorch)**
+     > 💡 *Requires a CUDA NVIDIA GPU (CUDA ≥ 12.8) or Apple Silicon MPS. [NVIDIA Toolkit](https://developer.nvidia.com/cuda-downloads) recommended. Adds the PyTorch stack so **v3 Turbo runs on GPU** — inference is batched automatically on CUDA (same API, no code change).*
 
      ```bash
      uv sync --group gpu
@@ -98,7 +98,7 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ## 📦 2. Using the Python SDK (vieneu) <a name="sdk"></a>
 
-The `vieneu` SDK **defaults to VieNeu-TTS v3 Turbo (48 kHz)**. The minimal install is **torch-free**: on CPU everything runs on **ONNX Runtime** (PyTorch is never imported), and on a CUDA machine it auto-switches to the PyTorch engine. Older models (v1/v2) are available via the `[gpu]` extra.
+The `vieneu` SDK **defaults to VieNeu-TTS v3 Turbo (48 kHz)**. The minimal install is **torch-free**: on CPU everything runs on **ONNX Runtime** (PyTorch is never imported), and on a CUDA machine it auto-switches to the PyTorch engine — where inference is **batched automatically** (same API, no code change).
 
 > ⚡ **On CPU the backbone runs `int8` by default** — ~1.6× faster and ~4× smaller than fp32, with voice quality preserved. Want maximum fidelity instead? Pass `Vieneu(precision="fp32")` (slower on CPU). `precision` only affects the CPU/ONNX path; on GPU it's ignored (PyTorch).
 >
@@ -108,7 +108,20 @@ The `vieneu` SDK **defaults to VieNeu-TTS v3 Turbo (48 kHz)**. The minimal insta
 > ```
 
 ### Quick Start
+
+**CPU (default)** — torch-free, runs v3 Turbo via ONNX Runtime. Most users want this:
+
 ```bash
+pip install vieneu
+```
+
+**GPU (CUDA)** — only if you have an NVIDIA GPU. Install a CUDA build of PyTorch
+**yourself first** (there is no `[gpu]` extra — pip can't pull a CUDA torch from an
+extra). Batching then turns on automatically on CUDA — same API, no code change:
+
+```bash
+pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+pip install "transformers>=4.51"   # Qwen3 backbone + MOSS codec
 pip install vieneu
 ```
 
@@ -264,7 +277,7 @@ Once the server is running, you can connect from anywhere (Colab, Web Apps, etc.
 
 **Installation**:
 ```bash
-pip install "vieneu[gpu]"
+pip install "vieneu[legacy]"
 ```
 
 **Usage**:

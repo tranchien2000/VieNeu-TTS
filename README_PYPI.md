@@ -18,12 +18,19 @@
 
 ## 📦 Install
 
-```bash
-# Minimal, TORCH-FREE — runs v3 Turbo on CPU via ONNX Runtime
-pip install vieneu
+**CPU (default)** — torch-free, runs v3 Turbo via ONNX Runtime. Most users want this:
 
-# Optional: GPU + older backends (v1/v2 PyTorch & GGUF, v3 Turbo on GPU)
-pip install "vieneu[gpu]"
+```bash
+pip install vieneu
+```
+
+**GPU (CUDA)** — only if you have an NVIDIA GPU. Install a CUDA build of PyTorch
+**yourself first**. Batching then turns on automatically on CUDA — same API, no code change:
+
+```bash
+pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+pip install "transformers>=4.51"   # Qwen3 backbone + MOSS codec
+pip install vieneu
 ```
 
 ---
@@ -90,12 +97,6 @@ wav, sr = tts.denoise("noisy.wav", out_path="clean.wav")
 
 > `denoise`, `add_voice`, and cloning require the PyTorch (GPU) engine; built-in voices work everywhere.
 
-### Older models (v1 / v2 — requires `pip install "vieneu[gpu]"`)
-```python
-tts = Vieneu(mode="standard")   # v2 GGUF, bilingual, podcast
-tts = Vieneu(mode="turbo")      # v2 Turbo, fastest
-```
-
 ---
 
 ## 🔬 Model Overview
@@ -103,8 +104,6 @@ tts = Vieneu(mode="turbo")      # v2 Turbo, fastest
 | Model | Engine | Device | Sample Rate | Features |
 |---|---|---|---|---|
 | **VieNeu-TTS v3 Turbo** *(default)* | ONNX (CPU) / PyTorch (GPU) | CPU/GPU | 48 kHz | Default voices, cloning, emotion cues |
-| VieNeu-TTS v2 | PyTorch / GGUF | GPU/CPU | 24 kHz | Bilingual, podcast (`[gpu]`) |
-| VieNeu-TTS v1 | PyTorch | GPU/CPU | 24 kHz | Stable, Vietnamese (`[gpu]`) |
 
 ---
 
