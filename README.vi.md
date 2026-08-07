@@ -59,13 +59,17 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
    ```
 
 2. **Cài đặt các phụ thuộc:**
-   - **Lựa chọn 1: Tối giản (Turbo/CPU)** - Nhanh & Nhẹ
-     > ⚠️ *Lưu ý: Chế độ này chỉ hỗ trợ **VieNeu-TTS-v2-Turbo (CPU)** — chạy được trên mọi máy không cần GPU, nhưng **chất lượng âm thanh thấp hơn** so với Standard VieNeu-TTS (đặc biệt với câu ngắn < 5 từ). Khuyến nghị dùng để thử nghiệm nhanh hoặc triển khai trên thiết bị yếu.*
+   - **Lựa chọn 1: CPU & macOS (tối giản, không cần torch) — khuyến nghị để đạt tốc độ tối đa** — chạy **v3 Turbo bằng ONNX**
+     > 💡 *Không cần GPU. Chỉ cài bộ ONNX nhẹ; **v3 Turbo chạy trên CPU (48 kHz)** với giọng mặc định, voice cloning và tag cảm xúc. Hoàn toàn không cài PyTorch.*
+     >
+     > ⚡ **Để CPU chạy nhanh nhất, hãy cài bằng `uv sync` — đừng dùng `pip install`.** `uv sync` dựng lại đúng môi trường đã khóa (lockfile) với bản ONNX Runtime đã tối ưu, nhờ đó đạt tốc độ tối đa ngay từ đầu.
+     >
+     > 🍎 **Người dùng macOS: cũng dùng lựa chọn này.** Với v3 Turbo, đường ONNX không-torch chạy trên CPU *nhanh hơn* bản MPS/PyTorch (`--group gpu`), nên hãy ưu tiên `uv sync` để đạt tốc độ cao nhất trên Apple Silicon.
      ```bash
      uv sync
      ```
-   - **Lựa chọn 2: Đầy đủ (GPU/Standard)** - Chất lượng cao & Chế độ Podcast *(Dành cho người dùng GPU)*
-     > 💡 *Lưu ý: Yêu cầu GPU NVIDIA hỗ trợ CUDA (phiên bản CUDA >= 12.8) hoặc Apple Silicon MPS. Cần cài đặt [NVIDIA Toolkit](https://developer.nvidia.com/cuda-downloads) để đạt tốc độ tối đa. Kích hoạt toàn bộ backbone **VieNeu-TTS-v2** để đạt chất lượng âm thanh tối đa và clone giọng nói độ trung thực cao.*
+   - **Lựa chọn 2: GPU** — **v3 Turbo chạy trên GPU (PyTorch)**
+     > 💡 *Yêu cầu GPU NVIDIA CUDA (CUDA ≥ 12.8) hoặc Apple Silicon MPS. Khuyến nghị cài [NVIDIA Toolkit](https://developer.nvidia.com/cuda-downloads). Thêm bộ PyTorch để **v3 Turbo chạy trên GPU** — trên CUDA suy luận được **batch tự động** (cùng API, không đổi code).*
 
      ```bash
      uv sync --group gpu
@@ -81,91 +85,163 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ## 📦 2. Sử dụng Python SDK (vieneu) <a name="sdk"></a>
 
-SDK `vieneu` mặc định sử dụng **chế độ Standard** (VieNeu-TTS-v2 GGUF + ONNX) khi dùng cục bộ, mang lại sự cân bằng hoàn hảo giữa chất lượng âm thanh cao và tốc độ xử lý thời gian thực trên bất kỳ CPU hay GPU nào.
+SDK `vieneu` **mặc định dùng VieNeu-TTS v3 Turbo (48 kHz)**. Bản cài tối giản **không cần torch**: trên CPU mọi thứ chạy bằng **ONNX Runtime** (PyTorch không bao giờ được import), còn trên máy CUDA nó tự chuyển sang engine PyTorch — nơi suy luận được **batch tự động** (cùng API, không đổi code).
+
+> ⚡ **Trên CPU, backbone chạy `int8` theo mặc định** — nhanh ~1.6× và nhẹ ~4× so với fp32, chất giọng vẫn giữ nguyên. Cần chất lượng tối đa? Truyền `Vieneu(precision="fp32")` (chậm hơn trên CPU). `precision` chỉ ảnh hưởng đường CPU/ONNX; trên GPU nó bị bỏ qua (PyTorch).
+>
+> ```python
+> vieneu = Vieneu()                    # backbone int8 (mặc định, nhanh nhất trên CPU)
+> vieneu = Vieneu(precision="fp32")    # backbone fp32 (chất lượng tối đa, chậm hơn trên CPU)
+> ```
 
 ### Bắt đầu nhanh
+**CPU (mặc định)** — không cần torch, chạy v3 Turbo bằng ONNX Runtime. Đa số người dùng chọn cái này:
+
 ```bash
-# Cài đặt tối giản (Build llama-cpp từ nguồn - có thể mất chút thời gian)
 pip install vieneu
-
-# Tùy chọn: Dành cho người dùng Windows (CPU pre-built)
-pip install vieneu --extra-index-url https://pnnbao97.github.io/llama-cpp-python-v0.3.16/cpu/
-
-# Tùy chọn: Dành cho người dùng macOS (ARM64/Apple Silicon - Kích hoạt Metal GPU)
-pip install vieneu --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/metal/
 ```
+
+**GPU (CUDA)** — chỉ khi bạn có GPU NVIDIA. Tự cài bản PyTorch CUDA **trước** (không có extra `[gpu]`). Trên CUDA, batch tự bật — cùng API, không đổi code:
+
+```bash
+pip install torch==2.8.0 torchaudio==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+pip install "transformers==4.57.6"   # Qwen3 backbone + MOSS codec (bản ổn định nhất cho SDK GPU)
+pip install vieneu
+```
+
+> ℹ️ **Khi nào GPU thật sự đáng dùng?** Lợi thế của GPU đến từ **batch**, nên chỉ
+> đáng khi **text dài** (nhiều chunk chạy chung một forward — đọc dài, tổng hợp hàng
+> loạt). Với **text ngắn**, đường **CPU/ONNX** không-torch thường *nhanh hơn* (không
+> có gì để lấp batch). Dùng CPU cho câu ngắn, tương tác; dùng GPU cho đọc dài hoặc
+> khối lượng lớn.
 
 ```python
 from vieneu import Vieneu
 
-# Khởi tạo chế độ Standard (Mặc định - Chất lượng cao nhất)
-tts = Vieneu(emotion="natural") # emotion="natural" (giọng tự nhiên - mặc định) hoặc "storytelling" (giọng kể chuyện)
+# Mặc định = v3 Turbo (48 kHz). GPU → PyTorch (tự nhận diện).
+vieneu = Vieneu()
+# 💡 Trên máy GPU vẫn có thể chuyển sang ONNX/CPU nếu muốn: Vieneu(backend="onnx")
 
-# 1. Tổng hợp đơn giản (sử dụng giọng Nữ miền Bắc mặc định 'Trúc Ly')
-text = "Chào bạn. Tôi là VieNeu-TTS, tôi có thể giúp bạn đọc sách, làm chatbot thời gian thực, thậm chí clone giọng nói của bạn."
-audio = tts.infer(text=text)
+# 1. Giọng dựng sẵn theo tên — không cần audio mẫu
+print("🔊 Đang sinh giọng nói...")
+audio = vieneu.infer("Xin chào, đây là VieNeu-TTS.", voice="Trúc Ly")
+vieneu.save(audio, "output.wav")
+print("✅ Đã lưu vào output.wav")
 
-# Lưu thành file
-tts.save(audio, "output_Trúc Ly.wav")
-print("💾 Đã lưu file output_Trúc Ly.wav")
+# Liệt kê các giọng dựng sẵn
+voices = vieneu.list_preset_voices()
+print(f"\n🎙️  Có {len(voices)} giọng dựng sẵn:")
+for label, voice_id in voices:
+    print(f"  - {label} ({voice_id})")
 
-# 2. Sử dụng Giọng mẫu cụ thể (Preset Voice)
-voices = tts.list_preset_voices()
-for desc, voice_id in voices:
-    print(f"Giọng: {desc} (ID: {voice_id})")
-
-my_voice_id = voices[1][1] if len(voices) > 1 else voices[0][1] # Giọng Phạm Tuyên
-voice_data = tts.get_preset_voice(my_voice_id)
-
-audio_custom = tts.infer(text="Tôi đang nói bằng giọng của Bác sĩ Tuyên.", voice=voice_data)
-
-# 3. Lưu thành file
-tts.save(audio_custom, "output_Phạm Tuyên.wav")
-print("💾 Đã lưu file output_Phạm Tuyên.wav")
+# 2. ⚡ Batch trên GPU: infer_batch() chạy nhiều text trong MỘT lần forward — cùng API.
+#    Trên GPU CUDA, các chunk của mọi text dùng chung mỗi bước forward (throughput cao
+#    hơn nhiều); trên CPU vẫn CHẠY ĐƯỢC (không lỗi), chỉ là tuần tự. Batch tối đa
+#    max_batch_size (mặc định 32; hoặc infer_batch(..., batch_size=64); batch_size=1 để
+#    tắt). Một infer() cho text dài cũng tự batch các chunk. Bỏ comment để thử (nên dùng GPU):
+#
+# import time
+# texts = [
+#     "Chào cả nhà, hôm nay mình sẽ hướng dẫn các bạn cách cài đặt và sử dụng bộ giọng đọc mới.",
+#     "Giọng nghe cực kỳ tự nhiên và truyền cảm, lại có thể chuyển đổi biểu cảm một cách linh hoạt.",
+#     "Nếu thấy hữu ích, các bạn nhớ để lại một lượt thích và chia sẻ video này cho mọi người nhé!",
+# ] * 10   # 30 câu — đủ lấp đầy batch để thấy rõ sức mạnh throughput của GPU
+# t0 = time.time()
+# audios = vieneu.infer_batch(texts, voice="Minh Đức")
+# elapsed = time.time() - t0
+# total_audio = sum(len(a) for a in audios) / 48_000
+# print(f"⚡ {len(texts)} câu | audio {total_audio:.1f}s | thời gian {elapsed:.1f}s | RTF {elapsed/total_audio:.3f}")
+# for i, a in enumerate(audios):
+#     vieneu.save(a, f"batch_{i}.wav")
 ```
 
-### 🚀 Chế độ Turbo (Song ngữ & Tốc độ cực nhanh)
-Sử dụng `mode="turbo"` để đạt tốc độ xử lý nhanh nhất, đặc biệt tối ưu cho việc đọc song ngữ Anh-Việt (code-switching) trong thời gian thực.
-> [!WARNING]
-> Chế độ Turbo có chất lượng âm thanh thấp hơn các chế độ khác và có thể gặp lỗi (nhiễu hoặc lỗi âm) đối với các câu quá ngắn.
+### Streaming thời gian thực 🔊
 
+v3 Turbo hỗ trợ **streaming theo frame**: audio ra sau ~300 ms và generator luôn *chạy vượt* player (RTF < 1 trên CPU — ~2–3× trên laptop, ~7× trên Apple Silicon), rất hợp cho ứng dụng realtime / tương tác. Streaming chạy trên engine **ONNX/CPU** — độ trễ audio đầu thấp, theo từng frame; engine GPU/PyTorch sinh ra để **batch throughput**, không dành cho streaming, nên hãy ép `backend="onnx"` cho realtime. Chỉ cần lặp `infer_stream`:
 
 ```python
 from vieneu import Vieneu
-
-# Khởi tạo chế độ Turbo (v2-Turbo GGUF)
-tts = Vieneu(mode="turbo")
-
-# Turbo v2 hỗ trợ chuyển đổi Anh-Việt cực kỳ tự nhiên
-text = "Hệ thống điện chủ yếu sử dụng alternating current because it is more efficient."
-audio = tts.infer(text=text)
-
-tts.save(audio, "turbo_output.wav")
+vieneu = Vieneu(backend="onnx")                      # ép ONNX/CPU — đường dành cho streaming (int8)
+for chunk in vieneu.infer_stream("Xin chào các bạn!", voice="Trúc Ly"):
+    play(chunk)                                   # np.float32 @ 48 kHz — phát/ghi ngay khi có
 ```
 
-### 🦜 Clone giọng nói Zero-shot (SDK) <a name="cloning"></a>
-Clone bất kỳ giọng nói nào chỉ với **3-5 giây** âm thanh. 
+Bản demo **web streaming FastAPI** đầy đủ (player trên trình duyệt, hiện time-to-first-audio, dark mode) nằm ở [`apps/web_stream.py`](apps/web_stream.py):
+
+```bash
+uv run python -m apps.web_stream                  # → http://localhost:8001
+```
+
+> Engine chia chunk thích ứng (chunk đầu ~320 ms cho độ trễ thấp, rồi phình tới ~2 s khi đã dư lead). Vì RTF < 1 nên lead chỉ tăng dần → player prebuffer ~300 ms là dư, không underrun.
+
+### Phong cách đọc
+
+Chọn cách đọc bằng `style` (mặc định `"tu_nhien"`):
+
+| `style`        | Ý nghĩa        |
+| -------------- | -------------- |
+| `"tu_nhien"`   | Tự nhiên / hội thoại |
+| `"tin_tuc"`    | Tin tức        |
+| `"doc_truyen"` | Kể chuyện      |
+
+```python
+audio = vieneu.infer("Bản tin sáng nay.", voice="Minh Đức", style="tin_tuc")
+```
+
+### Tag cảm xúc (thử nghiệm)
+
+Chèn trực tiếp trong văn bản: `[cười]`, `[thở dài]`, `[hắng giọng]`.
+
+```python
+audio = vieneu.infer("Nghe hay quá đi [cười]. Để mình nói tiếp [hắng giọng].", voice="Trúc Ly")
+```
 
 > [!TIP]
-> **Chế độ Turbo** được khuyến nghị cho việc clone giọng vì không yêu cầu văn bản mẫu (`ref_text`), trong khi **chế độ Standard** (mặc định) yêu cầu cung cấp `ref_text` để đạt độ chính xác cao hơn.
+> Temperature ~0.8 ổn định nhất.
+
+### 🦜 Clone giọng nói Zero-shot (SDK) <a name="cloning"></a>
+Clone bất kỳ giọng nào từ một clip ngắn. Clip mẫu được **tự khử nhiễu nền** và **cắt còn ≤ 8 giây** trước khi clone — cứ để `denoise=True` trừ khi clip đã sạch.
 
 ```python
 from vieneu import Vieneu
 
-# Sử dụng turbo mode để clone giọng dễ dàng (không cần ref_text)
-tts = Vieneu(mode="turbo")
+vieneu = Vieneu()
 
-# 1. Trích xuất đặc trưng giọng nói (3-5 giây khuyến nghị)
-my_voice = tts.encode_reference("examples/audio_ref/example.wav")
-
-# 2. Tổng hợp với giọng đã clone
-audio = tts.infer(
-    text="Đây là giọng nói được clone trực tiếp bằng SDK của VieNeu-TTS.", 
-    voice=my_voice
+# Clone trực tiếp từ clip mẫu (3–8 giây)
+audio = vieneu.infer(
+    text="Đây là giọng được nhân bản tức thì.",
+    ref_audio="examples/audio_ref/example.wav",
+    denoise=True,          # mặc định; đặt False nếu clip đã sạch
+    style="doc_truyen",
 )
-
-tts.save(audio, "cloned_voice.wav")
+vieneu.save(audio, "cloned_voice.wav")
 ```
+
+#### Lưu & tái dùng giọng đã clone
+Đăng ký clip một lần bằng `add_voice`, sau đó gọi theo tên như giọng dựng sẵn (dùng được cả ở chế độ Hội thoại).
+
+```python
+# Đăng ký giọng (tự denoise + trích hồ sơ giọng một lần)
+vieneu.add_voice("Giọng của tôi", "my_voice.wav")
+
+audio = vieneu.infer("Câu này dùng giọng đã lưu.", voice="Giọng của tôi")
+
+# Lưu lại để lần sau vẫn còn
+vieneu.save_voices()
+# vieneu.remove_voice("Giọng của tôi")
+
+# Thêm giọng bạn đã tự làm sạch → bỏ qua bước denoise
+vieneu.add_voice("Giọng sạch", "already_clean.wav", denoise=False)
+```
+
+#### Chỉ khử nhiễu một clip
+Lấy audio đã khử nhiễu mà không tổng hợp gì (để nghe/lưu lại):
+
+```python
+wav, sr = vieneu.denoise("noisy.wav", out_path="clean.wav")   # 44.1 kHz mono
+```
+
+> **Lưu ý:** `denoise`, `add_voice` và voice cloning hiện cần engine PyTorch (GPU). Giọng dựng sẵn chạy ở mọi nơi.
 
 ---
 
@@ -191,7 +267,7 @@ Khi server đã chạy, bạn có thể kết nối từ bất kỳ đâu (Colab
 
 **Cài đặt**:
 ```bash
-pip install "vieneu[gpu]"
+pip install "vieneu[legacy]"
 ```
 
 **Sử dụng**:
@@ -205,36 +281,36 @@ REMOTE_MODEL_ID = "pnnbao-ump/VieNeu-TTS-v2"
 
 # Khởi tạo (Cực kỳ NHẸ - chỉ tải codec nhỏ cục bộ)
 # Cảm xúc mặc định là "natural" (tự nhiên) - đặt emotion="storytelling" cho chế độ kể chuyện
-tts = Vieneu(mode='remote', api_base=REMOTE_API_BASE, model_name=REMOTE_MODEL_ID, emotion="natural")
+vieneu = Vieneu(mode='remote', api_base=REMOTE_API_BASE, model_name=REMOTE_MODEL_ID, emotion="natural")
 os.makedirs("outputs", exist_ok=True)
 
 # Liệt kê các giọng mẫu trên server
-available_voices = tts.list_preset_voices()
+available_voices = vieneu.list_preset_voices()
 for desc, name in available_voices:
     print(f"   - {desc} (ID: {name})")
 
 # Sử dụng giọng cụ thể (chọn động giọng thứ hai)
 if available_voices:
     _, my_voice_id = available_voices[1]
-    voice_data = tts.get_preset_voice(my_voice_id)
-    audio_spec = tts.infer(text="Chào bạn, tôi đang nói bằng giọng của bác sĩ Tuyên.", voice=voice_data)
-    tts.save(audio_spec, f"outputs/remote_{my_voice_id}.wav")
+    voice_data = vieneu.get_preset_voice(my_voice_id)
+    audio_spec = vieneu.infer(text="Chào bạn, tôi đang nói bằng giọng của bác sĩ Tuyên.", voice=voice_data)
+    vieneu.save(audio_spec, f"outputs/remote_{my_voice_id}.wav")
     print(f"💾 Đã lưu kết quả tại: outputs/remote_{my_voice_id}.wav")
 
 # Tổng hợp chuẩn (dùng giọng mặc định)
 text_input = "Chế độ remote giúp tích hợp VieNeu vào ứng dụng Web hoặc App cực nhanh mà không cần GPU tại máy khách."
-audio = tts.infer(text=text_input)
-tts.save(audio, "outputs/remote_output.wav")
+audio = vieneu.infer(text=text_input)
+vieneu.save(audio, "outputs/remote_output.wav")
 print("💾 Đã lưu kết quả remote_output.wav")
 
 # Clone giọng Zero-shot (Mã hóa âm thanh cục bộ, gửi code lên server)
 if os.path.exists("examples/audio_ref/example_ngoc_huyen.wav"):
-    cloned_audio = tts.infer(
+    cloned_audio = vieneu.infer(
         text="Đây là giọng nói được clone và xử lý thông qua VieNeu Server.",
         ref_audio="examples/audio_ref/example_ngoc_huyen.wav",
         ref_text="Tác phẩm dự thi bảo đảm tính khoa học, tính đảng, tính chiến đấu, tính định hướng."
     )
-    tts.save(cloned_audio, "outputs/remote_cloned_output.wav")
+    vieneu.save(cloned_audio, "outputs/remote_cloned_output.wav")
     print("💾 Đã lưu kết quả remote_cloned_output.wav")
 ```
 *Chi tiết xem tại: [examples/main_remote.py](examples/main_remote.py)*
@@ -265,16 +341,12 @@ docker run --gpus all \
 
 ## 🔬 4. Tổng quan mô hình <a name="backbones"></a>
 
-| Model | Định dạng | Thiết bị | Song ngữ | Tính năng | Tốc độ |
-|---|---|---|---|---|---|
-| **VieNeu-TTS-v2** | PyTorch | **GPU** | ✅ | **Podcast, En-Vi CS** | **Nhanh (LMDeploy)** |
-| **VieNeu-v2-CPU** | GGUF/ONNX | **CPU/Edge** | ✅ | **Podcast, En-Vi CS** | **Rất nhanh** |
-| **VieNeu-v2-Turbo** | GGUF/ONNX | **CPU/Edge** | ✅ | En-Vi mượt mà | **Cực nhanh** |
-| **VieNeu-TTS (v1)** | PyTorch | GPU/CPU | ❌ | Ổn định (Chỉ Tiếng Việt) | Chuẩn |
+| Model | Engine | Thiết bị | Sample Rate | Tính năng |
+|---|---|---|---|---|
+| **VieNeu-TTS v3 Turbo** *(mặc định)* | ONNX (CPU) / PyTorch (GPU) | CPU/GPU | 48 kHz | Giọng dựng sẵn, clone giọng, cảm xúc |
 
 > [!TIP]
-> Sử dụng **Turbo v2** cho trợ lý AI, chatbot và các ứng dụng thời gian thực trên thiết bị yếu. Lưu ý: Có thể gặp vấn đề ổn định với các câu cực ngắn (< 5 từ).
-> Sử dụng **GPU/Standard** (VieNeu-TTS v1/v2) để đạt chất lượng âm thanh tối đa và clone giọng độ trung thực cao.
+> Trên **CPU**, backbone chạy `int8` mặc định (nhanh nhất); dùng `Vieneu(precision="fp32")` nếu cần chất lượng tối đa. Trên **GPU (CUDA)**, suy luận **tự động batch** — cùng API, không đổi code.
 
 ---
 
