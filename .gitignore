@@ -22,3 +22,6 @@ merged_models_cache/
 
 # History data
 history_data/
+
+# Audiobook output (large files)
+audiobook_output/
