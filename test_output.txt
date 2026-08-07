@@ -1,0 +1,7 @@
+SEAPipeline.run: 'tˈɛst'
+Normalizer.normalize: 'test'
+G2P.convert: 'tˈɛst'
+
+Normalizer.normalize signature: (text: str | list[str]) -> str | list[str]
+G2P.convert signature: (text: str | list[str], **kwargs) -> str | list[str]
+SEAPipeline.run signature: (text: str | list[str]) -> str | list[str]

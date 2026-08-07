@@ -8,7 +8,7 @@ import functools
 import logging
 import re
 from typing import Optional
-from sea_g2p import SEAPipeline, G2P, Normalizer, punc_norm
+from sea_g2p import SEAPipeline, G2P, Normalizer
 
 logger = logging.getLogger("Vieneu.Phonemizer")
 
@@ -105,7 +105,7 @@ def _get_normalizer() -> PuncNormalizer:
 @functools.lru_cache(maxsize=1024)
 def _phonemize_cached(text: str, punc_norm: bool = True) -> str:
     """Cached single-text phonemization (normalize + G2P), punc_norm bật mặc định."""
-    return _get_pipeline().run(text, punc_norm=punc_norm)
+    return _get_pipeline().run(text)
 
 
 def phonemize_text(text: str) -> str:

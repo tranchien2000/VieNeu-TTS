@@ -1,0 +1,37 @@
+audiobook_auto_export_text: False
+audiobook_chapter_keywords: Chương,Chapter,Chap,CHƯƠNG,CHAPTER
+audiobook_default_voice: Minh Duc
+audiobook_output_directory: C:/Users/Chien/VieNeu-TTS/audiobook_output
+audiobook_output_mode: Split by chapters
+audiobook_spell_check_level: Mạnh (Full check)
+audiobook_split_mode: Auto detect
+audiobook_words_per_chunk: 1000
+auto_cleanup_temp_files: True
+cache_enabled: True
+cache_ttl_minutes: 60
+conversation_auto_detect: True
+conversation_silence_duration: 0.1
+conversation_speaker_mappings: <class 'dict'>
+custom_model_path: None
+enable_experimental_features: False
+generation_mode: Standard (Một lần)
+gpu_memory_fraction: 0.9
+history_enabled: True
+history_max_items: 50
+last_backbone: VieNeu-TTS-v2 (GPU)
+last_codec: NeuCodec (Distill)
+last_device: Auto
+last_voice_id: Ly
+last_voice_name: None
+logging_level: INFO
+max_batch_size: 16
+max_chars_chunk: 512
+repetition_penalty: 1.05
+spell_check_level: Mạnh (Full check)
+temperature: 0.3
+top_p: 0.85
+ui_auto_play: True
+ui_default_tab: preset
+ui_show_advanced_settings: False
+ui_theme: default
+use_batch: True
