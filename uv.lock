@@ -5583,6 +5583,7 @@ dependencies = [
     { name = "sea-g2p" },
     { name = "soundfile" },
     { name = "tqdm" },
+    { name = "trafilatura" },
 ]
 
 [package.optional-dependencies]
@@ -5651,6 +5652,7 @@ requires-dist = [
     { name = "torchaudio", marker = "sys_platform == 'darwin' and extra == 'gpu'", index = "https://pypi.org/simple" },
     { name = "torchaudio", marker = "sys_platform != 'darwin' and extra == 'gpu'", index = "https://download.pytorch.org/whl/cu128" },
     { name = "tqdm" },
+    { name = "trafilatura", specifier = ">=2.0.0" },
     { name = "transformers", marker = "sys_platform == 'darwin' and extra == 'gpu'" },
     { name = "triton", marker = "sys_platform == 'linux' and extra == 'gpu'" },
     { name = "triton-windows", marker = "sys_platform == 'win32' and extra == 'gpu'" },

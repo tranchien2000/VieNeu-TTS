@@ -4,12 +4,15 @@ Text exporter for audiobook chapters.
 
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
+from vieneu_utils.spell_checker import export_spell_checked_text
 
 
 def export_chapters_to_text(
     chapters: List[Dict],
     output_dir: str,
-    export_mode: str = "both"
+    export_mode: str = "both",
+    spell_check_level: str = "off",
+    base_name: str = "audiobook"
 ) -> Tuple[List[str], Optional[str], str]:
     """
     Export chapters to text files.
@@ -18,6 +21,8 @@ def export_chapters_to_text(
         chapters: List of chapter dicts with 'title' and 'text'
         output_dir: Directory to save text files
         export_mode: "individual", "combined", or "both"
+        spell_check_level: "off", "light", "medium", "strong" - applies spell check and adds status to filename
+        base_name: Base name for files (used when spell_check_level != "off")
 
     Returns:
         Tuple of (individual_files, combined_file, status_message)
@@ -27,6 +32,16 @@ def export_chapters_to_text(
     """
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
+
+    # If spell check requested, use enhanced exporter
+    if spell_check_level != "off":
+        from vieneu_utils.spell_checker import export_spell_checked_text
+        files_created, status_msg = export_spell_checked_text(chapters, output_dir, spell_check_level, base_name)
+        # export_spell_checked_text returns (files, status_msg)
+        # Separate into individual and combined for compatibility
+        individual_files = files_created[:-1] if len(files_created) > 1 else files_created
+        combined_file = files_created[-1] if len(files_created) > 1 else None
+        return individual_files, combined_file, status_msg
 
     individual_files = []
     combined_file = None

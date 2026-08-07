@@ -124,6 +124,7 @@ class TurboGPUVieNeuTTS(BaseTurboVieNeuTTS):
         device: str = "cuda",
         backend: str = "standard",
         hf_token: Optional[str] = None,
+        max_batch_size: int = 16,
         **kwargs
     ):
         super().__init__()
@@ -131,6 +132,7 @@ class TurboGPUVieNeuTTS(BaseTurboVieNeuTTS):
         self.backend = backend.lower()
         self.backbone = None
         self.tokenizer = None
+        self.max_batch_size = max_batch_size
 
         self._load_backbone(backbone_repo, self.device, hf_token, **kwargs)
         self._load_decoder(decoder_repo, decoder_filename, self.device, hf_token)
@@ -151,7 +153,8 @@ class TurboGPUVieNeuTTS(BaseTurboVieNeuTTS):
                         tp=kwargs.get("tp", 1),
                         enable_prefix_caching=kwargs.get("enable_prefix_caching", True),
                         dtype='bfloat16',
-                        quant_policy=kwargs.get("quant_policy", 0)
+                        quant_policy=kwargs.get("quant_policy", 0),
+                        max_batch_size=kwargs.get("max_batch_size", 16)
                     )
                     self.backbone = pipeline(repo, backend_config=engine_config)
                     self.gen_config = GenerationConfig(
@@ -256,12 +259,22 @@ class TurboGPUVieNeuTTS(BaseTurboVieNeuTTS):
                 generated_text = responses[0].text
             else:
                 generated_text = self._run_standard_generate(prompt, temperature, top_k, top_p, repetition_penalty)
-            
+
             yield self._apply_watermark(self._decode(generated_text, voice_embedding))
             if i < len(chunks) - 1:
                 silence_dur = get_silence_duration_v2(chunk)
                 if silence_dur > 0:
                     yield np.zeros(int(self.sample_rate * silence_dur), dtype=np.float32)
+
+    def get_optimization_stats(self) -> Dict[str, Any]:
+        """Get optimization stats for Turbo GPU model."""
+        return {
+            'triton_enabled': False,  # ONNX codec doesn't use Triton
+            'max_batch_size': getattr(self, 'max_batch_size', 16),
+            'cached_references': len(getattr(self, '_ref_cache', {})),
+            'active_sessions': len(getattr(self, 'stored_dict', {})),
+            'prefix_caching': getattr(self, 'enable_prefix_caching', True),
+        }
 
     def close(self):
         self.backbone = None

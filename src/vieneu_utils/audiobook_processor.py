@@ -88,18 +88,27 @@ class AudiobookProcessor:
         # Load checkpoint if resuming
         start_chapter_idx = 0
         chapter_audios = []
+        completed_chapter_files = []
 
         if resume_from_checkpoint:
             checkpoint = self.load_checkpoint()
             if checkpoint:
                 start_chapter_idx = checkpoint.get('current_chapter_idx', 0)
-                # Load completed chapter audio files
-                for ch_file in checkpoint.get('completed_chapter_files', []):
+                # Load completed chapter audio files from checkpoint
+                completed_chapter_files = checkpoint.get('completed_chapter_files', [])
+                for idx, ch_file in enumerate(completed_chapter_files):
                     if Path(ch_file).exists():
                         audio_data, _ = sf.read(ch_file)
+                        # Extract actual title from filename: chapter_XX_Title.wav -> Title
+                        stem = Path(ch_file).stem
+                        if stem.startswith(f"chapter_{idx+1:02d}_"):
+                            title = stem[len(f"chapter_{idx+1:02d}_"):]
+                        else:
+                            title = stem
                         chapter_audios.append({
-                            'title': Path(ch_file).stem,
-                            'audio': audio_data
+                            'title': title,
+                            'audio': audio_data,
+                            'index': idx
                         })
 
         # Get voice data
@@ -130,10 +139,7 @@ class AudiobookProcessor:
             if stop_event and stop_event.is_set():
                 self.save_checkpoint({
                     'current_chapter_idx': ch_idx,
-                    'completed_chapter_files': [
-                        str(self.output_dir / f"chapter_{i:02d}.wav")
-                        for i in range(len(chapter_audios))
-                    ],
+                    'completed_chapter_files': completed_chapter_files,
                     'voice_id': voice_id,
                     'temperature': temperature,
                     'max_chars_chunk': max_chars_chunk,
@@ -146,10 +152,7 @@ class AudiobookProcessor:
             if pause_event and pause_event.is_set():
                 self.save_checkpoint({
                     'current_chapter_idx': ch_idx,
-                    'completed_chapter_files': [
-                        str(self.output_dir / f"chapter_{i:02d}.wav")
-                        for i in range(len(chapter_audios))
-                    ],
+                    'completed_chapter_files': completed_chapter_files,
                     'voice_id': voice_id,
                     'temperature': temperature,
                     'max_chars_chunk': max_chars_chunk,
@@ -170,10 +173,7 @@ class AudiobookProcessor:
                     if stop_event and stop_event.is_set():
                         self.save_checkpoint({
                             'current_chapter_idx': ch_idx,
-                            'completed_chapter_files': [
-                                str(self.output_dir / f"chapter_{i:02d}.wav")
-                                for i in range(len(chapter_audios))
-                            ],
+                            'completed_chapter_files': completed_chapter_files,
                             'voice_id': voice_id,
                             'temperature': temperature,
                             'max_chars_chunk': max_chars_chunk,
@@ -185,10 +185,7 @@ class AudiobookProcessor:
                     if pause_event and pause_event.is_set():
                         self.save_checkpoint({
                             'current_chapter_idx': ch_idx,
-                            'completed_chapter_files': [
-                                str(self.output_dir / f"chapter_{i:02d}.wav")
-                                for i in range(len(chapter_audios))
-                            ],
+                            'completed_chapter_files': completed_chapter_files,
                             'voice_id': voice_id,
                             'temperature': temperature,
                             'max_chars_chunk': max_chars_chunk,
@@ -227,10 +224,7 @@ class AudiobookProcessor:
                     if stop_event and stop_event.is_set():
                         self.save_checkpoint({
                             'current_chapter_idx': ch_idx,
-                            'completed_chapter_files': [
-                                str(self.output_dir / f"chapter_{i:02d}.wav")
-                                for i in range(len(chapter_audios))
-                            ],
+                            'completed_chapter_files': completed_chapter_files,
                             'voice_id': voice_id,
                             'temperature': temperature,
                             'max_chars_chunk': max_chars_chunk,
@@ -242,10 +236,7 @@ class AudiobookProcessor:
                     if pause_event and pause_event.is_set():
                         self.save_checkpoint({
                             'current_chapter_idx': ch_idx,
-                            'completed_chapter_files': [
-                                str(self.output_dir / f"chapter_{i:02d}.wav")
-                                for i in range(len(chapter_audios))
-                            ],
+                            'completed_chapter_files': completed_chapter_files,
                             'voice_id': voice_id,
                             'temperature': temperature,
                             'max_chars_chunk': max_chars_chunk,
@@ -276,7 +267,7 @@ class AudiobookProcessor:
 
             # Join chapter chunks
             if chapter_chunk_audios:
-                chapter_audio = join_audio_chunks(chapter_chunk_audios, sr=self.sr, silence_p=0.15)
+                chapter_audio = join_audio_chunks(chapter_chunk_audios, sr=self.sr, silence_p=0.05, crossfade_p=0.01)
 
                 # Sanitize chapter name for filename
                 safe_title = "".join(c for c in chapter_name if c.isalnum() or c in (' ', '-', '_')).strip()
@@ -297,6 +288,8 @@ class AudiobookProcessor:
                     filename = f"chapter_{ch_idx+1:02d}_{safe_title}.wav"
                     chapter_file = self.output_dir / filename
                     sf.write(chapter_file, chapter_audio, self.sr)
+                    # Track saved file for checkpoint
+                    completed_chapter_files.append(str(chapter_file))
 
         # All chapters completed - clear checkpoint
         self.clear_checkpoint()
@@ -310,16 +303,16 @@ class AudiobookProcessor:
 
     def _save_single_file(self, chapter_audios: List[Dict]) -> List[str]:
         """Join all chapters and save as single file."""
-        # Add 1 second silence between chapters
+        # Add crossfade between chapters (Turbo adds its own silence at sentence ends)
         all_audio = []
-        silence = np.zeros(int(self.sr * 1.0), dtype=np.float32)
+        silence = np.zeros(int(self.sr * 0.5), dtype=np.float32)  # Reduced from 1.0s
 
         for i, ch in enumerate(chapter_audios):
             all_audio.append(ch['audio'])
             if i < len(chapter_audios) - 1:
                 all_audio.append(silence)
 
-        final_audio = np.concatenate(all_audio)
+        final_audio = join_audio_chunks(all_audio, sr=self.sr, silence_p=0.0, crossfade_p=0.02)
 
         # Save
         output_file = self.output_dir / "audiobook.wav"

@@ -528,6 +528,7 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
                     tp=1,
                     enable_prefix_caching=False,
                     enable_triton=True,
+                    max_batch_size=16,
                     hf_token=custom_hf_token
                 )
                 using_lmdeploy = True
@@ -631,7 +632,8 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
                     decoder_repo=codec_config["repo"],
                     device=backbone_device,
                     backend="lmdeploy" if force_lmdeploy and "GPU" in backbone_choice else "standard",
-                    hf_token=custom_hf_token
+                    hf_token=custom_hf_token,
+                    max_batch_size=16
                 )
             else:
                 from vieneu.standard import VieNeuTTS
@@ -875,13 +877,11 @@ def handle_file_upload(file_path):
     # Route to appropriate extractor
     if file_ext == '.docx':
         text, char_count, truncated, error = extract_text_from_docx(
-            file_path,
-            max_chars=10000
+            file_path
         )
     elif file_ext == '.txt':
         text, char_count, truncated, error = extract_text_from_txt(
-            file_path,
-            max_chars=10000
+            file_path
         )
     else:
         return "", gr.update(value=f"❌ Định dạng file không được hỗ trợ: {file_ext}", visible=True)
@@ -2321,34 +2321,6 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                                     value=""
                                 )
 
-                        # ========== SECTION 3: SETTINGS ==========
-                        with gr.Accordion("⚙️ Cài đặt", open=True):
-                            with gr.Row():
-                                audiobook_output_mode = gr.Radio(
-                                    ["Single file", "Split by chapters"],
-                                    value=load_setting("audiobook_output_mode", "Single file"),
-                                    label="Output format"
-                                )
-                                audiobook_voice = gr.Dropdown(
-                                    choices=[],
-                                    value="Ly",
-                                    label="🎤 Giọng đọc",
-                                    interactive=True
-                                )
-
-                            # Output Directory - MOVED HERE (after settings)
-                            with gr.Row():
-                                audiobook_output_dir = gr.Textbox(
-                                    label="📁 Thư mục lưu file",
-                                    value=load_setting("audiobook_output_directory", "audiobook_output"),
-                                    placeholder="audiobook_output",
-                                    info="Đường dẫn thư mục lưu file audio",
-                                    scale=4
-                                )
-                                with gr.Column(scale=1):
-                                    btn_browse_output_dir = gr.Button("📂 Chọn thư mục", size="sm")
-                                    btn_open_output_folder = gr.Button("📂 Truy cập thư mục lưu file", size="sm")
-
                         # State
                         audiobook_state = gr.State({
                             "text": "",
@@ -2410,6 +2382,83 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
 
             # --- OUTPUT ---
             with gr.Column(scale=2):
+                # ========== AUDIOBOOK CONTROLS (visible only when Audiobook tab active) ==========
+                with gr.Group(visible=False) as audiobook_output_group:
+                    # Settings - Compact layout
+                    with gr.Accordion("⚙️ Cài đặt", open=True):
+                        with gr.Row(equal_height=True):
+                            audiobook_output_mode = gr.Radio(
+                                ["Single file", "Split by chapters"],
+                                value=load_setting("audiobook_output_mode", "Single file"),
+                                label="📦 Format",
+                                scale=2,
+                                container=False
+                            )
+                            audiobook_voice = gr.Dropdown(
+                                choices=[],
+                                value="Ly",
+                                label="🎤 Voice",
+                                interactive=True,
+                                scale=2,
+                                container=False,
+                                allow_custom_value=True
+                            )
+
+                        # Output Directory - inline
+                        with gr.Row(equal_height=True):
+                            audiobook_output_dir = gr.Textbox(
+                                label="📁 Thư mục",
+                                value=load_setting("audiobook_output_directory", "audiobook_output"),
+                                placeholder="audiobook_output",
+                                scale=5,
+                                container=False
+                            )
+                            with gr.Column(scale=1, min_width=80):
+                                btn_browse_output_dir = gr.Button("📂 Chọn", size="sm", variant="secondary")
+                            with gr.Column(scale=1, min_width=80):
+                                btn_open_output_folder = gr.Button("📂 Mở", size="sm", variant="secondary")
+
+                    # Process Control
+                    gr.Markdown("### 🎬 Xử lý")
+                    with gr.Row(equal_height=True):
+                        btn_start_audiobook = gr.Button("🎵 Bắt đầu", variant="primary", interactive=False, scale=1)
+                        btn_pause_audiobook = gr.Button("⏸️ Tạm dừng", interactive=False, scale=1)
+                        btn_resume_audiobook = gr.Button("▶️ Tiếp tục", interactive=False, scale=1)
+                        btn_stop_audiobook = gr.Button("⏹️ Dừng", variant="stop", interactive=False, scale=1)
+
+                    # Monitoring
+                    gr.Markdown("### 📊 Tiến độ")
+                    audiobook_progress = gr.Markdown("Chưa bắt đầu")
+
+                    with gr.Row(equal_height=True):
+                        audiobook_chunks_progress = gr.Textbox(
+                            label="Chunks",
+                            value="0/0",
+                            interactive=False,
+                            scale=1,
+                            container=False
+                        )
+                        audiobook_time_estimate = gr.Textbox(
+                            label="Còn lại",
+                            value="--",
+                            interactive=False,
+                            scale=1,
+                            container=False
+                        )
+                        audiobook_speed = gr.Textbox(
+                            label="Tốc độ",
+                            value="--",
+                            interactive=False,
+                            scale=1,
+                            container=False
+                        )
+
+                    audiobook_preview = gr.Audio(
+                        label="🔊 Preview",
+                        autoplay=False,
+                        container=False
+                    )
+
                 # ========== UNIFIED AUDIO OUTPUT ==========
                 gr.Markdown("### 🎵 Audio Output")
                 with gr.Row():
@@ -2426,45 +2475,6 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                         max_lines=10,
                         show_copy_button=True,
                         scale=2
-                    )
-
-                # ========== AUDIOBOOK CONTROLS (visible only when Audiobook tab active) ==========
-                with gr.Group(visible=False) as audiobook_output_group:
-                    # Process Control
-                    gr.Markdown("### 🎬 Xử lý")
-                    with gr.Row():
-                        btn_start_audiobook = gr.Button("🎵 Bắt đầu", variant="primary", interactive=False)
-                        btn_pause_audiobook = gr.Button("⏸️ Tạm dừng", interactive=False)
-                        btn_resume_audiobook = gr.Button("▶️ Tiếp tục", interactive=False)
-                        btn_stop_audiobook = gr.Button("⏹️ Dừng hẳn", variant="stop", interactive=False)
-
-                    # Monitoring
-                    gr.Markdown("### 📊 Tiến độ")
-                    audiobook_progress = gr.Markdown("Chưa bắt đầu")
-
-                    with gr.Row():
-                        audiobook_chunks_progress = gr.Textbox(
-                            label="Chunks",
-                            value="0/0",
-                            interactive=False,
-                            scale=1
-                        )
-                        audiobook_time_estimate = gr.Textbox(
-                            label="Thời gian còn lại",
-                            value="--",
-                            interactive=False,
-                            scale=1
-                        )
-                        audiobook_speed = gr.Textbox(
-                            label="Tốc độ",
-                            value="--",
-                            interactive=False,
-                            scale=1
-                        )
-
-                    audiobook_preview = gr.Audio(
-                        label="Preview (chunk mới nhất)",
-                        autoplay=False
                     )
 
                 gr.Markdown("<div style='text-align: center; color: #64748b; font-size: 0.8rem;'>🔒 Audio được đóng dấu bản quyền ẩn (Watermarker) để bảo mật và định danh AI.</div>")
@@ -2878,7 +2888,9 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             individual_files, combined_file, export_status = export_chapters_to_text(
                 chapters=chapters,
                 output_dir=str(export_dir),
-                export_mode="both"
+                export_mode="both",
+                spell_check_level="off",
+                base_name="audiobook"
             )
 
             # Build info message
@@ -2902,6 +2914,14 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                 for ch in chapters
             ]
 
+            # Create output directory based on first file name
+            base_name = Path(file_names[0]).stem if file_names else "audiobook"
+            # Sanitize folder name
+            safe_base = "".join(c for c in base_name if c.isalnum() or c in (' ', '-', '_')).strip()
+            safe_base = safe_base[:100]  # Limit length
+            # Create final output dir: user_specified_dir / safe_base
+            final_output_dir = str(Path(output_dir) / safe_base)
+
             return (
                 gr.update(value=info),
                 gr.update(value=chapter_data),
@@ -2911,7 +2931,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                     "text": merged_text,
                     "chapters": chapters,
                     "file_path": file_paths[0] if len(file_paths) == 1 else None,
-                    "output_dir": output_dir,
+                    "output_dir": final_output_dir,
                     "status": "idle",
                     "current_chapter_idx": 0,
                     "completed_chapters": [],
@@ -2926,8 +2946,8 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             outputs=[audiobook_file_info, audiobook_chapters, btn_start_audiobook, audiobook_text_display, audiobook_state]
         )
 
-        def export_audiobook_text(audiobook_state_val, output_dir):
-            """Export chapters to text files."""
+        def export_audiobook_text(audiobook_state_val, output_dir, spell_check_level):
+            """Export chapters to text files with spell check status in filename."""
             from vieneu_utils.text_exporter import export_chapters_to_text
 
             if not audiobook_state_val.get("chapters"):
@@ -2935,14 +2955,26 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
 
             chapters = audiobook_state_val["chapters"]
 
-            # Use output_dir from state or textbox
-            export_dir = Path(output_dir) / "text_export"
+            # Map UI label to internal level
+            level_map = {
+                "Tắt": "off",
+                "Nhẹ (Lọc ký tự)": "light",
+                "Trung bình (Sửa typo)": "medium",
+                "Mạnh (Full check)": "strong"
+            }
+            level = level_map.get(spell_check_level, "off")
 
-            # Export both individual and combined
+            # Use output_dir from state (already includes book folder name)
+            base_name = Path(audiobook_state_val.get("output_dir", output_dir)).name
+            export_dir = Path(audiobook_state_val.get("output_dir", output_dir)) / "text_export"
+
+            # Export both individual and combined with spell check level
             individual_files, combined_file, status_msg = export_chapters_to_text(
                 chapters=chapters,
                 output_dir=str(export_dir),
-                export_mode="both"
+                export_mode="both",
+                spell_check_level=level,
+                base_name=base_name
             )
 
             # Show file paths
@@ -3506,20 +3538,22 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             # Limit text for preview
             text_preview = text[:char_limit] if len(text) > char_limit else text
 
-            # Apply spell check
-            from vieneu_utils.spell_checker import clean_vietnamese_text
-            cleaned_text, status = clean_vietnamese_text(text_preview, internal_level)
+            # Apply spell check with detailed changes
+            from vieneu_utils.spell_checker import clean_text_with_changes, generate_diff_html
+            cleaned_text, changes = clean_text_with_changes(text_preview, internal_level)
 
-            # Generate diff based on mode
-            if mode == "Side-by-side":
-                diff_html = generate_side_by_side_diff(text_preview, cleaned_text)
-            elif mode == "Unified":
-                diff_html = generate_unified_diff(text_preview, cleaned_text)
-            else:  # Inline
-                diff_html = generate_inline_diff(text_preview, cleaned_text)
+            # Generate diff based on mode using spell_checker's generate_diff_html
+            # Map UI mode to spell_checker mode
+            mode_map = {
+                "Side-by-side": "side-by-side",
+                "Unified": "unified",
+                "Inline": "inline"
+            }
+            sc_mode = mode_map.get(mode, "inline")
+            diff_html = generate_diff_html(text_preview, cleaned_text, changes, mode=sc_mode, limit=char_limit)
 
             # Generate statistics
-            stats_html = generate_stats_dashboard(text_preview, cleaned_text, status)
+            stats_html = generate_stats_dashboard(text_preview, cleaned_text, f"Level: {internal_level}, Changes: {len(changes)}")
 
             return (diff_html, stats_html)
 
@@ -3652,12 +3686,11 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             resume_mode = (audiobook_state_val.get("status") == "paused")
 
             # Initialize processor
-            output_dir = Path(audiobook_state_val.get("output_dir", "audiobook_output")) / str(uuid.uuid4())
+            output_dir = Path(audiobook_state_val.get("output_dir", "audiobook_output"))
             if resume_mode and audiobook_state_val.get("checkpoint_file"):
-                # Use existing output dir
+                # Use existing output dir (parent of checkpoint file)
                 output_dir = Path(audiobook_state_val["checkpoint_file"]).parent
-            else:
-                output_dir.mkdir(parents=True, exist_ok=True)
+            output_dir.mkdir(parents=True, exist_ok=True)
 
             processor = AudiobookProcessor(tts, str(output_dir))
             chapters = audiobook_state_val["chapters"]
@@ -3946,7 +3979,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
         # Export text button
         btn_export_text.click(
             fn=export_audiobook_text,
-            inputs=[audiobook_state, audiobook_output_dir],
+            inputs=[audiobook_state, audiobook_output_dir, audiobook_spell_check_level],
             outputs=[export_text_status]
         )
 

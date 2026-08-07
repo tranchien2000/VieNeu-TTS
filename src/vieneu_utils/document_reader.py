@@ -9,14 +9,14 @@ from typing import Tuple, Optional
 
 def extract_text_from_txt(
     file_path: str,
-    max_chars: Optional[int] = 10000
+    max_chars: Optional[int] = None
 ) -> Tuple[str, int, bool, Optional[str]]:
     """
     Extract text from .txt file with auto-detect encoding.
 
     Args:
         file_path: Path to the .txt file
-        max_chars: Maximum characters to extract (default: 10000, None = no limit)
+        max_chars: Maximum characters to extract (default: None = no limit)
 
     Returns:
         Tuple of (text, char_count, truncated, error_message)
@@ -64,14 +64,14 @@ def extract_text_from_txt(
 
 def extract_text_from_docx(
     file_path: str,
-    max_chars: Optional[int] = 10000
+    max_chars: Optional[int] = None
 ) -> Tuple[str, int, bool, Optional[str]]:
     """
     Extract text from .docx file.
 
     Args:
         file_path: Path to the .docx file
-        max_chars: Maximum characters to extract (default: 10000, None = no limit)
+        max_chars: Maximum characters to extract (default: None = no limit)
 
     Returns:
         Tuple of (text, char_count, truncated, error_message)
