@@ -4149,6 +4149,13 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
 
             # Get chapters with checkbox from dataframe
             chapters_raw = audiobook_state_val.get("chapters_display", full_chapters)
+            # Convert pandas DataFrame to list if needed
+            try:
+                import pandas as pd
+                if isinstance(chapters_raw, pd.DataFrame):
+                    chapters_raw = chapters_raw.values.tolist()
+            except Exception:
+                pass
 
             # Filter chapters based on checkbox (first column)
             chapters = []
@@ -4792,13 +4799,37 @@ Nhấn **'Tiếp tục'** hoặc **'Bắt đầu'** ở phần Xử lý để ch
         )
 
         # Select/Deselect all chapters
+        def set_all_chapters_checkboxes(chapters, value: bool):
+            """Return chapters list with first column set to *value* for each row.
+            Handles both list-of-lists and list-of-dicts formats.
+            """
+            if not chapters:
+                return []
+            # Detect format: list of lists (expected) or list of dicts
+            first = chapters[0]
+            if isinstance(first, (list, tuple)):
+                # Preserve columns after index 0
+                return [[value] + list(row[1:]) for row in chapters]
+            elif isinstance(first, dict):
+                new_chapters = []
+                for row in chapters:
+                    new_row = dict(row)
+                    first_key = next(iter(new_row))
+                    new_row[first_key] = value
+                    new_chapters.append(new_row)
+                return new_chapters
+            else:
+                return []
+
+        # Select all chapters
         btn_select_all_chapters.click(
-            fn=lambda chapters: [[True, c[1], c[2], c[3]] for c in chapters] if chapters else [],
+            fn=lambda chapters: set_all_chapters_checkboxes(chapters, True),
             inputs=[audiobook_chapters],
             outputs=[audiobook_chapters]
         )
+        # Deselect all chapters
         btn_deselect_all_chapters.click(
-            fn=lambda chapters: [[False, c[1], c[2], c[3]] for c in chapters] if chapters else [],
+            fn=lambda chapters: set_all_chapters_checkboxes(chapters, False),
             inputs=[audiobook_chapters],
             outputs=[audiobook_chapters]
         )
