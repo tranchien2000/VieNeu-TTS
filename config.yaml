@@ -2,6 +2,13 @@ text_settings:
   max_chars_per_chunk: 256
   max_total_chars_streaming: 3000
 
+spell_check:
+  engine: "symspell"  # off | symspell | vspell | hybrid
+  device: "auto"      # auto | cpu | cuda
+  batch_size: 16
+  use_languagetool: false
+  languagetool_url: "http://localhost:8081"
+
 backbone_configs:
   # v3 Turbo: default for everyone — CPU runs via ONNX, GPU via PyTorch.
   "VieNeu-TTS-v3-Turbo (Thử nghiệm)":

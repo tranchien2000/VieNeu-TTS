@@ -687,7 +687,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS (XPU)", head=head_html) a
                 )
                 
                 with gr.Tabs() as tabs:
-                    with gr.TabItem("👤 Preset", id="preset_mode") as tab_preset:
+                    with gr.TabItem("📖 Đọc truyện", id="preset_mode") as tab_preset:
                         voice_select = gr.Dropdown(choices=[], value=None, label="Giọng mẫu")
                     
                     with gr.TabItem("🦜 Voice Cloning", id="custom_mode") as tab_custom:
@@ -710,11 +710,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS (XPU)", head=head_html) a
                         Hướng dẫn chi tiết có tại file: `finetune/README.md` hoặc xem trên [GitHub](https://github.com/pnnbao97/VieNeu-TTS/tree/main/finetune).
                         """)              
                 
-                generation_mode = gr.Radio(
-                    ["Standard (Một lần)"],
-                    value="Standard (Một lần)",
-                    label="Chế độ sinh"
-                )
+
 
                 with gr.Row():
                     use_batch = gr.Checkbox(
@@ -746,6 +742,11 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS (XPU)", head=head_html) a
                 
                 current_mode_state = gr.State("preset_mode")
                 
+                generation_mode = gr.Radio(
+                    ["Standard (Một lần)"],
+                    value="Standard (Một lần)",
+                    label="Chế độ sinh"
+                )
                 with gr.Row():
                     btn_generate = gr.Button("🎵 Bắt đầu", variant="primary", scale=2, interactive=False)
                     btn_stop = gr.Button("⏹️ Dừng", variant="stop", scale=1, interactive=False)

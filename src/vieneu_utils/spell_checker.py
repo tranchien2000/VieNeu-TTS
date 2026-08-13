@@ -1,20 +1,306 @@
 """
-Vietnamese spell checker and text filter.
+Vietnamese spell checker with multiple engines (SymSpell, VSpell, Hybrid).
 """
 
-from typing import Tuple, List, Dict
+from abc import ABC, abstractmethod
+from typing import Tuple, List, Dict, Optional
 import re
 import json
+import time
 from pathlib import Path
+from functools import lru_cache
 
 
-class VietnameseSpellChecker:
-    """
-    Vietnamese spell checker with multiple filtering levels.
-    """
+class SpellCheckerBase(ABC):
+    """Abstract base class for spell checkers."""
+
+    @abstractmethod
+    def correct(self, text: str) -> str:
+        """Correct a single text."""
+        pass
+
+    @abstractmethod
+    def correct_batch(self, texts: List[str]) -> List[str]:
+        """Correct multiple texts (batch processing)."""
+        pass
+
+    @abstractmethod
+    def name(self) -> str:
+        """Engine name for logging/debugging."""
+        pass
+
+
+class SymSpellChecker(SpellCheckerBase):
+    """SymSpell + Underthesea based spell checker (fast, CPU-only)."""
 
     def __init__(self):
-        """Initialize spell checker."""
+        self._sym_spell = None
+        self._dict_loaded = False
+
+    def _load_dictionary(self):
+        """Load Vietnamese dictionary for SymSpell."""
+        from symspellpy import SymSpell, Verbosity
+        import os
+
+        if self._dict_loaded:
+            return
+
+        self._sym_spell = SymSpell(max_dictionary_edit_distance=2, prefix_length=7)
+
+        dict_paths = [
+            "vn_dict.txt",
+            os.path.join(os.path.dirname(__file__), "vn_dict.txt"),
+            os.path.join(os.path.dirname(os.path.dirname(__file__)), "vn_dict.txt"),
+        ]
+
+        loaded = False
+        for path in dict_paths:
+            if os.path.exists(path):
+                self._sym_spell.load_dictionary(path, term_index=0, count_index=1)
+                loaded = True
+                break
+
+        if not loaded:
+            self._build_basic_dict()
+
+        self._dict_loaded = True
+
+    def _build_basic_dict(self):
+        """Build a basic VN dictionary from common words."""
+        common_words = [
+            "và", "của", "có", "là", "trong", "được", "cho", "với", "tại", "từ",
+            "khi", "này", "đó", "những", "các", "một", "nhiều", "ít", "lớn", "nhỏ",
+            "tôi", "bạn", "anh", "chị", "em", "họ", "chúng", "ta", "mình", "người",
+            "đi", "đến", "về", "làm", "ăn", "ngủ", "học", "làm việc", "chơi", "xem",
+            "đẹp", "xấu", "tốt", "xấu", "nhanh", "chậm", "dễ", "khó", "mới", "cũ",
+            "ngày", "tháng", "năm", "giờ", "phút", "giây", "sáng", "trưa", "chiều", "tối",
+            "Hà Nội", "Hồ Chí Minh", "Đà Nẵng", "Việt Nam", "trường", "bệnh viện", "công ty",
+            "không", "có", "được", "sẽ", "đã", "đang", "sẽ", "có thể", "phải", "nên",
+            "vì", "nên", "do", "bởi", "nếu", "thì", "mà", "hoặc", "hay", "hoặc là",
+            "trên", "dưới", "giữa", "bên", "trái", "phải", "trước", "sau", "ngoài", "trong",
+        ]
+
+        for i, word in enumerate(common_words):
+            freq = 1000000 - i * 1000
+            self._sym_spell.create_dictionary_entry(word, freq)
+
+    @property
+    def sym_spell(self):
+        self._load_dictionary()
+        return self._sym_spell
+
+    def correct(self, text: str) -> str:
+        from symspellpy import Verbosity
+        from underthesea import word_tokenize
+
+        if not text or not text.strip():
+            return text
+
+        try:
+            tokens = word_tokenize(text, format="text").split()
+        except Exception:
+            tokens = text.split()
+
+        corrected_tokens = []
+        for token in tokens:
+            if any(c.isdigit() for c in token) or len(token) <= 2:
+                corrected_tokens.append(token)
+                continue
+
+            suggestions = self.sym_spell.lookup(token, Verbosity.CLOSEST, max_edit_distance=2)
+            if suggestions and suggestions[0].distance > 0:
+                corrected_tokens.append(suggestions[0].term)
+            else:
+                corrected_tokens.append(token)
+
+        return " ".join(corrected_tokens)
+
+    def correct_batch(self, texts: List[str]) -> List[str]:
+        return [self.correct(t) for t in texts]
+
+    def name(self) -> str:
+        return "SymSpell"
+
+
+class VSpellChecker(SpellCheckerBase):
+    """VSpell based spell checker (transformer-based, GPU/CPU)."""
+
+    def __init__(self, device: str = "auto", batch_size: int = 16):
+        self._model = None
+        self._device = device
+        self._batch_size = batch_size
+        self._initialized = False
+        self._init_error = None
+
+    def _init_model(self):
+        """Lazy initialize VSpell model."""
+        if self._initialized:
+            return
+
+        try:
+            import torch
+            from vspell import VSpell
+
+            if self._device == "auto":
+                self._device = "cuda" if torch.cuda.is_available() else "cpu"
+
+            self._model = VSpell(device=self._device)
+            self._initialized = True
+            print(f"✅ VSpell initialized on {self._device}")
+
+        except ImportError:
+            self._init_error = "vspell not installed (pip install vspell torch transformers)"
+            self._initialized = True  # Don't retry
+        except Exception as e:
+            self._init_error = f"VSpell init failed: {e}"
+            self._initialized = True
+
+    def correct(self, text: str) -> str:
+        self._init_model()
+
+        if self._init_error or self._model is None:
+            return text  # Fallback: return original
+
+        if not text or not text.strip():
+            return text
+
+        try:
+            result = self._model.correct(text)
+            return result
+        except Exception as e:
+            print(f"⚠️ VSpell error: {e}")
+            return text
+
+    def correct_batch(self, texts: List[str]) -> List[str]:
+        self._init_model()
+
+        if self._init_error or self._model is None:
+            return texts  # Fallback
+
+        if not texts:
+            return []
+
+        results = []
+        for i in range(0, len(texts), self._batch_size):
+            batch = texts[i:i + self._batch_size]
+            try:
+                batch_results = self._model.correct_batch(batch)
+                results.extend(batch_results)
+            except Exception as e:
+                print(f"⚠️ VSpell batch error: {e}")
+                results.extend(batch)  # Fallback to original
+
+        return results
+
+    def name(self) -> str:
+        return f"VSpell({self._device})"
+
+
+class HybridSpellChecker(SpellCheckerBase):
+    """Hybrid: Normalizer -> VSpell -> (optional LanguageTool)."""
+
+    def __init__(self, device: str = "auto", batch_size: int = 16, use_languagetool: bool = False, languagetool_url: str = "http://localhost:8081"):
+        self._vspell = VSpellChecker(device=device, batch_size=batch_size)
+        self._symspell = SymSpellChecker()
+        self._use_languagetool = use_languagetool
+        self._languagetool_url = languagetool_url
+
+    def correct(self, text: str) -> str:
+        # Step 1: VSpell (main correction)
+        text = self._vspell.correct(text)
+
+        # Step 2: SymSpell for remaining typos (fast cleanup)
+        text = self._symspell.correct(text)
+
+        # Step 3: LanguageTool (optional, slow)
+        if self._use_languagetool:
+            text = self._languagetool_correct(text)
+
+        return text
+
+    def correct_batch(self, texts: List[str]) -> List[str]:
+        # VSpell batch
+        texts = self._vspell.correct_batch(texts)
+        # SymSpell cleanup
+        texts = self._symspell.correct_batch(texts)
+        # LanguageTool (optional)
+        if self._use_languagetool:
+            texts = [self._languagetool_correct(t) for t in texts]
+        return texts
+
+    def _languagetool_correct(self, text: str) -> str:
+        """Call LanguageTool API for grammar checking."""
+        try:
+            import requests
+            response = requests.post(
+                f"{self._languagetool_url}/v2/check",
+                data={"text": text, "language": "vi-VN"},
+                timeout=10
+            )
+            if response.status_code == 200:
+                matches = response.json().get("matches", [])
+                # Apply corrections in reverse order to maintain positions
+                for match in reversed(matches):
+                    if match.get("replacements"):
+                        offset = match["offset"]
+                        length = match["length"]
+                        replacement = match["replacements"][0]["value"]
+                        text = text[:offset] + replacement + text[offset + length:]
+        except Exception:
+            pass  # Silently skip LanguageTool errors
+        return text
+
+    def name(self) -> str:
+        parts = [self._vspell.name(), "SymSpell"]
+        if self._use_languagetool:
+            parts.append("LanguageTool")
+        return "Hybrid(" + "+".join(parts) + ")"
+
+
+# ---------------------------------------------------------------------------
+# Factory & Cache
+# ---------------------------------------------------------------------------
+
+_checker_cache: Dict[str, SpellCheckerBase] = {}
+
+
+def get_spell_checker(
+    engine: str = "symspell",
+    device: str = "auto",
+    batch_size: int = 16,
+    use_languagetool: bool = False,
+    languagetool_url: str = "http://localhost:8081"
+) -> SpellCheckerBase:
+    """Get or create spell checker instance (cached)."""
+    cache_key = f"{engine}:{device}:{batch_size}:{use_languagetool}"
+
+    if cache_key not in _checker_cache:
+        if engine == "vspell":
+            _checker_cache[cache_key] = VSpellChecker(device=device, batch_size=batch_size)
+        elif engine == "hybrid":
+            _checker_cache[cache_key] = HybridSpellChecker(
+                device=device, batch_size=batch_size,
+                use_languagetool=use_languagetool, languagetool_url=languagetool_url
+            )
+        else:  # symspell (default)
+            _checker_cache[cache_key] = SymSpellChecker()
+
+    return _checker_cache[cache_key]
+
+
+def clear_spell_checker_cache():
+    """Clear all cached spell checkers (e.g., when config changes)."""
+    _checker_cache.clear()
+
+
+# ---------------------------------------------------------------------------
+# Legacy compatibility layer (existing API)
+# ---------------------------------------------------------------------------
+
+class VietnameseSpellChecker:
+    """Legacy wrapper for backward compatibility."""
+
+    def __init__(self):
         try:
             from pyvi import ViTokenizer
             self.tokenizer = ViTokenizer
@@ -23,14 +309,12 @@ class VietnameseSpellChecker:
             print("⚠️ pyvi not installed. Spell checking disabled.")
             self.available = False
 
-        # Custom dictionary
         self.custom_dict_path = Path.home() / ".vieneu" / "custom_spell_dict.json"
         self.custom_replacements = {}
         self.whitelist = []
         self.load_custom_dict()
 
     def load_custom_dict(self):
-        """Load custom dictionary from file."""
         if self.custom_dict_path.exists():
             try:
                 with open(self.custom_dict_path, 'r', encoding='utf-8') as f:
@@ -41,7 +325,6 @@ class VietnameseSpellChecker:
                 print(f"⚠️ Failed to load custom dictionary: {e}")
 
     def save_custom_dict(self):
-        """Save custom dictionary to file."""
         self.custom_dict_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             with open(self.custom_dict_path, 'w', encoding='utf-8') as f:
@@ -53,39 +336,26 @@ class VietnameseSpellChecker:
             print(f"⚠️ Failed to save custom dictionary: {e}")
 
     def add_replacement(self, old_word: str, new_word: str):
-        """Add custom replacement rule."""
         self.custom_replacements[old_word] = new_word
         self.save_custom_dict()
 
     def add_to_whitelist(self, word: str):
-        """Add word to whitelist."""
         if word not in self.whitelist:
             self.whitelist.append(word)
             self.save_custom_dict()
 
     def remove_replacement(self, old_word: str):
-        """Remove custom replacement rule."""
         if old_word in self.custom_replacements:
             del self.custom_replacements[old_word]
             self.save_custom_dict()
 
     def remove_from_whitelist(self, word: str):
-        """Remove word from whitelist."""
         if word in self.whitelist:
             self.whitelist.remove(word)
             self.save_custom_dict()
 
     def clean_text(self, text: str, level: str = "off") -> Tuple[str, str]:
-        """
-        Clean and spell check text based on level.
-
-        Args:
-            text: Input text
-            level: Cleaning level - "off", "light", "medium", "strong"
-
-        Returns:
-            Tuple of (cleaned_text, status_message)
-        """
+        """Legacy clean_text with levels (off/light/medium/strong)."""
         if level == "off":
             return text, "Spell checking: OFF"
 
@@ -95,27 +365,23 @@ class VietnameseSpellChecker:
 
         # Level 1: Remove special characters (all levels)
         if level in ["light", "medium", "strong"]:
-            # Remove URLs
             url_pattern = re.compile(
                 r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+'
             )
             cleaned = url_pattern.sub('', cleaned)
 
-            # Remove email addresses
             email_pattern = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b')
             cleaned = email_pattern.sub('', cleaned)
 
-            # Remove hashtags and mentions
             cleaned = re.sub(r'#\w+', '', cleaned)
             cleaned = re.sub(r'@\w+', '', cleaned)
 
-            # Remove emojis
             emoji_pattern = re.compile(
                 "["
-                "\U0001F600-\U0001F64F"  # emoticons
-                "\U0001F300-\U0001F5FF"  # symbols & pictographs
-                "\U0001F680-\U0001F6FF"  # transport & map symbols
-                "\U0001F1E0-\U0001F1FF"  # flags
+                "\U0001F600-\U0001F64F"
+                "\U0001F300-\U0001F5FF"
+                "\U0001F680-\U0001F6FF"
+                "\U0001F1E0-\U0001F1FF"
                 "\U00002702-\U000027B0"
                 "\U000024C2-\U0001F251"
                 "]+", flags=re.UNICODE
@@ -124,23 +390,14 @@ class VietnameseSpellChecker:
             cleaned = emoji_pattern.sub('', cleaned)
             emoji_removed = before - len(cleaned)
 
-            # Normalize excessive punctuation
-            cleaned = re.sub(r'!{2,}', '!', cleaned)  # !!! → !
-            cleaned = re.sub(r'\?{2,}', '?', cleaned)  # ??? → ?
-            cleaned = re.sub(r'\.{4,}', '...', cleaned)  # ..... → ...
-
-            # Remove decorative characters
-            cleaned = re.sub(r'[~*\-_]{3,}', '', cleaned)  # ~~~, ***, ---
-
-            # Normalize quotes and dashes
+            cleaned = re.sub(r'!{2,}', '!', cleaned)
+            cleaned = re.sub(r'\?{2,}', '?', cleaned)
+            cleaned = re.sub(r'\.{4,}', '...', cleaned)
+            cleaned = re.sub(r'[~*\-_]{3,}', '', cleaned)
             cleaned = re.sub(r'[""]', '"', cleaned)
             cleaned = re.sub(r'[''`]', "'", cleaned)
             cleaned = re.sub(r'[–—]', '-', cleaned)
-
-            # Remove zero-width characters
             cleaned = re.sub(r'[​‌‍﻿]', '', cleaned)
-
-            # Remove excessive whitespace
             cleaned = re.sub(r'\s+', ' ', cleaned)
             cleaned = cleaned.strip()
 
@@ -149,15 +406,11 @@ class VietnameseSpellChecker:
 
         # Level 2: Fix common typos (medium, strong)
         if level in ["medium", "strong"]:
-            # Common Vietnamese typos - EXPANDED
             typo_map = {
-                # Pronouns
                 'mik': 'mình', 'mk': 'mình', 'mjk': 'mình',
                 'bn': 'bạn',
                 'tớ': 'tôi',
                 'cx': 'cũng', 'cug': 'cũng',
-
-                # Common words
                 'đg': 'đang', 'dg': 'đang',
                 'lm': 'làm',
                 'bik': 'biết', 'bit': 'biết', 'bít': 'biết',
@@ -167,15 +420,11 @@ class VietnameseSpellChecker:
                 'vs': 'với', 'v': 'với',
                 'ntn': 'như thế nào',
                 'j': 'gì', 'z': 'gì',
-
-                # Time & quantity
                 'h': 'giờ',
                 'r': 'rồi', 'ròi': 'rồi',
                 'nx': 'nữa',
                 'nhìu': 'nhiều', 'nhiu': 'nhiều',
                 'it': 'ít',
-
-                # Expressions
                 'ok': 'được', 'oke': 'được', 'okie': 'được',
                 'tks': 'cảm ơn', 'thanks': 'cảm ơn', 'thank': 'cảm ơn',
                 'camon': 'cảm ơn',
@@ -184,14 +433,10 @@ class VietnameseSpellChecker:
                 'wtf': 'gì vậy',
                 'lol': 'ha ha', 'haha': 'ha ha',
                 'yep': 'vâng', 'yeah': 'vâng', 'uh': 'vâng',
-
-                # Question words
                 'zao': 'sao', 'zo': 'sao',
                 'dau': 'đâu',
                 'nao': 'nào',
                 'aj': 'ai',
-
-                # Verbs
                 'ns': 'nói',
                 'ngê': 'nghe',
                 'thay': 'thấy',
@@ -207,10 +452,7 @@ class VietnameseSpellChecker:
         # Level 3: Advanced spell checking with pyvi (strong only)
         if level == "strong" and self.available:
             try:
-                # Tokenize and check for non-Vietnamese words
                 tokens = self.tokenizer.tokenize(cleaned)
-                # pyvi tokenization helps identify word boundaries
-                # Further spell checking logic can be added here
                 changes.append("Applied advanced spell checking")
             except Exception as e:
                 changes.append(f"Advanced checking failed: {str(e)}")
@@ -218,16 +460,13 @@ class VietnameseSpellChecker:
         # Apply custom replacements (all levels except "off")
         if self.custom_replacements:
             for old_word, new_word in self.custom_replacements.items():
-                # Skip if word is in whitelist
                 if old_word in self.whitelist:
                     continue
-
                 pattern = r'\b' + re.escape(old_word) + r'\b'
                 if re.search(pattern, cleaned, re.IGNORECASE):
                     cleaned = re.sub(pattern, new_word, cleaned, flags=re.IGNORECASE)
                     changes.append(f"Custom: '{old_word}' → '{new_word}'")
 
-        # Generate status message
         if changes:
             status = f"✅ Cleaned ({level}): " + ", ".join(changes)
         else:
@@ -236,60 +475,25 @@ class VietnameseSpellChecker:
         return cleaned, status
 
 
-# Global singleton
-_spell_checker = None
-
-def get_spell_checker() -> VietnameseSpellChecker:
-    """Get or create spell checker singleton."""
-    global _spell_checker
-    if _spell_checker is None:
-        _spell_checker = VietnameseSpellChecker()
-    return _spell_checker
+_legacy_checker = None
 
 
-def clean_vietnamese_text(text: str, level: str = "off") -> Tuple[str, str]:
-    """
-    Convenience function to clean Vietnamese text.
-
-    Args:
-        text: Input text
-        level: Cleaning level - "off", "light", "medium", "strong"
-
-    Returns:
-        Tuple of (cleaned_text, status_message)
-    """
-    checker = get_spell_checker()
-    return checker.clean_text(text, level)
+def get_legacy_checker() -> VietnameseSpellChecker:
+    global _legacy_checker
+    if _legacy_checker is None:
+        _legacy_checker = VietnameseSpellChecker()
+    return _legacy_checker
 
 
 def clean_vietnamese_text(text: str, level: str = "off") -> Tuple[str, str]:
-    """
-    Convenience function to clean Vietnamese text.
-
-    Args:
-        text: Input text
-        level: Cleaning level - "off", "light", "medium", "strong"
-
-    Returns:
-        Tuple of (cleaned_text, status_message)
-    """
-    checker = get_spell_checker()
+    """Legacy convenience function."""
+    checker = get_legacy_checker()
     return checker.clean_text(text, level)
 
 
 def clean_text_with_changes(text: str, level: str = "off") -> Tuple[str, List[dict]]:
-    """
-    Clean text and return detailed changes for preview.
-
-    Args:
-        text: Input text
-        level: Cleaning level
-
-    Returns:
-        Tuple of (cleaned_text, list_of_changes)
-        Each change: {"type": "removed|replaced|normalized", "original": "...", "new": "...", "position": int}
-    """
-    checker = get_spell_checker()
+    """Legacy clean text with detailed changes for preview."""
+    checker = get_legacy_checker()
 
     if level == "off":
         return text, []
@@ -298,7 +502,6 @@ def clean_text_with_changes(text: str, level: str = "off") -> Tuple[str, List[di
     cleaned = text
     changes = []
 
-    # Level 1: Remove special characters (all levels)
     if level in ["light", "medium", "strong"]:
         # URLs
         url_pattern = re.compile(
@@ -337,7 +540,6 @@ def clean_text_with_changes(text: str, level: str = "off") -> Tuple[str, List[di
         before = cleaned
         cleaned = emoji_pattern.sub('', cleaned)
         if len(before) != len(cleaned):
-            # Approximate position - find first difference
             for i, (a, b) in enumerate(zip(before, cleaned)):
                 if a != b:
                     changes.append({"type": "removed", "original": before[i:i+10], "new": "", "position": i, "category": "emoji"})
@@ -452,20 +654,7 @@ def export_spell_checked_text(
     level: str = "off",
     base_name: str = "audiobook"
 ) -> Tuple[List[str], str]:
-    """
-    Export spell-checked text files with status in filename.
-
-    Args:
-        chapters: List of chapter dicts
-        output_dir: Output directory
-        level: Spell check level applied
-        base_name: Base name for files
-
-    Returns:
-        Tuple of (file_paths, status_message)
-    """
-    from pathlib import Path
-
+    """Export spell-checked text files with status in filename."""
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
 
@@ -483,10 +672,8 @@ def export_spell_checked_text(
         safe_title = "".join(c for c in chapter['title'] if c.isalnum() or c in (' ', '-', '_')).strip()
         safe_title = safe_title[:50]
 
-        # Apply spell check
         cleaned_text, changes = clean_text_with_changes(chapter['text'], level)
 
-        # Filename: name_chapter01_trangthai.txt
         filename = f"{base_name}_chapter_{i+1:02d}_{safe_title}_{level_suffix}.txt"
         file_path = output_path / filename
 
@@ -527,15 +714,12 @@ def generate_diff_html(original: str, cleaned: str, changes: List[dict], mode: s
 
 
 def _generate_inline_diff(original: str, cleaned: str, changes: List[dict], limit: int) -> str:
-    """Generate inline diff with character-level highlighting."""
     import difflib
     from html import escape
 
-    # Limit text for performance
     display_original = original[:limit] + ("..." if len(original) > limit else "")
     display_cleaned = cleaned[:limit] + ("..." if len(cleaned) > limit else "")
 
-    # Use SequenceMatcher for character-level diff
     matcher = difflib.SequenceMatcher(None, original[:limit], cleaned[:limit])
 
     html_parts = []
@@ -550,7 +734,6 @@ def _generate_inline_diff(original: str, cleaned: str, changes: List[dict], limi
             html_parts.append(f'<span style="background: #fee2e2; color: #991b1b; text-decoration: line-through; padding: 1px 2px; border-radius: 2px;">{escape(original[i1:i2])}</span>')
             html_parts.append(f'<span style="background: #d1fae5; color: #065f46; font-weight: 600; padding: 1px 2px; border-radius: 2px;">{escape(cleaned[j1:j2])}</span>')
 
-    # Generate category badges
     from collections import Counter
     cats = Counter(c['category'] for c in changes)
 
@@ -588,7 +771,6 @@ def _generate_inline_diff(original: str, cleaned: str, changes: List[dict], limi
 
 
 def _generate_side_by_side_diff(original: str, cleaned: str, changes: List[dict], limit: int) -> str:
-    """Generate side-by-side diff with line-by-line comparison."""
     import difflib
     from html import escape
 
@@ -684,7 +866,6 @@ def _generate_side_by_side_diff(original: str, cleaned: str, changes: List[dict]
 
 
 def _generate_unified_diff(original: str, cleaned: str, changes: List[dict], limit: int) -> str:
-    """Generate unified diff with inline highlights."""
     import difflib
     from html import escape
 
@@ -716,3 +897,99 @@ def _generate_unified_diff(original: str, cleaned: str, changes: List[dict], lim
     <p style="margin-top: 8px; color: #6b7280; font-size: 12px;">Unified diff - Tóm tắt {len(changes)} thay đổi chi tiết</p>
     """
     return html
+
+
+# ---------------------------------------------------------------------------
+# New API: Engine-aware spell checking (for pipeline integration)
+# ---------------------------------------------------------------------------
+
+def spell_check_text(
+    text: str,
+    engine: str = "symspell",
+    device: str = "auto",
+    batch_size: int = 16,
+    use_languagetool: bool = False,
+    languagetool_url: str = "http://localhost:8081"
+) -> Tuple[str, Dict]:
+    """
+    Spell check text with new engine API.
+    Returns (corrected_text, metadata).
+    """
+    start_time = time.time()
+    checker = get_spell_checker(engine, device, batch_size, use_languagetool, languagetool_url)
+
+    if not text or not text.strip():
+        return text, {"engine": checker.name(), "time_ms": 0, "changes": 0}
+
+    corrected = checker.correct(text)
+    elapsed_ms = int((time.time() - start_time) * 1000)
+
+    # Count changes (simple diff)
+    changes = sum(1 for a, b in zip(text.split(), corrected.split()) if a != b)
+
+    return corrected, {
+        "engine": checker.name(),
+        "time_ms": elapsed_ms,
+        "changes": changes,
+        "original_len": len(text),
+        "corrected_len": len(corrected)
+    }
+
+
+def spell_check_batch(
+    texts: List[str],
+    engine: str = "symspell",
+    device: str = "auto",
+    batch_size: int = 16,
+    use_languagetool: bool = False,
+    languagetool_url: str = "http://localhost:8081"
+) -> Tuple[List[str], List[Dict]]:
+    """Spell check multiple texts with new engine API."""
+    start_time = time.time()
+    checker = get_spell_checker(engine, device, batch_size, use_languagetool, languagetool_url)
+
+    if not texts:
+        return [], []
+
+    corrected = checker.correct_batch(texts)
+    elapsed_ms = int((time.time() - start_time) * 1000)
+
+    metadata = []
+    for orig, corr in zip(texts, corrected):
+        changes = sum(1 for a, b in zip(orig.split(), corr.split()) if a != b)
+        metadata.append({
+            "engine": checker.name(),
+            "time_ms": elapsed_ms // len(texts) if texts else 0,
+            "changes": changes,
+            "original_len": len(orig),
+            "corrected_len": len(corr)
+        })
+
+    return corrected, metadata
+
+
+if __name__ == "__main__":
+    # Quick test
+    test_texts = [
+        "Toi di hoc o Ha Noi",
+        "Hom nay troi dep qua",
+        "Ban co muon an pho khong",
+        "Tôi đi học ở Hà Nội",  # đã đúng
+        "Em tên là Nam",
+    ]
+
+    print("=== SymSpell ===")
+    checker = SymSpellChecker()
+    for t in test_texts:
+        result = checker.correct(t)
+        print(f"Input:  {t}")
+        print(f"Output: {result}")
+        print()
+
+    print("=== VSpell (if available) ===")
+    vspell = VSpellChecker()
+    for t in test_texts:
+        result = vspell.correct(t)
+        print(f"Input:  {t}")
+        print(f"Output: {result}")
+        print()

@@ -28,7 +28,7 @@ max_batch_size: 16
 max_chars_chunk: 512
 repetition_penalty: 1.05
 spell_check_level: Mạnh (Full check)
-temperature: 0.3
+temperature: 0.1
 top_p: 0.85
 ui_auto_play: True
 ui_default_tab: preset

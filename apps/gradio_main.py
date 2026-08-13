@@ -242,16 +242,13 @@ def restore_ui_state():
     else:
         voice_update = gr.update()
 
-    # Check if v2 for conversation tab
-    is_v2 = current_backbone and ("VieNeu-TTS-v2 (GPU)" in current_backbone or "VieNeu-TTS-v2 (CPU)" in current_backbone)
-    conv_tab_update = gr.update(visible=is_v2)
+    # Check if v2 for conversation tab - always show
+    # is_v2 = current_backbone and ("VieNeu-TTS-v2 (GPU)" in current_backbone or "VieNeu-TTS-v2 (CPU)" in current_backbone)
+    conv_tab_update = gr.update(visible=True)
 
     # Update speaker dropdowns
     slot_dd_update = gr.update(choices=CONV_VOICES_CACHE) if model_loaded else gr.update()
     slot_updates = [slot_dd_update] * MAX_SPEAKERS
-
-    # Audiobook voice update (same as voice_select)
-    audiobook_voice_update = voice_update
 
     return (
         msg,
@@ -261,9 +258,47 @@ def restore_ui_state():
         gr.update(interactive=False),        # btn_stop_conv
         voice_update,                        # voice_select
         conv_tab_update,                     # conv_tab
-        audiobook_voice_update,              # audiobook_voice
         *slot_updates                        # speaker voice dropdowns
     )
+
+
+def check_audiobook_resume(audiobook_state_val):
+    """Check if there's a valid checkpoint to resume from."""
+    from vieneu_utils.audiobook_processor import AudiobookProcessor
+
+    output_dir = audiobook_state_val.get("output_dir")
+    if not output_dir:
+        return gr.update(value="📭 Không có thư mục output để kiểm tra checkpoint"), audiobook_state_val
+
+    processor = AudiobookProcessor(tts if model_loaded else None, str(output_dir))
+    checkpoint_info = processor.get_checkpoint_info()
+
+    if checkpoint_info:
+        status = checkpoint_info.get('status', 'unknown')
+        ch_idx = checkpoint_info.get('chapter_index', 0)
+        chunk_idx = checkpoint_info.get('chunk_index', 0)
+        completed = checkpoint_info.get('completed_chapters', 0)
+        voice = checkpoint_info.get('voice_id', 'unknown')
+        timestamp = checkpoint_info.get('timestamp', 0)
+
+        from datetime import datetime
+        time_str = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S') if timestamp else 'Unknown'
+
+        info = f"""
+✅ **Tìm thấy checkpoint để resume**
+- Trạng thái: {status}
+- Chương hiện tại: {ch_idx + 1} (đã hoàn thành {completed} chương)
+- Chunk trong chương: {chunk_idx}
+- Giọng đọc: {voice}
+- Thời gian checkpoint: {time_str}
+
+Nhấn **'Bắt đầu'** để tiếp tục từ checkpoint, hoặc **'Dừng'** để xóa checkpoint và bắt đầu mới.
+        """
+        audiobook_state_val["status"] = "paused"  # Mark as paused to enable resume
+        return gr.update(value=info), audiobook_state_val
+    else:
+        return gr.update(value="📭 Không tìm thấy checkpoint hợp lệ"), audiobook_state_val
+
 
 def should_use_lmdeploy(backbone_choice: str, device_choice: str) -> bool:
     """Determine if we should use LMDeploy backend."""
@@ -322,9 +357,10 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
         gr.update(interactive=False), # btn_stop_single
         gr.update(interactive=False), # btn_stop_conv
         gr.update(), # voice_select
-        gr.update(), gr.update(), gr.update(), gr.update(), # tab_p, tab_c, tab_sel, mode_state
+        gr.update(), gr.update(), # tab_custom, current_mode_state
         gr.update(), # conv_tab
-        gr.update(), # audiobook_voice
+        gr.update(interactive=False), # btn_generate_cloning
+        gr.update(interactive=False), # btn_stop_cloning
         *slot_no_updates
     )
     
@@ -343,10 +379,13 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
             if not custom_model_id or not custom_model_id.strip():
                 yield (
                     "❌ Lỗi: Vui lòng nhập Model ID cho Custom Model.",
-                    gr.update(interactive=False), gr.update(interactive=False), gr.update(interactive=True), gr.update(interactive=False), gr.update(),
-                    gr.update(), gr.update(), gr.update(), gr.update(),
+                    gr.update(interactive=False), gr.update(interactive=False), gr.update(interactive=True), gr.update(interactive=False),
+                    gr.update(interactive=False), # btn_stop_conv
+                    gr.update(), # voice_select
+                    gr.update(), gr.update(), # tab_custom, current_mode_state
                     gr.update(), # conv_tab
-                    gr.update(), # audiobook_voice
+                    gr.update(interactive=False), # btn_generate_cloning
+                    gr.update(interactive=False), # btn_stop_cloning
                     *slot_no_updates
                 )
                 return
@@ -359,9 +398,12 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
                     yield (
                         f"❌ Lỗi: Base Model '{custom_base_model}' không hợp lệ.",
                         gr.update(interactive=False), gr.update(interactive=False), gr.update(interactive=True), gr.update(interactive=False),
-                        gr.update(), gr.update(), gr.update(), gr.update(), gr.update(),
+                        gr.update(interactive=False), # btn_stop_conv
+                        gr.update(), # voice_select
+                        gr.update(), gr.update(), # tab_custom, current_mode_state
                         gr.update(), # conv_tab
-                        gr.update(), # audiobook_voice
+                        gr.update(interactive=False), # btn_generate_cloning
+                        gr.update(interactive=False), # btn_stop_cloning
                         *slot_no_updates
                     )
                     return
@@ -442,14 +484,16 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
                         print("   ⚠️ Detected incomplete cache, rebuilding...")
                     yield (
                          f"⏳ Đang merge và lưu model LoRA để tối ưu cho LMDeploy (thao tác này chỉ chạy một lần)...",
-                         gr.update(interactive=False),
-                         gr.update(interactive=False),
-                         gr.update(interactive=False),
-                         gr.update(interactive=False),
-                         gr.update(),
-                         gr.update(), gr.update(), gr.update(), gr.update(),
+                         gr.update(interactive=False), # btn_generate
+                         gr.update(interactive=False), # btn_generate_conv
+                         gr.update(interactive=False), # btn_load
+                         gr.update(interactive=False), # btn_stop_single
+                         gr.update(interactive=False), # btn_stop_conv
+                         gr.update(), # voice_select
+                         gr.update(), gr.update(), # tab_custom, current_mode_state
                          gr.update(), # conv_tab
-                         gr.update(), # audiobook_voice
+                         gr.update(interactive=False), # btn_generate_cloning
+                         gr.update(interactive=False), # btn_stop_cloning
                          *slot_no_updates
                     )
                     
@@ -548,14 +592,16 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
                 
                 yield (
                     f"⚠️ LMDeploy Init Error: {lmdeploy_error_reason}. Đang loading model với backend mặc định - tốc độ chậm hơn so với lmdeploy...",
-                    gr.update(interactive=False),
-                    gr.update(interactive=False),
-                    gr.update(interactive=False),
-                    gr.update(interactive=False),
-                    gr.update(),
-                    gr.update(), gr.update(), gr.update(), gr.update(),
+                    gr.update(interactive=False), # btn_generate
+                    gr.update(interactive=False), # btn_generate_conv
+                    gr.update(interactive=False), # btn_load
+                    gr.update(interactive=False), # btn_stop_single
+                    gr.update(interactive=False), # btn_stop_conv
+                    gr.update(), # voice_select
+                    gr.update(), gr.update(), # tab_custom, current_mode_state
                     gr.update(), # conv_tab
-                    gr.update(), # audiobook_voice
+                    gr.update(interactive=False), # btn_generate_cloning
+                    gr.update(interactive=False), # btn_stop_cloning
                     *slot_no_updates
                 )
                 time.sleep(1)
@@ -651,10 +697,16 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
             if is_merged_lora and custom_loading and not using_lmdeploy:
                 yield (
                     f"🔄 Đang tải và merge LoRA adapter: {custom_model_id}...",
-                    gr.update(interactive=False), gr.update(interactive=False), gr.update(interactive=False), gr.update(interactive=False), gr.update(),
-                    gr.update(), gr.update(), gr.update(), gr.update(),
+                    gr.update(interactive=False), # btn_generate
+                    gr.update(interactive=False), # btn_generate_conv
+                    gr.update(interactive=False), # btn_load
+                    gr.update(interactive=False), # btn_stop_single
+                    gr.update(interactive=False), # btn_stop_conv
+                    gr.update(), # voice_select
+                    gr.update(), gr.update(), # tab_custom, current_mode_state
                     gr.update(), # conv_tab
-                    gr.update(), # audiobook_voice
+                    gr.update(interactive=False), # btn_generate_cloning
+                    gr.update(interactive=False), # btn_stop_cloning
                     *slot_no_updates
                 )
                 try:
@@ -754,9 +806,6 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
 
             voice_update = gr.update(choices=voices, value=default_v, interactive=True)
 
-            # Audiobook voice should default to "Ly"
-            audiobook_voice_update = gr.update(choices=voices, value="Ly", interactive=True)
-
             global PRESET_VOICES_CACHE, CONV_VOICES_CACHE
             PRESET_VOICES_CACHE = voices
             
@@ -772,27 +821,22 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
             
             slot_dd_update = gr.update(choices=CONV_VOICES_CACHE)
             
-            # Show Standard Tabs
-            tab_p = gr.update(visible=True)
+            # Show Voice Cloning Tab
             tab_c = gr.update(visible=True)
-            tab_sel = gr.update(selected="preset_mode")
             mode_state = "preset_mode"
         else:
             # Missing voices.json case
             msg = "⚠️ Không tìm thấy file voices.json. Vui lòng dùng Tab Voice Cloning."
             voice_update = gr.update(choices=[msg], value=msg, interactive=False)
-            audiobook_voice_update = gr.update(choices=[msg], value=msg, interactive=False)
             slot_dd_update = gr.update(choices=[])
 
-            # Show Preset Tab (to see message) and Custom Tab
-            tab_p = gr.update(visible=True)
+            # Show Voice Cloning Tab
             tab_c = gr.update(visible=True)
-            tab_sel = gr.update(selected="preset_mode")
             mode_state = "preset_mode"
 
-        # Check if v2 for conversation tab
-        is_v2 = (backbone_choice == "VieNeu-TTS-v2 (GPU)" or backbone_choice == "VieNeu-TTS-v2 (CPU)")
-        conv_tab_update = gr.update(visible=is_v2)
+        # Check if v2 for conversation tab - always show
+        # is_v2 = (backbone_choice == "VieNeu-TTS-v2 (GPU)" or backbone_choice == "VieNeu-TTS-v2 (CPU)")
+        conv_tab_update = gr.update(visible=True)
 
         # Update all MAX_SPEAKERS slot dropdowns
         slot_updates = [slot_dd_update] * MAX_SPEAKERS
@@ -805,9 +849,10 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
             gr.update(interactive=False), # btn_stop_single
             gr.update(interactive=False), # btn_stop_conv
             voice_update,
-            tab_p, tab_c, tab_sel, mode_state,
+            tab_c, mode_state, # tab_custom, current_mode_state
             conv_tab_update,
-            audiobook_voice_update, # audiobook_voice
+            gr.update(interactive=True), # btn_generate_cloning
+            gr.update(interactive=False), # btn_stop_cloning
             *slot_updates
         )
         
@@ -820,29 +865,31 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
         if "$env:CUDA_PATH" in str(e):
             yield (
                 "❌ Lỗi khi tải model: Không tìm thấy biến môi trường CUDA_PATH. Vui lòng cài đặt NVIDIA GPU Computing Toolkit (https://developer.nvidia.com/cuda/toolkit)",
-                gr.update(interactive=False),
+                gr.update(interactive=False), # btn_generate
                 gr.update(interactive=False), # btn_generate_conv
                 gr.update(interactive=True), # btn_load
                 gr.update(interactive=False), # btn_stop_single
                 gr.update(interactive=False), # btn_stop_conv
                 gr.update(), # voice_select
-                gr.update(), gr.update(), gr.update(), gr.update(),
+                gr.update(), gr.update(), # tab_custom, current_mode_state
                 gr.update(), # conv_tab
-                gr.update(), # audiobook_voice
+                gr.update(interactive=False), # btn_generate_cloning
+                gr.update(interactive=False), # btn_stop_cloning
                 *slot_no_updates
             )
         else:
             yield (
                 f"❌ Lỗi khi tải model: {str(e)}",
-                gr.update(interactive=False),
-                gr.update(interactive=False),
-                gr.update(interactive=True),
+                gr.update(interactive=False), # btn_generate
+                gr.update(interactive=False), # btn_generate_conv
+                gr.update(interactive=True), # btn_load
                 gr.update(interactive=False), # btn_stop_single
                 gr.update(interactive=False), # btn_stop_conv
-                gr.update(),
-                gr.update(), gr.update(), gr.update(), gr.update(),
+                gr.update(), # voice_select
+                gr.update(), gr.update(), # tab_custom, current_mode_state
                 gr.update(), # conv_tab
-                gr.update(), # audiobook_voice
+                gr.update(interactive=False), # btn_generate_cloning
+                gr.update(interactive=False), # btn_stop_cloning
                 *slot_no_updates
             )
 
@@ -2061,18 +2108,13 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             with gr.Column(scale=3):
                 with gr.Tabs() as main_input_tabs:
                     # --- TAB 1: SINGLE SPEAKER ---
-                    with gr.Tab("🦜 Đọc truyện", id="single_tab") as single_tab:
-                        text_input = gr.Textbox(
-                            label=f"Văn bản",
-                            lines=8,
-                            value=default_text,
-                            placeholder="Nhập văn bản hoặc upload file Word bên dưới..."
-                        )
-
+                    with gr.Tab("📖 Đọc truyện & Audiobook", id="reading_audiobook_tab") as reading_audiobook_tab:
+                        # --- 1. FILE UPLOAD (chung) ---
                         with gr.Row():
                             file_upload = gr.File(
-                                label="📄 Upload File (.docx, .txt)",
+                                label="📄 Upload File(s) (.docx, .txt)",
                                 file_types=[".docx", ".txt"],
+                                file_count="multiple",
                                 type="filepath"
                             )
                             upload_status = gr.Textbox(
@@ -2083,56 +2125,199 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                                 scale=1
                             )
 
-                        with gr.Tabs() as tabs:
-                            with gr.TabItem("👤 Preset", id="preset_mode") as tab_preset:
-                                voice_select = gr.Dropdown(
-                                    choices=[],
-                                    value=load_setting("last_voice_id"),
-                                    label="Giọng mẫu",
-                                    allow_custom_value=True
-                                )
-                            
-                            with gr.TabItem("🦜 Voice Cloning", id="custom_mode") as tab_custom:
-                                with gr.Group(visible=True) as cloning_elements_group:
-                                    custom_audio = gr.Audio(label="Audio giọng mẫu (3-5 giây) (.wav)", type="filepath")
-                                    cloning_warning_msg = gr.Markdown(visible=False, elem_id="cloning-warning")
-                                    custom_text = gr.Textbox(label="Nội dung audio mẫu - vui lòng gõ đúng nội dung của audio mẫu - kể cả dấu câu vì model rất nhạy cảm với dấu câu (.,?!)")
-                                    gr.Examples(
-                                        examples=[
-                                            [os.path.join(os.path.dirname(os.path.dirname(__file__)), "examples", "audio_ref", "example.wav"), "Ví dụ 2. Tính trung bình của dãy số."],
-                                            [os.path.join(os.path.dirname(os.path.dirname(__file__)), "examples", "audio_ref", "example_2.wav"), "Trên thực tế, các nghi ngờ đã bắt đầu xuất hiện."],
-                                            [os.path.join(os.path.dirname(os.path.dirname(__file__)), "examples", "audio_ref", "example_3.wav"), "Cậu có nhìn thấy không?"],
-                                            [os.path.join(os.path.dirname(os.path.dirname(__file__)), "examples", "audio_ref", "example_4.wav"), "Tết là dịp mọi người háo hức đón chào một năm mới với nhiều hy vọng và mong ước."]
-                                        ],
-                                        inputs=[custom_audio, custom_text],
-                                        label="Ví dụ mẫu để thử nghiệm clone giọng"
-                                    )
-                                    
-                                    gr.Markdown("""
-                                    **💡 Mẹo nhỏ:** Nếu kết quả Zero-shot Voice Cloning chưa như ý, bạn hãy cân nhắc **Finetune (LoRA)** để đạt chất lượng tốt nhất. 
-                                    Hướng dẫn chi tiết có tại file: `finetune/README.md` hoặc xem trên [GitHub](https://github.com/pnnbao97/VieNeu-TTS/tree/main/finetune).
-                                    """)
-                        
-                        generation_mode = gr.Radio(
-                            ["Standard (Một lần)"],
-                            value=load_setting("generation_mode", "Standard (Một lần)"),
-                            label="Chế độ sinh"
+                        # --- 2. TEXTBOX VĂN BẢN (chung) ---
+                        text_input = gr.Textbox(
+                            label="Văn bản",
+                            lines=10,
+                            value=default_text,
+                            interactive=True,
+                            placeholder="Nhập văn bản hoặc upload file (.docx, .txt)...",
+                            show_copy_button=True
                         )
-
-                        # Spell checking level
-                        spell_check_level = gr.Dropdown(
-                            choices=["Tắt", "Nhẹ (Lọc ký tự)", "Trung bình (Sửa typo)", "Mạnh (Full check)"],
-                            value=load_setting("spell_check_level", "Tắt"),
-                            label="🔍 Kiểm tra chính tả",
-                            info="Lọc và sửa lỗi chính tả tiếng Việt trước khi đọc"
-                        )
-
                         with gr.Row():
-                            btn_generate = gr.Button("🎵 Bắt đầu", variant="primary", scale=2, interactive=False)
+                            btn_update_text = gr.Button("💾 Cập nhật văn bản", size="sm")
+                            text_update_status = gr.Markdown("", visible=False)
+
+                        # --- Voice Selection (moved here from OUTPUT) ---
+                        voice_select = gr.Dropdown(
+                            choices=[],
+                            value=load_setting("last_voice_id"),
+                            label="🎤 Giọng mẫu",
+                            allow_custom_value=True
+                        )
+
+                        # --- 3. CHAPTERS ACCORDION ---
+                        with gr.Accordion("📖 Chapters", open=True):
+                            audiobook_chapters = gr.Dataframe(
+                                headers=["✓", "Chapter", "Characters", "Est. Duration (min)"],
+                                datatype=["bool", "str", "number", "number"],
+                                interactive=True,
+                                label="Danh sách chapters (tick để áp dụng spell check)"
+                            )
+                            with gr.Row():
+                                btn_export_text = gr.Button("📄 Xuất Text", size="sm")
+                                export_text_status = gr.Markdown("", visible=False)
+                                btn_select_all_chapters = gr.Button("☑️ Chọn tất cả", size="sm")
+                                btn_deselect_all_chapters = gr.Button("☐ Bỏ chọn tất cả", size="sm")
+
+                        # --- 4. XỬ LÝ VĂN BẢN ACCORDION ---
+                        with gr.Accordion("⚙️ Xử lý văn bản", open=False):
+                            # Split Settings
+                            audiobook_split_mode = gr.Radio(
+                                ["Auto detect", "By keyword", "By word count"],
+                                value=load_setting("audiobook_split_mode", "Auto detect"),
+                                label="Chế độ phân tách",
+                                info="Auto detect: tự động phát hiện chapters từ cấu trúc text"
+                            )
+                            with gr.Row(visible=False) as keyword_row:
+                                audiobook_keywords = gr.Textbox(
+                                    label="Keywords (phân cách bằng dấu phẩy)",
+                                    value=load_setting("audiobook_chapter_keywords", "Chương,Chapter,Chap,CHƯƠNG,CHAPTER"),
+                                    placeholder="Chương,Chapter,Chap",
+                                    info="Ví dụ: Chương,Chapter,Chap"
+                                )
+                            with gr.Row(visible=False) as wordcount_row:
+                                audiobook_words_per_chunk = gr.Slider(
+                                    minimum=100,
+                                    maximum=5000,
+                                    value=load_setting("audiobook_words_per_chunk", 1000),
+                                    step=100,
+                                    label="Số từ mỗi phần",
+                                    info="Chia text thành các phần có số từ xấp xỉ bằng nhau"
+                                )
+
+                            # Spell Check Engine (new)
+                            spell_check_engine = gr.Dropdown(
+                                choices=[
+                                    ("Tắt", "off"),
+                                    ("SymSpell (nhanh, CPU)", "symspell"),
+                                    ("VSpell (chính xác, GPU/CPU)", "vspell"),
+                                    ("Hybrid (VSpell + SymSpell)", "hybrid"),
+                                ],
+                                value=load_setting("spell_check_engine", "symspell"),
+                                label="🔍 Spell Check Engine",
+                                info="Chọn engine kiểm tra chính tả"
+                            )
+                            with gr.Row(visible=True) as spell_check_engine_options:
+                                spell_check_device = gr.Dropdown(
+                                    choices=["auto", "cpu", "cuda"],
+                                    value=load_setting("spell_check_device", "auto"),
+                                    label="Device",
+                                    scale=1,
+                                    info="VSpell device (auto = GPU nếu có)"
+                                )
+                                spell_check_batch_size = gr.Slider(
+                                    minimum=1,
+                                    maximum=64,
+                                    value=load_setting("spell_check_batch_size", 16),
+                                    step=1,
+                                    label="Batch Size",
+                                    scale=2,
+                                    info="Batch size cho VSpell/Hybrid"
+                                )
+                            gr.Markdown("""
+                            **Engine comparison:**
+                            - **Tắt:** Không kiểm tra, giữ nguyên văn bản gốc
+                            - **SymSpell:** Nhanh, CPU-only, sửa typo phổ biến (ko→không, dc→được)
+                            - **VSpell:** Transformer-based (PhoBERT), chính xác hơn, hỗ trợ GPU
+                            - **Hybrid:** VSpell + SymSpell cleanup, chất lượng cao nhất
+
+                            *Áp dụng khi bắt đầu xử lý, không ảnh hưởng đến văn bản hiển thị ở trên.*
+                            """)
+
+                            # Legacy spell check level (for backward compat - hidden)
+                            spell_check_level = gr.Dropdown(
+                                choices=["Tắt", "Nhẹ (Lọc ký tự)", "Trung bình (Sửa typo)", "Mạnh (Full check)"],
+                                value=load_setting("spell_check_level", "Tắt"),
+                                label="🔍 Kiểm tra chính tả (Legacy)",
+                                info="Legacy mode - sử dụng SymSpell với levels",
+                                visible=False
+                            )
+
+                            # Custom Dictionary Section
+                            with gr.Accordion("📝 Từ điển tùy chỉnh", open=False):
+                                gr.Markdown("""
+                                **Thêm quy tắc riêng cho văn bản của bạn:**
+                                - **Replacements:** Thay thế từ/cụm từ (mỗi dòng: `cũ → mới`)
+                                - **Whitelist:** Từ giữ nguyên không sửa (phân cách bằng dấu phẩy)
+                                """)
+
+                                custom_replacements = gr.Textbox(
+                                    label="Replacements",
+                                    placeholder="Harry Potter → Hà Lợi Bồ Đào\nHogwarts → Học viện Hogwarts",
+                                    lines=5,
+                                    max_lines=10
+                                )
+
+                                custom_whitelist = gr.Textbox(
+                                    label="Whitelist",
+                                    placeholder="ok, bye, CEO, AI",
+                                    lines=2
+                                )
+
+                                with gr.Row():
+                                    btn_save_custom_dict = gr.Button("💾 Lưu từ điển", size="sm", variant="primary")
+                                    btn_load_custom_dict = gr.Button("📂 Tải từ điển", size="sm")
+
+                                custom_dict_status = gr.Markdown("", visible=True)
+
+                            # Preview Section
+                            with gr.Accordion("👁️ Xem trước kết quả", open=False):
+                                gr.Markdown("*Preview văn bản sau khi áp dụng spell check với highlighting thay đổi.*")
+
+                                # View mode selector
+                                with gr.Row():
+                                    preview_mode = gr.Radio(
+                                        choices=["Side-by-side", "Unified", "Inline"],
+                                        value="Inline",
+                                        label="Chế độ xem",
+                                        scale=1
+                                    )
+                                    preview_limit_slider = gr.Slider(
+                                        minimum=500,
+                                        maximum=30000,
+                                        value=5000,
+                                        step=500,
+                                        label="Số ký tự preview",
+                                        scale=1
+                                    )
+
+                                # Diff display (HTML for rich formatting)
+                                spell_check_diff_html = gr.HTML(
+                                    value="<p style='color: #666;'>Chọn level spell check để xem preview...</p>"
+                                )
+
+                                # Statistics dashboard
+                                spell_check_stats_details = gr.HTML(
+                                    value=""
+                                )
+
+                        # --- 5. CHỌN GIỌNG (chung — Preset) ---
+
+
+                        # --- 7. NÚT TẠO NHANH ---
+                        gr.Markdown("### 🎵 Tạo nhanh")
+                        with gr.Row():
+                            btn_generate = gr.Button("🎵 Tạo nhanh", variant="primary", scale=2, interactive=False)
                             btn_stop_single = gr.Button("⏹️ Dừng", variant="stop", scale=1, interactive=False)
 
+                        # --- 8. STATE ---
+                        audiobook_state = gr.State({
+                            "text": "",
+                            "chapters": [],
+                            "file_path": None,
+                            "output_dir": None,
+                            "status": "idle",
+                            "current_chapter_idx": 0,
+                            "completed_chapters": [],
+                            "checkpoint_file": None,
+                            "pause_requested": False,
+                            "session_history": [],
+                            "current_session_id": None
+                        })
+
                     # --- TAB 2: MULTI-SPEAKER CONVERSATION ---
-                    with gr.Tab("🎭 Hội thoại", id="conv_tab", visible=False) as conv_tab:
+                    with gr.Tab("🎭 Hội thoại", id="conv_tab", visible=True) as conv_tab:
                         conv_script_input = gr.Textbox(
                             label="Kịch bản hội thoại",
                             placeholder="Phương: Chào mọi người, mình là Phương...",
@@ -2205,161 +2390,32 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                             btn_generate_conv = gr.Button("🎭 Bắt đầu hội thoại", variant="primary", scale=2, interactive=False)
                             btn_stop_conv = gr.Button("⏹️ Dừng", variant="stop", scale=1, interactive=False)
 
-                    # --- TAB 3: AUDIOBOOK ---
-                    with gr.Tab("📚 Audiobook", id="audiobook_tab") as audiobook_tab:
-                        gr.Markdown("""
-                        ### Xử lý file lớn (không giới hạn kích thước)
-                        Tự động phát hiện chapters, xử lý batch, hỗ trợ output đa dạng
-                        """)
-
-                        # ========== SECTION 1: FILE INPUT ==========
-                        audiobook_file = gr.File(
-                            label="📄 Upload Files (.docx, .txt) - Có thể chọn nhiều file",
-                            file_types=[".docx", ".txt"],
-                            file_count="multiple"
-                        )
-                        audiobook_file_info = gr.Markdown("Chưa có file")
-
-                        # ========== SECTION 2: CONTENT PREVIEW ==========
-                        # Chapters List - OPEN by default
-                        with gr.Accordion("📖 Chapters", open=True):
-                            audiobook_chapters = gr.Dataframe(
-                                headers=["Chapter", "Characters", "Est. Duration (min)"],
-                                datatype=["str", "number", "number"],
-                                interactive=False,
-                                label="Danh sách chapters"
+                    with gr.Tab("🦜 Voice Cloning", id="custom_mode") as tab_custom:
+                        with gr.Group(visible=True) as cloning_elements_group:
+                            custom_cloning_text_input = gr.Textbox(label="Văn bản cần đọc", lines=4, placeholder="Nhập văn bản cho Voice Cloning...")
+                            custom_audio = gr.Audio(label="Audio giọng mẫu (3-5 giây) (.wav)", type="filepath")
+                            cloning_warning_msg = gr.Markdown(visible=False, elem_id="cloning-warning")
+                            custom_text = gr.Textbox(label="Nội dung audio mẫu - vui lòng gõ đúng nội dung của audio mẫu - kể cả dấu câu vì model rất nhạy cảm với dấu câu (.,?!)")
+                            gr.Examples(
+                                examples=[
+                                    [os.path.join(os.path.dirname(os.path.dirname(__file__)), "examples", "audio_ref", "example.wav"), "Ví dụ 2. Tính trung bình của dãy số."],
+                                    [os.path.join(os.path.dirname(os.path.dirname(__file__)), "examples", "audio_ref", "example_2.wav"), "Trên thực tế, các nghi ngờ đã bắt đầu xuất hiện."],
+                                    [os.path.join(os.path.dirname(os.path.dirname(__file__)), "examples", "audio_ref", "example_3.wav"), "Cậu có nhìn thấy không?"],
+                                    [os.path.join(os.path.dirname(os.path.dirname(__file__)), "examples", "audio_ref", "example_4.wav"), "Tết là dịp mọi người háo hức đón chào một năm mới với nhiều hy vọng và mong ước."]
+                                ],
+                                inputs=[custom_audio, custom_text],
+                                label="Ví dụ mẫu để thử nghiệm clone giọng"
                             )
-                            with gr.Row():
-                                btn_export_text = gr.Button("📄 Xuất Text", size="sm")
-                                export_text_status = gr.Markdown("", visible=False)
-
-                        # Text Processing - OPEN by default
-                        with gr.Accordion("📝 Xử lý văn bản", open=True):
-                            # Split Settings
-                            audiobook_split_mode = gr.Radio(
-                                ["Auto detect", "By keyword", "By word count"],
-                                value=load_setting("audiobook_split_mode", "Auto detect"),
-                                label="Chế độ phân tách",
-                                info="Auto detect: tự động phát hiện chapters từ cấu trúc text"
-                            )
-                            with gr.Row(visible=False) as keyword_row:
-                                audiobook_keywords = gr.Textbox(
-                                    label="Keywords (phân cách bằng dấu phẩy)",
-                                    value=load_setting("audiobook_chapter_keywords", "Chương,Chapter,Chap,CHƯƠNG,CHAPTER"),
-                                    placeholder="Chương,Chapter,Chap",
-                                    info="Ví dụ: Chương,Chapter,Chap"
-                                )
-                            with gr.Row(visible=False) as wordcount_row:
-                                audiobook_words_per_chunk = gr.Slider(
-                                    minimum=100,
-                                    maximum=5000,
-                                    value=load_setting("audiobook_words_per_chunk", 1000),
-                                    step=100,
-                                    label="Số từ mỗi phần",
-                                    info="Chia text thành các phần có số từ xấp xỉ bằng nhau"
-                                )
-
-                            # Text Display
-                            audiobook_text_display = gr.Textbox(
-                                label="Nội dung văn bản",
-                                lines=10,
-                                max_lines=20,
-                                interactive=True,
-                                placeholder="Văn bản sẽ hiển thị ở đây sau khi upload file...",
-                                show_copy_button=True
-                            )
-                            with gr.Row():
-                                btn_update_text = gr.Button("💾 Cập nhật văn bản", size="sm")
-                                text_update_status = gr.Markdown("", visible=False)
-
-                            # Spell Check
-                            audiobook_spell_check_level = gr.Dropdown(
-                                choices=["Tắt", "Nhẹ (Lọc ký tự)", "Trung bình (Sửa typo)", "Mạnh (Full check)"],
-                                value=load_setting("audiobook_spell_check_level", "Tắt"),
-                                label="🔍 Kiểm tra chính tả",
-                                info="Lọc và sửa lỗi chính tả tiếng Việt trước khi đọc"
-                            )
+                                    
                             gr.Markdown("""
-                            **Cách hoạt động:**
-                            - **Tắt:** Không kiểm tra, giữ nguyên văn bản gốc
-                            - **Nhẹ:** Loại bỏ emoji và ký tự đặc biệt, chuẩn hóa khoảng trắng
-                            - **Trung bình:** Nhẹ + sửa lỗi gõ phổ biến (ko→không, dc→được, vs→với, etc.)
-                            - **Mạnh:** Trung bình + phân tích từ vựng với pyvi (tokenization)
-
-                            *Áp dụng khi bắt đầu xử lý, không ảnh hưởng đến văn bản hiển thị ở trên.*
+                            **💡 Mẹo nhỏ:** Nếu kết quả Zero-shot Voice Cloning chưa như ý, bạn hãy cân nhắc **Finetune (LoRA)** để đạt chất lượng tốt nhất. 
+                            Hướng dẫn chi tiết có tại file: `finetune/README.md` hoặc xem trên [GitHub](https://github.com/pnnbao97/VieNeu-TTS/tree/main/finetune).
                             """)
-
-                            # Custom Dictionary Section
-                            with gr.Accordion("📝 Từ điển tùy chỉnh", open=False):
-                                gr.Markdown("""
-                                **Thêm quy tắc riêng cho văn bản của bạn:**
-                                - **Replacements:** Thay thế từ/cụm từ (mỗi dòng: `cũ → mới`)
-                                - **Whitelist:** Từ giữ nguyên không sửa (phân cách bằng dấu phẩy)
-                                """)
-
-                                custom_replacements = gr.Textbox(
-                                    label="Replacements",
-                                    placeholder="Harry Potter → Hà Lợi Bồ Đào\nHogwarts → Học viện Hogwarts",
-                                    lines=5,
-                                    max_lines=10
-                                )
-
-                                custom_whitelist = gr.Textbox(
-                                    label="Whitelist",
-                                    placeholder="ok, bye, CEO, AI",
-                                    lines=2
-                                )
-
-                                with gr.Row():
-                                    btn_save_custom_dict = gr.Button("💾 Lưu từ điển", size="sm", variant="primary")
-                                    btn_load_custom_dict = gr.Button("📂 Tải từ điển", size="sm")
-
-                                custom_dict_status = gr.Markdown("", visible=True)
-
-                            # Preview Section
-                            with gr.Accordion("👁️ Xem trước kết quả", open=False):
-                                gr.Markdown("*Preview văn bản sau khi áp dụng spell check với highlighting thay đổi.*")
-
-                                # View mode selector
-                                with gr.Row():
-                                    preview_mode = gr.Radio(
-                                        choices=["Side-by-side", "Unified", "Inline"],
-                                        value="Inline",
-                                        label="Chế độ xem",
-                                        scale=1
-                                    )
-                                    preview_limit_slider = gr.Slider(
-                                        minimum=500,
-                                        maximum=30000,
-                                        value=5000,
-                                        step=500,
-                                        label="Số ký tự preview",
-                                        scale=1
-                                    )
-
-                                # Diff display (HTML for rich formatting)
-                                spell_check_diff_html = gr.HTML(
-                                    value="<p style='color: #666;'>Chọn level spell check để xem preview...</p>"
-                                )
-
-                                # Statistics dashboard
-                                spell_check_stats_details = gr.HTML(
-                                    value=""
-                                )
-
-                        # State
-                        audiobook_state = gr.State({
-                            "text": "",
-                            "chapters": [],
-                            "file_path": None,
-                            "output_dir": None,
-                            "status": "idle",
-                            "current_chapter_idx": 0,
-                            "completed_chapters": [],
-                            "checkpoint_file": None,
-                            "pause_requested": False
-                        })
-
+                            
+                            with gr.Row():
+                                btn_generate_cloning = gr.Button("🎵 Bắt đầu", variant="primary", scale=2, interactive=False)
+                                btn_stop_cloning = gr.Button("⏹️ Dừng", variant="stop", scale=1, interactive=False)
+                        
                 # Global Generation Settings (applies to all tabs)
                 with gr.Accordion("⚙️ Global Settings (Áp dụng cho tất cả tabs)", open=False):
                     gr.Markdown("""
@@ -2403,13 +2459,21 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                             info="Tránh lặp âm thanh. 1.0 = tắt, 1.1 = nhẹ, 1.2 = mạnh."
                         )
 
+                        # --- 6. CHẾ ĐỘ SINH ---
+                        generation_mode = gr.Radio(
+                            ["Standard (Một lần)"],
+                            value=load_setting("generation_mode", "Standard (Một lần)"),
+                            label="Chế độ sinh"
+                        )
+
                 # State to track current mode
                 current_mode_state = gr.State("preset_mode")
 
             # --- OUTPUT ---
+
             with gr.Column(scale=2):
                 # ========== AUDIOBOOK CONTROLS (visible only when Audiobook tab active) ==========
-                with gr.Group(visible=False) as audiobook_output_group:
+                with gr.Group(visible=True) as audiobook_output_group:
                     # Settings - Compact layout
                     with gr.Accordion("⚙️ Cài đặt", open=True):
                         with gr.Row(equal_height=True):
@@ -2420,15 +2484,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                                 scale=2,
                                 container=False
                             )
-                            audiobook_voice = gr.Dropdown(
-                                choices=[],
-                                value=load_setting("audiobook_default_voice", "Ly"),
-                                label="🎤 Voice",
-                                interactive=True,
-                                scale=2,
-                                container=False,
-                                allow_custom_value=True
-                            )
+
 
                         # Output Directory - inline
                         with gr.Row(equal_height=True):
@@ -2451,6 +2507,28 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                         btn_pause_audiobook = gr.Button("⏸️ Tạm dừng", interactive=False, scale=1)
                         btn_resume_audiobook = gr.Button("▶️ Tiếp tục", interactive=False, scale=1)
                         btn_stop_audiobook = gr.Button("⏹️ Dừng", variant="stop", interactive=False, scale=1)
+
+                    # Checkpoint / Session Management
+                    with gr.Accordion("🔄 Quản lý phiên & Checkpoint", open=True):
+                        # Session selector for multiple checkpoints
+                        with gr.Row():
+                            audiobook_session_selector = gr.Dropdown(
+                                label="📋 Phiên xử lý",
+                                choices=[],
+                                interactive=True,
+                                scale=3,
+                                container=False,
+                                allow_custom_value=False
+                            )
+                            btn_refresh_sessions = gr.Button("🔄 Làm mới", size="sm", scale=1)
+                            btn_new_session = gr.Button("➕ Phiên mới", size="sm", variant="primary", scale=1)
+
+                        # Checkpoint info display
+                        checkpoint_info_display = gr.Markdown("Chưa có checkpoint nào")
+
+                        with gr.Row(equal_height=True):
+                            btn_check_resume = gr.Button("🔍 Kiểm tra resume", size="sm", scale=1)
+                            btn_clear_checkpoint = gr.Button("🗑️ Xóa checkpoint", size="sm", variant="stop", scale=1)
 
                     # Monitoring
                     gr.Markdown("### 📊 Tiến độ")
@@ -2479,8 +2557,23 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                             container=False
                         )
 
+                    # Visual progress bar
+                    audiobook_progress_bar = gr.HTML(
+                        value="<div style='width:100%; height:8px; background:#e2e8f0; border-radius:4px;'><div style='width:0%; height:100%; background:#3b82f6; border-radius:4px; transition:width 0.3s;'></div></div>",
+                        elem_id="audiobook_progress_bar"
+                    )
+
+                    # Completed chapters list with audio preview
+                    with gr.Accordion("📖 Chapters đã hoàn thành", open=False):
+                        completed_chapters_display = gr.Dataframe(
+                            headers=["#", "Chapter", "File", "Duration", "Preview"],
+                            datatype=["number", "str", "str", "str", "str"],
+                            interactive=False,
+                            label="Danh sách chapters đã xong"
+                        )
+
                     audiobook_preview = gr.Audio(
-                        label="🔊 Preview",
+                        label="🔊 Preview chunk hiện tại",
                         autoplay=False,
                         container=False
                     )
@@ -2561,33 +2654,131 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             is_onnx = "onnx" in codec.lower()
             # If switching to ONNX and we are on custom mode, switch back to preset
             if is_onnx and current_mode == "custom_mode":
-                return gr.update(visible=False), gr.update(selected="preset_mode"), "preset_mode"
-            return gr.update(visible=not is_onnx), gr.update(), current_mode
-        
+                return gr.update(visible=False), gr.update(value="preset_mode")
+            return gr.update(visible=not is_onnx), gr.update()
+
         codec_select.change(
             on_codec_change,
             inputs=[codec_select, current_mode_state],
-            outputs=[tab_custom, tabs, current_mode_state]
+            outputs=[tab_custom, current_mode_state]
         )
 
-        # Tab change handler to show/hide audiobook controls in OUTPUT column
-        audiobook_tab.select(
-            fn=lambda: gr.update(visible=True),
-            outputs=[audiobook_output_group]
-        )
+        # Tab change handlers removed (merged tab layout)
 
-        single_tab.select(
-            fn=lambda: gr.update(visible=False),
-            outputs=[audiobook_output_group]
-        )
+        # Helper to auto-restore text and chapters from a session directory
+        def load_audiobook_session_text(output_dir):
+            """Auto-restore text and chapters from an existing session output directory."""
+            if not output_dir:
+                return None, None, None
+            output_path = Path(output_dir)
+            if not output_path.exists():
+                return None, None, None
 
-        conv_tab.select(
-            fn=lambda: gr.update(visible=False),
-            outputs=[audiobook_output_group]
-        )
+            candidate_files = []
+            # Check text_export folder
+            export_dir = output_path / "text_export"
+            if export_dir.exists():
+                candidate_files.extend(list(export_dir.glob("*_combined.txt")))
+                candidate_files.extend([f for f in export_dir.glob("*.txt") if not f.name.endswith("_combined.txt")])
+
+            # Check output_path root
+            candidate_files.extend(list(output_path.glob("all_chapters.txt")))
+            candidate_files.extend([f for f in output_path.glob("*.txt") if f.name != "all_chapters.txt"])
+
+            from vieneu_utils.chapter_detector import detect_chapters, estimate_chapter_duration
+            for file_path in candidate_files:
+                try:
+                    text_content = file_path.read_text(encoding="utf-8").strip()
+                    if text_content:
+                        chapters = detect_chapters(text_content, format="auto")
+                        chapter_data = [
+                            [ch['title'], len(ch['text']), estimate_chapter_duration(ch['text']) / 60]
+                            for ch in chapters
+                        ]
+                        return text_content, chapters, chapter_data
+                except Exception:
+                    continue
+            return None, None, None
+
+        # Add checkpoint resume check when audiobook tab is selected
+        def check_resume_on_tab_select(audiobook_state_val, audiobook_output_dir_val=None):
+            """Check for existing checkpoint when tab is selected and auto-restore text/UI state."""
+            from vieneu_utils.audiobook_processor import AudiobookProcessor
+
+            output_dir = audiobook_state_val.get("output_dir")
+            # Fallback to textbox value after page reload
+            if not output_dir and audiobook_output_dir_val:
+                output_dir = audiobook_output_dir_val
+                audiobook_state_val["output_dir"] = output_dir
+
+            text_update = gr.update()
+            chapters_update = gr.update()
+            if not audiobook_state_val.get("text") and output_dir:
+                res_text, res_chapters, res_data = load_audiobook_session_text(output_dir)
+                if res_text:
+                    audiobook_state_val["text"] = res_text
+                    audiobook_state_val["chapters"] = res_chapters
+                    text_update = gr.update(value=res_text)
+                    chapters_update = gr.update(value=res_data)
+
+            has_text = bool(audiobook_state_val.get("text"))
+
+            if not output_dir:
+                return (
+                    gr.update(),
+                    gr.update(interactive=has_text),
+                    gr.update(interactive=False),
+                    gr.update(interactive=False),
+                    text_update,
+                    chapters_update,
+                    audiobook_state_val
+                )
+
+            processor = AudiobookProcessor(tts if model_loaded else None, str(output_dir))
+            if processor.can_resume():
+                checkpoint_info = processor.get_checkpoint_info()
+                if checkpoint_info:
+                    status = checkpoint_info.get('status', 'unknown')
+                    ch_idx = checkpoint_info.get('chapter_index', 0)
+                    chunk_idx = checkpoint_info.get('chunk_index', 0)
+                    completed = checkpoint_info.get('completed_chapters', 0)
+                    voice = checkpoint_info.get('voice_id', 'unknown')
+                    timestamp = checkpoint_info.get('timestamp', 0)
+
+                    from datetime import datetime
+                    time_str = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S') if timestamp else 'Unknown'
+
+                    info = f"⏸️ **Phát hiện checkpoint:** Chương {ch_idx + 1} ({completed} chương hoàn thành, chunk {chunk_idx}). Nhấn **'Tiếp tục'** hoặc **'Bắt đầu'** để chạy."
+                    audiobook_state_val["status"] = "paused"
+                    audiobook_state_val["checkpoint_file"] = str(processor.checkpoint_file)
+                    return (
+                        gr.update(value=info),
+                        gr.update(interactive=True),  # start
+                        gr.update(interactive=True),  # resume
+                        gr.update(interactive=True),  # stop
+                        text_update,
+                        chapters_update,
+                        audiobook_state_val
+                    )
+            return (
+                gr.update(value="Chưa bắt đầu"),
+                gr.update(interactive=has_text),
+                gr.update(interactive=False),
+                gr.update(interactive=False),
+                text_update,
+                chapters_update,
+                audiobook_state_val
+            )
+
+
+
+
+
+
+
+
 
         # Bind tab events to update state
-        tab_preset.select(lambda: "preset_mode", outputs=current_mode_state)
         tab_custom.select(lambda: "custom_mode", outputs=current_mode_state)
         
         def validate_audio_duration(audio_path):
@@ -2690,9 +2881,9 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             inputs=[backbone_select, codec_select, device_choice, use_lmdeploy_cb,
                     custom_backbone_model_id, custom_backbone_base_model, custom_backbone_hf_token],
             outputs=[model_status, btn_generate, btn_generate_conv, btn_load, btn_stop_single, btn_stop_conv, voice_select,
-                     tab_preset, tab_custom, tabs, current_mode_state,
+                     tab_custom, current_mode_state,
                      conv_tab,
-                     audiobook_voice,
+                     btn_generate_cloning, btn_stop_cloning,
                      *speaker_voice_dds]
         )
         
@@ -2721,10 +2912,12 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             fn=lambda: gr.update(value=1.0),
             outputs=temperature_slider
         )
-        single_tab.select(
+
+        reading_audiobook_tab.select(
             fn=lambda: gr.update(value=default_temp),
             outputs=temperature_slider
         )
+
         
         # --- Standard Generation Handlers ---
         gen_event = btn_generate.click(
@@ -2738,6 +2931,20 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
         btn_generate.click(lambda: gr.update(interactive=True), outputs=btn_stop_single)
         gen_event.then(lambda: gr.update(interactive=False), outputs=btn_stop_single)
 
+        # --- Voice Cloning Generation Handler ---
+        cloning_mode_state = gr.State("custom_mode")
+        cloning_generation_mode = gr.State("Standard (Một lần)")
+        cloning_gen_event = btn_generate_cloning.click(
+            fn=synthesize_speech,
+            inputs=[custom_cloning_text_input, voice_select, custom_audio, custom_text, cloning_mode_state,
+                    cloning_generation_mode, use_batch, max_batch_size_run,
+                    temperature_slider, max_chars_chunk_slider, top_p_slider, repetition_penalty_slider,
+                    session_id_state, spell_check_level],
+            outputs=[audio_output, status_output]
+        )
+        btn_generate_cloning.click(lambda: gr.update(interactive=True), outputs=btn_stop_cloning)
+        cloning_gen_event.then(lambda: gr.update(interactive=False), outputs=btn_stop_cloning)
+
         # --- Stop Button ---
         def request_stop():
             print("🛑 STOP REQUESTED via button click.")
@@ -2749,12 +2956,178 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
         # relying instead on the frequent _STOP_EVENT.is_set() checks in the code.
         btn_stop_single.click(fn=request_stop, outputs=[audio_output, status_output, btn_stop_single])
         btn_stop_conv.click(fn=request_stop, outputs=[audio_output, status_output, btn_stop_conv])
+        btn_stop_cloning.click(fn=request_stop, outputs=[audio_output, status_output, btn_stop_cloning])
 
-        # File upload handler
+        # --- Audiobook Event Handlers ---
+        def on_split_mode_change(mode):
+            """Toggle visibility of split options based on mode."""
+            if mode == "By keyword":
+                return gr.update(visible=True), gr.update(visible=False)
+            elif mode == "By word count":
+                return gr.update(visible=False), gr.update(visible=True)
+            else:  # Auto detect
+                return gr.update(visible=False), gr.update(visible=False)
+
+        audiobook_split_mode.change(
+            fn=on_split_mode_change,
+            inputs=[audiobook_split_mode],
+            outputs=[keyword_row, wordcount_row]
+        )
+
+        def handle_audiobook_upload(file_paths, split_mode, keywords, words_per_chunk, output_dir):
+            """Handle audiobook file upload (single or multiple) and detect chapters."""
+            from vieneu_utils.document_reader import extract_text_from_txt, extract_text_from_docx
+            from vieneu_utils.chapter_detector import detect_chapters, estimate_chapter_duration
+
+            if file_paths is None or (isinstance(file_paths, list) and len(file_paths) == 0):
+                return (
+                    gr.update(value="Chưa có file"),
+                    gr.update(value=[]),
+                    gr.update(interactive=False),
+                    gr.update(value=""),  # audiobook_text_display
+                    {"text": "", "chapters": [], "file_path": None, "output_dir": None, "status": "idle", "current_chapter_idx": 0, "completed_chapters": [], "checkpoint_file": None, "pause_requested": False}
+                )
+
+            # Handle both single file and multiple files
+            if not isinstance(file_paths, list):
+                file_paths = [file_paths]
+
+            # Process all files and merge text
+            all_texts = []
+            total_char_count = 0
+            file_names = []
+
+            for file_path in file_paths:
+                file_ext = Path(file_path).suffix.lower()
+                file_names.append(Path(file_path).name)
+
+                if file_ext == '.txt':
+                    text, char_count, truncated, error = extract_text_from_txt(file_path, max_chars=None)
+                elif file_ext == '.docx':
+                    text, char_count, truncated, error = extract_text_from_docx(file_path, max_chars=None)
+                else:
+                    continue  # Skip unsupported files
+
+                if error:
+                    continue  # Skip files with errors
+
+                all_texts.append(text)
+                total_char_count += char_count
+
+            if not all_texts:
+                return (
+                    gr.update(value="❌ Không có file hợp lệ nào được tải lên"),
+                    gr.update(value=[]),
+                    gr.update(interactive=False),
+                    gr.update(value=""),  # audiobook_text_display
+                    {"text": "", "chapters": [], "file_path": None, "output_dir": None, "status": "idle", "current_chapter_idx": 0, "completed_chapters": [], "checkpoint_file": None, "pause_requested": False}
+                )
+
+            # Merge all texts with separator
+            merged_text = "\n\n---\n\n".join(all_texts)
+
+            # Detect chapters based on split mode
+            if split_mode == "By keyword":
+                # Split by custom keywords
+                keyword_list = [k.strip() for k in keywords.split(",") if k.strip()]
+                chapters = detect_chapters(merged_text, format="numbered", custom_keywords=keyword_list)
+            elif split_mode == "By word count":
+                # Split by word count
+                chapters = detect_chapters(merged_text, format="wordcount", words_per_chunk=int(words_per_chunk))
+            else:  # Auto detect
+                chapters = detect_chapters(merged_text, format="auto")
+
+            # Calculate stats
+            estimated_chunks = (total_char_count // 256) + 1
+            estimated_duration = total_char_count / 50  # ~50 chars/second
+
+            # Create output directory based on first file name
+            base_name = Path(file_names[0]).stem if file_names else "audiobook"
+            # Sanitize folder name
+            safe_base = "".join(c for c in base_name if c.isalnum() or c in (' ', '-', '_')).strip()
+            safe_base = safe_base[:100]  # Limit length
+            # Create final output dir: user_specified_dir / safe_base
+            final_output_dir = str(Path(output_dir) / safe_base)
+
+            # Auto-export text files
+            from vieneu_utils.text_exporter import export_chapters_to_text
+            export_dir = Path(final_output_dir) / "text_export"
+            individual_files, combined_file, export_status = export_chapters_to_text(
+                chapters=chapters,
+                output_dir=str(export_dir),
+                export_mode="both",
+                spell_check_level="off",
+                base_name=safe_base
+            )
+
+            # Build info message
+            file_list = "\n".join([f"  - {name}" for name in file_names])
+            info = f"""
+✅ **Files loaded successfully**
+- Files uploaded: {len(file_names)}
+{file_list}
+- Total characters: {total_char_count:,}
+- Estimated chunks: {estimated_chunks:,}
+- Estimated duration: {estimated_duration/60:.1f} minutes
+- Chapters detected: {len(chapters)}
+- Split mode: {split_mode}
+
+{export_status}
+            """
+
+            # Prepare chapter dataframe (with checkbox default True)
+            chapter_data = [
+                [True, ch['title'], len(ch['text']), estimate_chapter_duration(ch['text']) / 60]
+                for ch in chapters
+            ]
+
+            # Create output directory based on first file name
+            base_name = Path(file_names[0]).stem if file_names else "audiobook"
+            # Sanitize folder name
+            safe_base = "".join(c for c in base_name if c.isalnum() or c in (' ', '-', '_')).strip()
+            safe_base = safe_base[:100]  # Limit length
+            # Create final output dir: user_specified_dir / safe_base
+            final_output_dir = str(Path(output_dir) / safe_base)
+
+            # Save combined text file with chapter headers in output folder for instant resume recovery without re-upload
+            try:
+                Path(final_output_dir).mkdir(parents=True, exist_ok=True)
+                # Write combined text with chapter headers (like all_chapters.txt format)
+                with open(Path(final_output_dir) / "all_chapters.txt", 'w', encoding='utf-8') as f:
+                    for i, chapter in enumerate(chapters):
+                        f.write(f"{'='*80}\n")
+                        f.write(f"CHAPTER {i+1}: {chapter['title']}\n")
+                        f.write(f"{'='*80}\n\n")
+                        f.write(chapter['text'])
+                        if i < len(chapters) - 1:
+                            f.write(f"\n\n{'='*80}\n\n")
+            except Exception:
+                pass
+
+            return (
+                gr.update(value=info),
+                gr.update(value=chapter_data),
+                gr.update(interactive=True),
+                gr.update(value=merged_text),  # audiobook_text_display
+                {
+                    "text": merged_text,
+                    "chapters": chapters,
+                    "chapters_display": chapter_data,  # DataFrame format with checkboxes
+                    "file_path": file_paths[0] if len(file_paths) == 1 else None,
+                    "output_dir": final_output_dir,
+                    "status": "idle",
+                    "current_chapter_idx": 0,
+                    "completed_chapters": [],
+                    "checkpoint_file": None,
+                    "pause_requested": False
+                }
+            )
+
+        # File upload handler (merged: supports both quick-read and audiobook)
         file_upload.upload(
-            fn=handle_file_upload,
-            inputs=[file_upload],
-            outputs=[text_input, upload_status]
+            fn=handle_audiobook_upload,
+            inputs=[file_upload, audiobook_split_mode, audiobook_keywords, audiobook_words_per_chunk, audiobook_output_dir],
+            outputs=[upload_status, audiobook_chapters, btn_start_audiobook, text_input, audiobook_state]
         )
 
         # History event handlers
@@ -2822,7 +3195,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
         # Persistence: Restore UI state on load
         demo.load(
             fn=restore_ui_state,
-            outputs=[model_status, btn_generate, btn_generate_conv, btn_stop_single, btn_stop_conv, voice_select, conv_tab, audiobook_voice, *speaker_voice_dds]
+            outputs=[model_status, btn_generate, btn_generate_conv, btn_stop_single, btn_stop_conv, voice_select, conv_tab, *speaker_voice_dds]
         )
 
         # --- Audiobook Event Handlers ---
@@ -2908,15 +3281,23 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             estimated_chunks = (total_char_count // 256) + 1
             estimated_duration = total_char_count / 50  # ~50 chars/second
 
+            # Create output directory based on first file name
+            base_name = Path(file_names[0]).stem if file_names else "audiobook"
+            # Sanitize folder name
+            safe_base = "".join(c for c in base_name if c.isalnum() or c in (' ', '-', '_')).strip()
+            safe_base = safe_base[:100]  # Limit length
+            # Create final output dir: user_specified_dir / safe_base
+            final_output_dir = str(Path(output_dir) / safe_base)
+
             # Auto-export text files
             from vieneu_utils.text_exporter import export_chapters_to_text
-            export_dir = Path(output_dir) / "text_export"
+            export_dir = Path(final_output_dir) / "text_export"
             individual_files, combined_file, export_status = export_chapters_to_text(
                 chapters=chapters,
                 output_dir=str(export_dir),
                 export_mode="both",
                 spell_check_level="off",
-                base_name="audiobook"
+                base_name=safe_base
             )
 
             # Build info message
@@ -2934,9 +3315,9 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
 {export_status}
             """
 
-            # Prepare chapter dataframe
+            # Prepare chapter dataframe (with checkbox default True)
             chapter_data = [
-                [ch['title'], len(ch['text']), estimate_chapter_duration(ch['text']) / 60]
+                [True, ch['title'], len(ch['text']), estimate_chapter_duration(ch['text']) / 60]
                 for ch in chapters
             ]
 
@@ -2948,6 +3329,21 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             # Create final output dir: user_specified_dir / safe_base
             final_output_dir = str(Path(output_dir) / safe_base)
 
+            # Save combined text file with chapter headers in output folder for instant resume recovery without re-upload
+            try:
+                Path(final_output_dir).mkdir(parents=True, exist_ok=True)
+                # Write combined text with chapter headers (like all_chapters.txt format)
+                with open(Path(final_output_dir) / "all_chapters.txt", 'w', encoding='utf-8') as f:
+                    for i, chapter in enumerate(chapters):
+                        f.write(f"{'='*80}\n")
+                        f.write(f"CHAPTER {i+1}: {chapter['title']}\n")
+                        f.write(f"{'='*80}\n\n")
+                        f.write(chapter['text'])
+                        if i < len(chapters) - 1:
+                            f.write(f"\n\n{'='*80}\n\n")
+            except Exception:
+                pass
+
             return (
                 gr.update(value=info),
                 gr.update(value=chapter_data),
@@ -2956,6 +3352,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                 {
                     "text": merged_text,
                     "chapters": chapters,
+                    "chapters_display": chapter_data,  # DataFrame format with checkboxes
                     "file_path": file_paths[0] if len(file_paths) == 1 else None,
                     "output_dir": final_output_dir,
                     "status": "idle",
@@ -2966,11 +3363,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                 }
             )
 
-        audiobook_file.upload(
-            fn=handle_audiobook_upload,
-            inputs=[audiobook_file, audiobook_split_mode, audiobook_keywords, audiobook_words_per_chunk, audiobook_output_dir],
-            outputs=[audiobook_file_info, audiobook_chapters, btn_start_audiobook, audiobook_text_display, audiobook_state]
-        )
+
 
         def export_audiobook_text(audiobook_state_val, output_dir, spell_check_level):
             """Export chapters to text files with spell check status in filename."""
@@ -3059,9 +3452,9 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             else:  # Auto detect
                 chapters = detect_chapters(text, format="auto")
 
-            # Prepare chapter dataframe
+            # Prepare chapter dataframe (with checkbox default True)
             chapter_data = [
-                [ch['title'], len(ch['text']), estimate_chapter_duration(ch['text']) / 60]
+                [True, ch['title'], len(ch['text']), estimate_chapter_duration(ch['text']) / 60]
                 for ch in chapters
             ]
 
@@ -3524,15 +3917,18 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             </div>
             """
 
-        def preview_spell_check_professional(text: str, level: str, mode: str, char_limit: int):
+        def preview_spell_check_professional(text: str, level: str, mode: str, char_limit: int, engine: str = "symspell", device: str = "auto", batch_size: int = 16):
             """
-            Generate professional diff preview with highlighting.
+            Generate professional diff preview with highlighting (new engine API).
 
             Args:
                 text: Original text
-                level: Spell check level
+                level: Spell check level (legacy)
                 mode: View mode (Side-by-side, Unified, Inline)
                 char_limit: Character limit for preview
+                engine: Spell check engine (off, symspell, vspell, hybrid)
+                device: Device for VSpell
+                batch_size: Batch size
 
             Returns:
                 Tuple of (diff_html, stats_html)
@@ -3546,16 +3942,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                     ""
                 )
 
-            # Map level
-            level_map = {
-                "Tắt": "off",
-                "Nhẹ (Lọc ký tự)": "light",
-                "Trung bình (Sửa typo)": "medium",
-                "Mạnh (Full check)": "strong"
-            }
-            internal_level = level_map.get(level, "off")
-
-            if internal_level == "off":
+            if engine == "off":
                 return (
                     "<p style='color: #10b981;'>✅ Spell check tắt - văn bản giữ nguyên</p>",
                     ""
@@ -3564,12 +3951,32 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             # Limit text for preview
             text_preview = text[:char_limit] if len(text) > char_limit else text
 
-            # Apply spell check with detailed changes
-            from vieneu_utils.spell_checker import clean_text_with_changes, generate_diff_html
-            cleaned_text, changes = clean_text_with_changes(text_preview, internal_level)
+            # Apply spell check with new engine API
+            from vieneu_utils.spell_checker import spell_check_text, generate_diff_html, clean_text_with_changes
 
-            # Generate diff based on mode using spell_checker's generate_diff_html
-            # Map UI mode to spell_checker mode
+            # For preview, use legacy level mapping if engine is symspell
+            if engine == "symspell":
+                level_map = {
+                    "Tắt": "off",
+                    "Nhẹ (Lọc ký tự)": "light",
+                    "Trung bình (Sửa typo)": "medium",
+                    "Mạnh (Full check)": "strong"
+                }
+                internal_level = level_map.get(level, "off")
+                cleaned_text, changes = clean_text_with_changes(text_preview, internal_level)
+            else:
+                # Use new engine API
+                corrected, meta = spell_check_text(
+                    text_preview,
+                    engine=engine,
+                    device=device,
+                    batch_size=batch_size
+                )
+                cleaned_text = corrected
+                # Create simple changes list for diff
+                changes = [{"type": "replaced", "original": "text", "new": "corrected", "position": 0, "category": "engine"}]
+
+            # Generate diff based on mode
             mode_map = {
                 "Side-by-side": "side-by-side",
                 "Unified": "unified",
@@ -3579,7 +3986,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             diff_html = generate_diff_html(text_preview, cleaned_text, changes, mode=sc_mode, limit=char_limit)
 
             # Generate statistics
-            stats_html = generate_stats_dashboard(text_preview, cleaned_text, f"Level: {internal_level}, Changes: {len(changes)}")
+            stats_html = generate_stats_dashboard(text_preview, cleaned_text, f"Engine: {engine}, Changes: {len(changes)}")
 
             return (diff_html, stats_html)
 
@@ -3651,6 +4058,9 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             use_batch,
             max_batch_size_run,
             spell_check_level,
+            spell_check_engine,
+            spell_check_device,
+            spell_check_batch_size,
             progress=gr.Progress()
         ):
             """Start or resume audiobook processing."""
@@ -3666,6 +4076,8 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                     gr.update(value="--"),
                     gr.update(value="--"),
                     None,
+                    gr.update(value="<div style='width:100%; height:10px; background:#e2e8f0; border-radius:5px;'><div style='width:0%; height:100%; background:#ef4444; border-radius:5px;'></div></div>"),
+                    gr.update(value=[]),
                     gr.update(interactive=False),
                     gr.update(interactive=False),
                     gr.update(interactive=False),
@@ -3675,19 +4087,27 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                 return
 
             if not audiobook_state_val.get("text"):
-                yield (
-                    gr.update(value="⚠️ Vui lòng upload file trước!"),
-                    gr.update(value="0/0"),
-                    gr.update(value="--"),
-                    gr.update(value="--"),
-                    None,
-                    gr.update(interactive=False),
-                    gr.update(interactive=False),
-                    gr.update(interactive=False),
-                    gr.update(interactive=False),
-                    audiobook_state_val
-                )
-                return
+                output_dir = audiobook_state_val.get("output_dir")
+                res_text, res_chapters, _ = load_audiobook_session_text(output_dir)
+                if res_text and res_chapters:
+                    audiobook_state_val["text"] = res_text
+                    audiobook_state_val["chapters"] = res_chapters
+                else:
+                    yield (
+                        gr.update(value="⚠️ Vui lòng upload file trước!"),
+                        gr.update(value="0/0"),
+                        gr.update(value="--"),
+                        gr.update(value="--"),
+                        None,
+                        gr.update(value="<div style='width:100%; height:10px; background:#e2e8f0; border-radius:5px;'><div style='width:0%; height:100%; background:#ef4444; border-radius:5px;'></div></div>"),
+                        gr.update(value=[]),
+                        gr.update(interactive=False),
+                        gr.update(interactive=False),
+                        gr.update(interactive=False),
+                        gr.update(interactive=False),
+                        audiobook_state_val
+                    )
+                    return
 
             if not voice_id:
                 yield (
@@ -3696,6 +4116,8 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                     gr.update(value="--"),
                     gr.update(value="--"),
                     None,
+                    gr.update(value="<div style='width:100%; height:10px; background:#e2e8f0; border-radius:5px;'><div style='width:0%; height:100%; background:#ef4444; border-radius:5px;'></div></div>"),
+                    gr.update(value=[]),
                     gr.update(interactive=False),
                     gr.update(interactive=False),
                     gr.update(interactive=False),
@@ -3711,45 +4133,54 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             # Determine if resuming
             resume_mode = (audiobook_state_val.get("status") == "paused")
 
-            # Initialize processor
+            # Initialize processor with checkpoint interval (every 5 chunks by default)
             output_dir = Path(audiobook_state_val.get("output_dir", "audiobook_output"))
             if resume_mode and audiobook_state_val.get("checkpoint_file"):
                 # Use existing output dir (parent of checkpoint file)
                 output_dir = Path(audiobook_state_val["checkpoint_file"]).parent
             output_dir.mkdir(parents=True, exist_ok=True)
 
-            processor = AudiobookProcessor(tts, str(output_dir))
-            chapters = audiobook_state_val["chapters"]
+            # Get book name from output directory name
+            book_name = output_dir.name
+            processor = AudiobookProcessor(tts, str(output_dir), checkpoint_interval=5, book_name=book_name)
 
-            # Map UI labels to internal levels
-            level_map = {
-                "Tắt": "off",
-                "Nhẹ (Lọc ký tự)": "light",
-                "Trung bình (Sửa typo)": "medium",
-                "Mạnh (Full check)": "strong"
-            }
-            level = level_map.get(spell_check_level, "off")
+            # Get full chapters from state (stored with full text)
+            full_chapters = audiobook_state_val.get("chapters", [])
 
-            # Apply spell checking to all chapters
-            if level != "off":
-                from vieneu_utils.spell_checker import clean_vietnamese_text
-                for chapter in chapters:
-                    cleaned_text, _ = clean_vietnamese_text(chapter['text'], level)
-                    chapter['text'] = cleaned_text
+            # Get chapters with checkbox from dataframe
+            chapters_raw = audiobook_state_val.get("chapters_display", full_chapters)
+
+            # Filter chapters based on checkbox (first column)
+            chapters = []
+            for i, row in enumerate(chapters_raw):
+                if isinstance(row, list) and len(row) >= 4:
+                    # DataFrame format: [checkbox, title, chars, duration]
+                    if row[0] is True and i < len(full_chapters):
+                        chapters.append(full_chapters[i])
+                elif isinstance(row, dict) and "title" in row:
+                    # Direct chapter object format
+                    chapters.append(row)
+
+            # Get spell check engine settings
+            spell_engine = spell_check_engine
+            spell_device = spell_check_device
+            spell_batch_size = int(spell_check_batch_size)
 
             # Update state
             audiobook_state_val["status"] = "processing"
             audiobook_state_val["checkpoint_file"] = str(processor.checkpoint_file)
 
-            # Progress tracking
+            # Progress tracking - enhanced with state_info
             start_time = time.time()
-            last_progress = {"current": 0, "total": 0, "chapter": "", "preview": None}
+            last_progress = {"current": 0, "total": 0, "chapter": "", "preview": None, "state_info": {}}
 
-            def progress_callback(current, total, chapter_name, preview_audio):
+            def progress_callback(current, total, chapter_name, preview_audio, state_info=None):
                 last_progress["current"] = current
                 last_progress["total"] = total
                 last_progress["chapter"] = chapter_name
                 last_progress["preview"] = preview_audio
+                if state_info:
+                    last_progress["state_info"] = state_info
 
             # Yield initial status
             yield (
@@ -3758,6 +4189,8 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                 gr.update(value="--"),
                 gr.update(value="--"),
                 None,
+                gr.update(value="<div style='width:100%; height:10px; background:#e2e8f0; border-radius:5px;'><div style='width:0%; height:100%; background:#3b82f6; border-radius:5px;'></div></div>"),
+                gr.update(value=[]),
                 gr.update(interactive=False),
                 gr.update(interactive=True),
                 gr.update(interactive=False),
@@ -3786,7 +4219,10 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                             stop_event=_STOP_EVENT,
                             resume_from_checkpoint=resume_mode,
                             use_batch=use_batch and using_lmdeploy,
-                            max_batch_size=int(max_batch_size_run)
+                            max_batch_size=int(max_batch_size_run),
+                            spell_check_engine=spell_engine,
+                            spell_check_device=spell_device,
+                            spell_check_batch_size=spell_batch_size
                         )
                     except Exception as e:
                         error_msg = str(e)
@@ -3805,20 +4241,57 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                     total = last_progress["total"]
                     chapter_name = last_progress["chapter"]
                     preview_audio = last_progress["preview"]
+                    state_info = last_progress.get("state_info", {})
 
                     if total > 0:
                         elapsed = time.time() - start_time
                         speed = current / elapsed if elapsed > 0 else 0
                         remaining = (total - current) / speed if speed > 0 else 0
 
+                        # Enhanced progress info with chapter-level detail
+                        chunk_in_chapter = state_info.get('chunk_in_chapter', 0)
+                        total_chunks_in_chapter = state_info.get('total_chunks_in_chapter', 0)
+                        chapter_idx = state_info.get('chapter_idx', 0)
+                        status = state_info.get('status', 'processing')
+
+                        progress_pct = int(current / total * 100)
                         progress_info = f"""
-### Processing: {chapter_name}
-- Progress: {current}/{total} chunks ({current/total*100:.1f}%)
+### Processing: {chapter_name} (Chương {chapter_idx + 1}/{len(chapters)})
+- Overall Progress: {current}/{total} chunks ({progress_pct}%)
+- Chapter Progress: {chunk_in_chapter}/{total_chunks_in_chapter} chunks
+- Status: {status}
                         """
 
                         chunks_text = f"{current}/{total}"
                         time_text = f"{remaining/60:.1f} min" if remaining > 0 else "Calculating..."
                         speed_text = f"{speed:.2f} chunks/s" if speed > 0 else "Calculating..."
+
+                        # Progress bar HTML
+                        progress_bar_html = f"""
+<div style='width:100%; height:10px; background:#e2e8f0; border-radius:5px; overflow:hidden;'>
+    <div style='width:{progress_pct}%; height:100%; background:linear-gradient(90deg, #3b82f6, #06b6d4); border-radius:5px; transition:width 0.3s;'></div>
+</div>
+<p style='text-align:center; margin-top:4px; color:#64748b; font-size:0.85rem;'>{progress_pct}% hoàn thành</p>
+                        """
+
+                        # Build completed chapters table
+                        completed_table = []
+                        if output_mode != "Single file":
+                            progress = processor._load_progress()
+                            for i, f in enumerate(progress.get('completed_files', [])):
+                                import soundfile as sf
+                                try:
+                                    info = sf.info(f)
+                                    duration = f"{info.duration:.1f}s"
+                                except:
+                                    duration = "N/A"
+                                completed_table.append([
+                                    i + 1,
+                                    f"Chapter {i + 1}",
+                                    Path(f).name,
+                                    duration,
+                                    "▶️"  # Preview placeholder
+                                ])
 
                         yield (
                             gr.update(value=progress_info),
@@ -3826,6 +4299,8 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                             gr.update(value=time_text),
                             gr.update(value=speed_text),
                             preview_audio,
+                            gr.update(value=progress_bar_html),
+                            gr.update(value=completed_table),
                             gr.update(interactive=False),
                             gr.update(interactive=True),
                             gr.update(interactive=False),
@@ -3849,6 +4324,8 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                         gr.update(value="--"),
                         gr.update(value="--"),
                         None,
+                        gr.update(value="<div style='width:100%; height:10px; background:#e2e8f0; border-radius:5px;'><div style='width:0%; height:100%; background:#f59e0b; border-radius:5px;'></div></div>"),
+                        gr.update(value=[]),
                         gr.update(interactive=False),
                         gr.update(interactive=False),
                         gr.update(interactive=True),
@@ -3866,6 +4343,8 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                         gr.update(value="--"),
                         gr.update(value="--"),
                         None,
+                        gr.update(value="<div style='width:100%; height:10px; background:#e2e8f0; border-radius:5px;'><div style='width:0%; height:100%; background:#ef4444; border-radius:5px;'></div></div>"),
+                        gr.update(value=[]),
                         gr.update(interactive=True),
                         gr.update(interactive=False),
                         gr.update(interactive=False),
@@ -3882,6 +4361,8 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                     gr.update(value="0 min"),
                     gr.update(value="--"),
                     None,
+                    gr.update(value="<div style='width:100%; height:10px; background:#e2e8f0; border-radius:5px;'><div style='width:100%; height:100%; background:#22c55e; border-radius:5px;'></div></div>"),
+                    gr.update(value=[]),
                     gr.update(interactive=True),
                     gr.update(interactive=False),
                     gr.update(interactive=False),
@@ -3897,6 +4378,8 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                     gr.update(value="--"),
                     gr.update(value="--"),
                     None,
+                    gr.update(value="<div style='width:100%; height:10px; background:#e2e8f0; border-radius:5px;'><div style='width:0%; height:100%; background:#ef4444; border-radius:5px;'></div></div>"),
+                    gr.update(value=[]),
                     gr.update(interactive=True),
                     gr.update(interactive=False),
                     gr.update(interactive=False),
@@ -3910,8 +4393,10 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             _PAUSE_EVENT.set()
             return (
                 gr.update(value="⏸️ Đang tạm dừng..."),
+                gr.update(value="<div style='width:100%; height:10px; background:#e2e8f0; border-radius:5px;'><div style='width:0%; height:100%; background:#f59e0b; border-radius:5px;'></div></div>"),
                 gr.update(interactive=False),
-                gr.update(interactive=False),
+                gr.update(interactive=True),
+                gr.update(interactive=True),
             )
 
         def stop_audiobook_processing():
@@ -3920,6 +4405,9 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             _STOP_EVENT.set()
             return (
                 gr.update(value="⏹️ Đang dừng..."),
+                gr.update(value="<div style='width:100%; height:10px; background:#e2e8f0; border-radius:5px;'><div style='width:0%; height:100%; background:#ef4444; border-radius:5px;'></div></div>"),
+                gr.update(interactive=False),
+                gr.update(interactive=False),
                 gr.update(interactive=False),
             )
 
@@ -3928,13 +4416,16 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             fn=start_audiobook_processing,
             inputs=[
                 audiobook_state,
-                audiobook_voice,
+                voice_select,
                 audiobook_output_mode,
                 temperature_slider,
                 max_chars_chunk_slider,
                 use_batch,
                 max_batch_size_run,
-                audiobook_spell_check_level
+                spell_check_level,
+                spell_check_engine,
+                spell_check_device,
+                spell_check_batch_size
             ],
             outputs=[
                 audiobook_progress,
@@ -3942,6 +4433,8 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                 audiobook_time_estimate,
                 audiobook_speed,
                 audiobook_preview,
+                audiobook_progress_bar,
+                completed_chapters_display,
                 btn_start_audiobook,
                 btn_pause_audiobook,
                 btn_resume_audiobook,
@@ -3955,13 +4448,16 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             fn=start_audiobook_processing,
             inputs=[
                 audiobook_state,
-                audiobook_voice,
+                voice_select,
                 audiobook_output_mode,
                 temperature_slider,
                 max_chars_chunk_slider,
                 use_batch,
                 max_batch_size_run,
-                audiobook_spell_check_level
+                spell_check_level,
+                spell_check_engine,
+                spell_check_device,
+                spell_check_batch_size
             ],
             outputs=[
                 audiobook_progress,
@@ -3969,6 +4465,8 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                 audiobook_time_estimate,
                 audiobook_speed,
                 audiobook_preview,
+                audiobook_progress_bar,
+                completed_chapters_display,
                 btn_start_audiobook,
                 btn_pause_audiobook,
                 btn_resume_audiobook,
@@ -3982,8 +4480,10 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             fn=pause_audiobook_processing,
             outputs=[
                 audiobook_progress,
+                audiobook_progress_bar,
                 btn_pause_audiobook,
-                btn_resume_audiobook
+                btn_resume_audiobook,
+                btn_stop_audiobook
             ]
         )
 
@@ -3992,9 +4492,291 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             fn=stop_audiobook_processing,
             outputs=[
                 audiobook_progress,
+                audiobook_progress_bar,
+                btn_pause_audiobook,
+                btn_resume_audiobook,
                 btn_stop_audiobook
             ]
         )
+
+        # Check Resume button
+        def check_resume(audiobook_state_val, audiobook_output_dir_val=None):
+            """Manually check for checkpoint, auto-restore text/UI state, and link with process controls."""
+            from vieneu_utils.audiobook_processor import AudiobookProcessor
+
+            output_dir = audiobook_state_val.get("output_dir")
+            # Fallback to textbox value after page reload
+            if not output_dir and audiobook_output_dir_val:
+                output_dir = audiobook_output_dir_val
+                audiobook_state_val["output_dir"] = output_dir
+
+            text_update = gr.update()
+            chapters_update = gr.update()
+            if not audiobook_state_val.get("text") and output_dir:
+                res_text, res_chapters, res_data = load_audiobook_session_text(output_dir)
+                if res_text:
+                    audiobook_state_val["text"] = res_text
+                    audiobook_state_val["chapters"] = res_chapters
+                    text_update = gr.update(value=res_text)
+                    chapters_update = gr.update(value=res_data)
+
+            has_text = bool(audiobook_state_val.get("text"))
+
+            if not output_dir:
+                return (
+                    gr.update(value="📭 Không có thư mục output"),
+                    gr.update(value="📭 Chưa chọn thư mục output"),
+                    gr.update(interactive=False),
+                    gr.update(interactive=False),
+                    gr.update(interactive=False),
+                    gr.update(interactive=False),
+                    text_update,
+                    chapters_update,
+                    audiobook_state_val
+                )
+
+            processor = AudiobookProcessor(tts if model_loaded else None, str(output_dir))
+            can_res = processor.can_resume()
+
+            if can_res:
+                checkpoint_info = processor.get_checkpoint_info()
+                if checkpoint_info:
+                    status = checkpoint_info.get('status', 'unknown')
+                    ch_idx = checkpoint_info.get('chapter_index', 0)
+                    chunk_idx = checkpoint_info.get('chunk_index', 0)
+                    completed = checkpoint_info.get('completed_chapters', 0)
+                    voice = checkpoint_info.get('voice_id', 'unknown')
+                    timestamp = checkpoint_info.get('timestamp', 0)
+
+                    from datetime import datetime
+                    time_str = datetime.fromtimestamp(timestamp).strftime('%Y-%m-%d %H:%M:%S') if timestamp else 'Unknown'
+
+                    info = f"""
+✅ **Tìm thấy checkpoint để resume**
+- Trạng thái: {status}
+- Chương hiện tại: {ch_idx + 1} (đã hoàn thành {completed} chương)
+- Chunk trong chương: {chunk_idx}
+- Giọng đọc: {voice}
+- Thời gian checkpoint: {time_str}
+
+Nhấn **'Tiếp tục'** hoặc **'Bắt đầu'** ở phần Xử lý để chạy tiếp.
+                    """
+                    audiobook_state_val["status"] = "paused"
+                    audiobook_state_val["checkpoint_file"] = str(processor.checkpoint_file)
+
+                    return (
+                        gr.update(value=info),
+                        gr.update(value=f"⏸️ **Sẵn sàng resume:** Chương {ch_idx + 1} ({completed} chương đã xong)"),
+                        gr.update(interactive=True),  # start
+                        gr.update(interactive=False), # pause
+                        gr.update(interactive=True),  # resume
+                        gr.update(interactive=True),  # stop
+                        text_update,
+                        chapters_update,
+                        audiobook_state_val
+                    )
+
+            return (
+                gr.update(value="📭 Không tìm thấy checkpoint"),
+                gr.update(value="Chưa bắt đầu"),
+                gr.update(interactive=has_text),  # start if text present
+                gr.update(interactive=False),
+                gr.update(interactive=False),
+                gr.update(interactive=False),
+                text_update,
+                chapters_update,
+                audiobook_state_val
+            )
+
+
+        # ===== NEW SESSION/CHECKPOINT HANDLERS =====
+
+        def refresh_audiobook_sessions(audiobook_state_val, audiobook_output_dir_val=None):
+            """Scan output directory for all session checkpoints."""
+            from vieneu_utils.audiobook_processor import AudiobookProcessor
+
+            output_dir = audiobook_state_val.get("output_dir")
+            # Fallback to the textbox value (persisted via settings) when state is empty (e.g. after page reload)
+            if not output_dir and audiobook_output_dir_val:
+                output_dir = audiobook_output_dir_val
+                audiobook_state_val["output_dir"] = output_dir
+            if not output_dir:
+                return gr.update(choices=[], value=None), gr.update(value="📭 Chưa chọn thư mục output"), audiobook_state_val
+
+            output_path = Path(output_dir)
+            if not output_path.exists():
+                return gr.update(choices=[], value=None), gr.update(value="📭 Thư mục không tồn tại"), audiobook_state_val
+
+            # Find all checkpoint.json files in subdirectories
+            sessions = []
+            for checkpoint_file in output_path.glob("*/checkpoint.json"):
+                try:
+                    processor = AudiobookProcessor(tts if model_loaded else None, str(checkpoint_file.parent))
+                    info = processor.get_checkpoint_info()
+                    if info:
+                        from datetime import datetime
+                        time_str = datetime.fromtimestamp(info.get('timestamp', 0)).strftime('%Y-%m-%d %H:%M:%S')
+                        session_name = checkpoint_file.parent.name
+                        label = f"{session_name} - Chương {info.get('chapter_index', 0)+1}/{info.get('completed_chapters', 0)+1} - {time_str} ({info.get('status', 'unknown')})"
+                        sessions.append((label, str(checkpoint_file)))
+                except Exception:
+                    pass
+
+            if sessions:
+                choices = [s[0] for s in sessions]
+                values = [s[1] for s in sessions]
+                # Create dropdown with labels and values
+                dropdown_choices = list(zip(choices, values))
+                return (
+                    gr.update(choices=dropdown_choices, value=values[0] if values else None),
+                    gr.update(value=f"🔍 Tìm thấy {len(sessions)} phiên xử lý"),
+                    audiobook_state_val
+                )
+            return gr.update(choices=[], value=None), gr.update(value="📭 Không tìm thấy phiên nào"), audiobook_state_val
+
+
+        def new_audiobook_session(audiobook_state_val, output_dir):
+            """Create a new session (clear current state for fresh start)."""
+            if output_dir:
+                audiobook_state_val["output_dir"] = output_dir
+            audiobook_state_val["status"] = "idle"
+            audiobook_state_val["checkpoint_file"] = None
+            audiobook_state_val["current_chapter_idx"] = 0
+            audiobook_state_val["completed_chapters"] = []
+            audiobook_state_val["current_session_id"] = str(uuid.uuid4())[:8]
+
+            from vieneu_utils.audiobook_processor import AudiobookProcessor
+            if output_dir:
+                processor = AudiobookProcessor(tts if model_loaded else None, str(output_dir))
+                processor.clear_checkpoint()
+
+            has_text = bool(audiobook_state_val.get("text"))
+
+            return (
+                gr.update(value="✅ Phiên mới sẵn sàng"),
+                gr.update(value="Chưa bắt đầu"),
+                gr.update(interactive=has_text),  # start button
+                gr.update(interactive=False),     # pause
+                gr.update(interactive=False),     # resume
+                gr.update(interactive=False),     # stop
+                audiobook_state_val
+            )
+
+
+        def on_session_select(session_value, audiobook_state_val):
+            """When user selects a session from dropdown, load info, restore text/chapters, and update UI."""
+            if not session_value:
+                return (
+                    gr.update(value="Chưa chọn phiên"),
+                    gr.update(value="Chưa chọn phiên"),
+                    gr.update(interactive=False),
+                    gr.update(interactive=False),
+                    gr.update(interactive=False),
+                    gr.update(interactive=False),
+                    gr.update(),
+                    gr.update(),
+                    gr.update(),
+                    audiobook_state_val
+                )
+
+            checkpoint_path = Path(session_value)
+            output_dir = str(checkpoint_path.parent)
+
+            # Auto-restore text & chapters from session output folder
+            res_text, res_chapters, res_data = load_audiobook_session_text(output_dir)
+            text_update = gr.update()
+            chapters_update = gr.update()
+            if res_text:
+                audiobook_state_val["text"] = res_text
+                audiobook_state_val["chapters"] = res_chapters
+                text_update = gr.update(value=res_text)
+                chapters_update = gr.update(value=res_data)
+
+            from vieneu_utils.audiobook_processor import AudiobookProcessor
+            processor = AudiobookProcessor(tts if model_loaded else None, output_dir)
+            info = processor.get_checkpoint_info()
+
+            if info:
+                from datetime import datetime
+                time_str = datetime.fromtimestamp(info.get('timestamp', 0)).strftime('%Y-%m-%d %H:%M:%S')
+                status = info.get('status', 'unknown')
+                ch_idx = info.get('chapter_index', 0)
+                chunk_idx = info.get('chunk_index', 0)
+                completed = info.get('completed_chapters', 0)
+                voice = info.get('voice_id', 'unknown')
+
+                status_emoji = {"processing": "⚙️", "paused": "⏸️", "stopped": "⏹️", "forced": "💾"}.get(status, "❓")
+
+                display = f"""
+**{status_emoji} Phiên: {checkpoint_path.parent.name}**
+- Trạng thái: {status}
+- Chương: {ch_idx + 1} (hoàn thành {completed})
+- Chunk trong chương: {chunk_idx}
+- Giọng đọc: {voice}
+- Checkpoint: {time_str}
+"""
+                audiobook_state_val["output_dir"] = output_dir
+                audiobook_state_val["checkpoint_file"] = session_value
+                can_res = processor.can_resume()
+                audiobook_state_val["status"] = "paused" if can_res else "idle"
+                audiobook_state_val["current_session_id"] = checkpoint_path.parent.name
+
+                has_text = bool(audiobook_state_val.get("text"))
+
+                progress_msg = f"⏸️ **Đã chọn phiên: {checkpoint_path.parent.name}** (Chương {ch_idx + 1}, {completed} chương đã xong). Nhấn 'Tiếp tục' để resume." if can_res else f"ℹ️ **Đã chọn phiên: {checkpoint_path.parent.name}**"
+
+                return (
+                    gr.update(value=display),
+                    gr.update(value=progress_msg),
+                    gr.update(interactive=has_text or can_res), # start button
+                    gr.update(interactive=False),               # pause button
+                    gr.update(interactive=can_res),             # resume button
+                    gr.update(interactive=can_res),             # stop button
+                    gr.update(value=voice) if voice and voice != 'unknown' else gr.update(),
+                    text_update,
+                    chapters_update,
+                    audiobook_state_val
+                )
+
+            return (
+                gr.update(value="❌ Không đọc được checkpoint"),
+                gr.update(value="❌ Checkpoint không hợp lệ"),
+                gr.update(interactive=False),
+                gr.update(interactive=False),
+                gr.update(interactive=False),
+                gr.update(interactive=False),
+                gr.update(),
+                text_update,
+                chapters_update,
+                audiobook_state_val
+            )
+
+
+        # Clear Checkpoint button
+        def clear_checkpoint(audiobook_state_val):
+            """Clear checkpoint and reset state and controls."""
+            from vieneu_utils.audiobook_processor import AudiobookProcessor
+
+            output_dir = audiobook_state_val.get("output_dir")
+            if output_dir:
+                processor = AudiobookProcessor(tts if model_loaded else None, str(output_dir))
+                if processor.can_resume():
+                    processor.clear_checkpoint()
+
+            audiobook_state_val["status"] = "idle"
+            audiobook_state_val["checkpoint_file"] = None
+            has_text = bool(audiobook_state_val.get("text"))
+
+            return (
+                gr.update(value="📭 Checkpoint đã xóa. Sẵn sàng bắt đầu mới."),
+                gr.update(value="Chưa bắt đầu"),
+                gr.update(interactive=has_text),  # start button
+                gr.update(interactive=False),     # pause button
+                gr.update(interactive=False),     # resume button
+                gr.update(interactive=False),     # stop button
+                audiobook_state_val
+            )
+
 
         # Browse output directory button
         btn_browse_output_dir.click(
@@ -4005,14 +4787,26 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
         # Export text button
         btn_export_text.click(
             fn=export_audiobook_text,
-            inputs=[audiobook_state, audiobook_output_dir, audiobook_spell_check_level],
+            inputs=[audiobook_state, audiobook_output_dir, spell_check_level],
             outputs=[export_text_status]
+        )
+
+        # Select/Deselect all chapters
+        btn_select_all_chapters.click(
+            fn=lambda chapters: [[True, c[1], c[2], c[3]] for c in chapters] if chapters else [],
+            inputs=[audiobook_chapters],
+            outputs=[audiobook_chapters]
+        )
+        btn_deselect_all_chapters.click(
+            fn=lambda chapters: [[False, c[1], c[2], c[3]] for c in chapters] if chapters else [],
+            inputs=[audiobook_chapters],
+            outputs=[audiobook_chapters]
         )
 
         # Update text button
         btn_update_text.click(
             fn=update_audiobook_text,
-            inputs=[audiobook_text_display, audiobook_state, audiobook_split_mode, audiobook_keywords, audiobook_words_per_chunk],
+            inputs=[text_input, audiobook_state, audiobook_split_mode, audiobook_keywords, audiobook_words_per_chunk],
             outputs=[text_update_status, audiobook_chapters, audiobook_state]
         )
 
@@ -4036,6 +4830,18 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
 
         def save_spell_check(value):
             save_setting("spell_check_level", value)
+            return value
+
+        def save_spell_check_engine(value):
+            save_setting("spell_check_engine", value)
+            return value
+
+        def save_spell_check_device(value):
+            save_setting("spell_check_device", value)
+            return value
+
+        def save_spell_check_batch_size(value):
+            save_setting("spell_check_batch_size", value)
             return value
 
         def save_generation_mode(value):
@@ -4068,9 +4874,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             save_setting("audiobook_words_per_chunk", value)
             return value
 
-        def save_audiobook_spell_check(value):
-            save_setting("audiobook_spell_check_level", value)
-            return value
+        # save_audiobook_spell_check removed (merged with spell_check_level)
 
         def save_audiobook_output_mode(value):
             save_setting("audiobook_output_mode", value)
@@ -4107,7 +4911,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             return value
 
         voice_select.change(fn=save_last_voice, inputs=[voice_select], outputs=[])
-        audiobook_voice.change(fn=save_audiobook_default_voice, inputs=[audiobook_voice], outputs=[])
+        # audiobook_voice removed (merged with voice_select)
 
         # Attach change handlers - Generation
         temperature_slider.change(fn=save_temperature, inputs=[temperature_slider], outputs=[])
@@ -4115,6 +4919,9 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
         top_p_slider.change(fn=save_top_p, inputs=[top_p_slider], outputs=[])
         repetition_penalty_slider.change(fn=save_repetition_penalty, inputs=[repetition_penalty_slider], outputs=[])
         spell_check_level.change(fn=save_spell_check, inputs=[spell_check_level], outputs=[])
+        spell_check_engine.change(fn=save_spell_check_engine, inputs=[spell_check_engine], outputs=[])
+        spell_check_device.change(fn=save_spell_check_device, inputs=[spell_check_device], outputs=[])
+        spell_check_batch_size.change(fn=save_spell_check_batch_size, inputs=[spell_check_batch_size], outputs=[])
         generation_mode.change(fn=save_generation_mode, inputs=[generation_mode], outputs=[])
         use_batch.change(fn=save_use_batch, inputs=[use_batch], outputs=[])
         max_batch_size_run.change(fn=save_batch_size, inputs=[max_batch_size_run], outputs=[])
@@ -4126,19 +4933,67 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
         audiobook_split_mode.change(fn=save_audiobook_split_mode, inputs=[audiobook_split_mode], outputs=[])
         audiobook_keywords.change(fn=save_audiobook_keywords, inputs=[audiobook_keywords], outputs=[])
         audiobook_words_per_chunk.change(fn=save_audiobook_words_per_chunk, inputs=[audiobook_words_per_chunk], outputs=[])
-        audiobook_spell_check_level.change(fn=save_audiobook_spell_check, inputs=[audiobook_spell_check_level], outputs=[])
+        # audiobook_spell_check_level removed (merged with spell_check_level)
         audiobook_output_mode.change(fn=save_audiobook_output_mode, inputs=[audiobook_output_mode], outputs=[])
         audiobook_output_dir.change(fn=save_audiobook_output_directory, inputs=[audiobook_output_dir], outputs=[])
 
+        # Tab select list refresh sessions
+        reading_audiobook_tab.select(
+            fn=refresh_audiobook_sessions,
+            inputs=[audiobook_state, audiobook_output_dir],
+            outputs=[audiobook_session_selector, checkpoint_info_display, audiobook_state]
+        )
+
+        reading_audiobook_tab.select(
+            fn=check_resume_on_tab_select,
+            inputs=[audiobook_state, audiobook_output_dir],
+            outputs=[audiobook_progress, btn_start_audiobook, btn_resume_audiobook, btn_stop_audiobook, text_input, audiobook_chapters, audiobook_state]
+        )
+
+        # Audiobook session/checkpoint handlers
+        btn_refresh_sessions.click(
+            fn=refresh_audiobook_sessions,
+            inputs=[audiobook_state, audiobook_output_dir],
+            outputs=[audiobook_session_selector, checkpoint_info_display, audiobook_state]
+        )
+
+
+
+        btn_new_session.click(
+            fn=new_audiobook_session,
+            inputs=[audiobook_state, audiobook_output_dir],
+            outputs=[checkpoint_info_display, audiobook_progress, btn_start_audiobook, btn_pause_audiobook, btn_resume_audiobook, btn_stop_audiobook, audiobook_state]
+        )
+
+        audiobook_session_selector.change(
+            fn=on_session_select,
+            inputs=[audiobook_session_selector, audiobook_state],
+            outputs=[checkpoint_info_display, audiobook_progress, btn_start_audiobook, btn_pause_audiobook, btn_resume_audiobook, btn_stop_audiobook, voice_select, text_input, audiobook_chapters, audiobook_state]
+        )
+
+        btn_check_resume.click(
+            fn=check_resume,
+            inputs=[audiobook_state, audiobook_output_dir],
+            outputs=[checkpoint_info_display, audiobook_progress, btn_start_audiobook, btn_pause_audiobook, btn_resume_audiobook, btn_stop_audiobook, text_input, audiobook_chapters, audiobook_state]
+        )
+
+        btn_clear_checkpoint.click(
+            fn=clear_checkpoint,
+            inputs=[audiobook_state],
+            outputs=[checkpoint_info_display, audiobook_progress, btn_start_audiobook, btn_pause_audiobook, btn_resume_audiobook, btn_stop_audiobook, audiobook_state]
+        )
+
         # Auto-preview when spell check level changes
-        # Auto-preview when spell check level changes
-        audiobook_spell_check_level.change(
+        spell_check_level.change(
             fn=preview_spell_check_professional,
             inputs=[
-                audiobook_text_display,
-                audiobook_spell_check_level,
+                text_input,
+                spell_check_level,
                 preview_mode,
-                preview_limit_slider
+                preview_limit_slider,
+                spell_check_engine,
+                spell_check_device,
+                spell_check_batch_size
             ],
             outputs=[spell_check_diff_html, spell_check_stats_details]
         )
@@ -4147,10 +5002,54 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
         preview_mode.change(
             fn=preview_spell_check_professional,
             inputs=[
-                audiobook_text_display,
-                audiobook_spell_check_level,
+                text_input,
+                spell_check_level,
                 preview_mode,
-                preview_limit_slider
+                preview_limit_slider,
+                spell_check_engine,
+                spell_check_device,
+                spell_check_batch_size
+            ],
+            outputs=[spell_check_diff_html, spell_check_stats_details]
+        )
+
+        # Update preview when engine/device/batch changes
+        spell_check_engine.change(
+            fn=preview_spell_check_professional,
+            inputs=[
+                text_input,
+                spell_check_level,
+                preview_mode,
+                preview_limit_slider,
+                spell_check_engine,
+                spell_check_device,
+                spell_check_batch_size
+            ],
+            outputs=[spell_check_diff_html, spell_check_stats_details]
+        )
+        spell_check_device.change(
+            fn=preview_spell_check_professional,
+            inputs=[
+                text_input,
+                spell_check_level,
+                preview_mode,
+                preview_limit_slider,
+                spell_check_engine,
+                spell_check_device,
+                spell_check_batch_size
+            ],
+            outputs=[spell_check_diff_html, spell_check_stats_details]
+        )
+        spell_check_batch_size.change(
+            fn=preview_spell_check_professional,
+            inputs=[
+                text_input,
+                spell_check_level,
+                preview_mode,
+                preview_limit_slider,
+                spell_check_engine,
+                spell_check_device,
+                spell_check_batch_size
             ],
             outputs=[spell_check_diff_html, spell_check_stats_details]
         )
@@ -4159,8 +5058,8 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
         preview_limit_slider.change(
             fn=preview_spell_check_professional,
             inputs=[
-                audiobook_text_display,
-                audiobook_spell_check_level,
+                text_input,
+                spell_check_level,
                 preview_mode,
                 preview_limit_slider
             ],
@@ -4168,11 +5067,11 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
         )
 
         # Also update preview when text changes
-        audiobook_text_display.change(
+        text_input.change(
             fn=preview_spell_check_professional,
             inputs=[
-                audiobook_text_display,
-                audiobook_spell_check_level,
+                text_input,
+                spell_check_level,
                 preview_mode,
                 preview_limit_slider
             ],

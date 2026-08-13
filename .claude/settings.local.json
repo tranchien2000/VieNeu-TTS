@@ -3,7 +3,12 @@
     "allow": [
       "Bash(espeak-ng *)",
       "Bash(.venv/Scripts/python.exe *)",
-      "Bash(python *)"
+      "Bash(python *)",
+      "Bash(git push *)",
+      "Bash(python3 -m py_compile src/vieneu_utils/audiobook_processor.py)",
+      "Bash(py *)",
+      "Bash(where python *)",
+      "Bash(where python3 *)"
     ]
   }
 }

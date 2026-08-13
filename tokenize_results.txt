@@ -1,0 +1,5 @@
+Tôi đi học ở Hà Nội -> Tôi đi học ở Hà_Nội
+Hôm nay trời đẹp quá -> Hôm_nay trời đẹp quá
+Bạn có muốn ăn phở không -> Bạn có muốn ăn phở không
+Tôi tên là Nam -> Tôi tên là Nam
+Tiếng Việt không khó -> Tiếng Việt không khó
