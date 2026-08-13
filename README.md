@@ -17,7 +17,11 @@
 > A brand-new architecture **designed and trained from scratch by Phạm Nguyễn Ngọc Bảo** (codec: [MOSS-Audio-Tokenizer-Nano](https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano); phonemizer: [sea-g2p](https://github.com/pnnbao97/sea-g2p)):
 > - **48 kHz** high-fidelity audio (up from 24 kHz).
 > - **Built-in default voices** — stable and consistent, no reference clip needed.
+<<<<<<< HEAD
 > - **Reading styles**: natural, news, and storytelling.
+=======
+> - **Natural reading style** everywhere — the style follows the reference voice (the `style` argument is deprecated and ignored).
+>>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 > - **Emotion / non-verbal cues** *(experimental)*: drop `[cười]`, `[thở dài]`, `[hắng giọng]` straight into the text.
 > - **Batched generation** (batch size up to 32), including a multi-speaker **Conversation** mode that batches the whole script regardless of speaker.
 > - **Instant voice cloning** from a 3–8s clip, with automatic reference denoising.
@@ -94,12 +98,15 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
    ```
    Access the UI at `http://127.0.0.1:7860`.
 
+<<<<<<< HEAD
    > 💡 **Tip:** For faster startup, use persistent server mode (models load once):
    > - Windows: `run_server_persistent.bat`
    > - Linux/Mac: `./run_server_persistent.sh`
    > 
    > See [QUICKSTART.md](QUICKSTART.md) for more options.
 
+=======
+>>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 ---
 
 ## 📦 2. Using the Python SDK (vieneu) <a name="sdk"></a>
@@ -201,6 +208,7 @@ uv run python -m apps.web_stream                  # → http://127.0.0.1:8001
 
 #### Available Voices
 
+<<<<<<< HEAD
 The v3 Turbo engine includes **14 curated preset voices** covering **3 Vietnamese regions** (North, Central, South) with diverse genders and styles:
 
 - **Northern (Bắc)**: Natural, news, storytelling styles
@@ -221,6 +229,32 @@ Pick how the text is read with `style` (default `"tu_nhien"`):
 
 ```python
 audio = vieneu.infer("Trận Caen là một trận đánh trong Chiến tranh Trăm Năm giữa Anh và Pháp diễn ra vào ngày 26 tháng 7 năm 1346 khi quân viễn chinh Anh dưới sự chỉ huy của Edward III tấn công thành Caen do quân Pháp nắm giữ.", voice="Minh Đức", style="tin_tuc")
+=======
+The v3 Turbo engine includes **14 curated preset voices** covering **3 Vietnamese regions** (North, Central, South) with diverse genders and speaking characters:
+
+- **Northern (Bắc)**: e.g. Minh Đức, Trúc Ly
+- **Central (Trung)**: Quang Sơn, Ngọc Trân
+- **Southern (Nam)**: e.g. Xuân Vĩnh
+
+### Reading style — **deprecated** ⚠️
+
+> [!WARNING]
+> **`style` is deprecated on v3 Turbo and has no effect.** The reading style is already
+> baked into the reference itself (the speaker embedding + reference codes of the preset
+> voice or of your cloned clip), so every generation follows the reference and comes out
+> in its natural reading style.
+>
+> The `style` argument is **still accepted** by `infer`, `infer_stream`, `infer_batch`
+> and `add_voice` so existing code keeps running — whatever you pass (`"tin_tuc"`,
+> `"doc_truyen"`, …) is simply ignored. New code should just omit it.
+
+```python
+# Old code — still runs, but `style` is ignored
+audio = vieneu.infer("Bản tin sáng nay.", voice="Minh Đức", style="tin_tuc")
+
+# New code — pick the reading character through the voice / reference clip instead
+audio = vieneu.infer("Bản tin sáng nay.", voice="Minh Đức")
+>>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 ```
 
 ### Emotion cues (experimental)
@@ -242,7 +276,10 @@ audio = vieneu.infer(
     "Đây là giọng được nhân bản tức thì.",
     ref_audio="my_voice.wav",   # a 3–8s reference clip
     denoise=True,               # default; set False if the clip is already clean
+<<<<<<< HEAD
     style="doc_truyen",
+=======
+>>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 )
 vieneu.save(audio, "cloned.wav")
 ```

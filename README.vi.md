@@ -174,6 +174,7 @@ uv run python -m apps.web_stream                  # → http://localhost:8001
 
 > Engine chia chunk thích ứng (chunk đầu ~320 ms cho độ trễ thấp, rồi phình tới ~2 s khi đã dư lead). Vì RTF < 1 nên lead chỉ tăng dần → player prebuffer ~300 ms là dư, không underrun.
 
+<<<<<<< HEAD
 ### Phong cách đọc
 
 Chọn cách đọc bằng `style` (mặc định `"tu_nhien"`):
@@ -186,6 +187,25 @@ Chọn cách đọc bằng `style` (mặc định `"tu_nhien"`):
 
 ```python
 audio = vieneu.infer("Bản tin sáng nay.", voice="Minh Đức", style="tin_tuc")
+=======
+### Phong cách đọc — **đã bỏ (deprecated)** ⚠️
+
+> [!WARNING]
+> **`style` không còn tác dụng trên v3 Turbo.** Phong cách đọc đã được *ám sẵn trong
+> reference* (speaker embedding + ref codes của giọng dựng sẵn hoặc của clip bạn clone),
+> nên mô hình luôn bám theo reference và đọc ở phong cách **tự nhiên**.
+>
+> Tham số `style` **vẫn được chấp nhận** ở `infer`, `infer_stream`, `infer_batch` và
+> `add_voice` để code cũ không vỡ — truyền gì (`"tin_tuc"`, `"doc_truyen"`, …) cũng bị
+> bỏ qua. Code mới nên bỏ hẳn tham số này.
+
+```python
+# Code cũ — vẫn chạy, nhưng `style` bị bỏ qua
+audio = vieneu.infer("Bản tin sáng nay.", voice="Minh Đức", style="tin_tuc")
+
+# Code mới — chọn chất giọng/cách đọc bằng chính giọng mẫu hoặc clip reference
+audio = vieneu.infer("Bản tin sáng nay.", voice="Minh Đức")
+>>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 ```
 
 ### Tag cảm xúc (thử nghiệm)
@@ -212,7 +232,10 @@ audio = vieneu.infer(
     text="Đây là giọng được nhân bản tức thì.",
     ref_audio="examples/audio_ref/example.wav",
     denoise=True,          # mặc định; đặt False nếu clip đã sạch
+<<<<<<< HEAD
     style="doc_truyen",
+=======
+>>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 )
 vieneu.save(audio, "cloned_voice.wav")
 ```

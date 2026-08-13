@@ -125,7 +125,10 @@ class TurboGPUVieNeuTTS(BaseTurboVieNeuTTS):
         device: str = "cuda",
         backend: str = "standard",
         hf_token: Optional[str] = None,
+<<<<<<< HEAD
         max_batch_size: int = 16,
+=======
+>>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
         **kwargs
     ):
         super().__init__()
@@ -133,7 +136,10 @@ class TurboGPUVieNeuTTS(BaseTurboVieNeuTTS):
         self.backend = backend.lower()
         self.backbone = None
         self.tokenizer = None
+<<<<<<< HEAD
         self.max_batch_size = max_batch_size
+=======
+>>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 
         self._load_backbone(backbone_repo, self.device, hf_token, **kwargs)
         self._load_decoder(decoder_repo, decoder_filename, self.device, hf_token)
@@ -154,8 +160,12 @@ class TurboGPUVieNeuTTS(BaseTurboVieNeuTTS):
                         tp=kwargs.get("tp", 1),
                         enable_prefix_caching=kwargs.get("enable_prefix_caching", True),
                         dtype='bfloat16',
+<<<<<<< HEAD
                         quant_policy=kwargs.get("quant_policy", 0),
                         max_batch_size=kwargs.get("max_batch_size", 16)
+=======
+                        quant_policy=kwargs.get("quant_policy", 0)
+>>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
                     )
                     self.backbone = pipeline(repo, backend_config=engine_config)
                     self.gen_config = GenerationConfig(
@@ -178,23 +188,34 @@ class TurboGPUVieNeuTTS(BaseTurboVieNeuTTS):
             self.backbone.eval()
             logger.info(f"✅ Turbo GPU (Standard) ready")
 
+<<<<<<< HEAD
     def _run_standard_generate(self, prompt: str, temperature: float, top_k: int, top_p: float = 0.95, repetition_penalty: float = 1.1) -> str:
+=======
+    def _run_standard_generate(self, prompt: str, temperature: float, top_k: int) -> str:
+>>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
         import torch
         inputs = self.tokenizer(prompt, return_tensors="pt")
         inputs = {k: v.to(self.device) for k, v in inputs.items()}
         with torch.no_grad():
             output_tokens = self.backbone.generate(
                 **inputs, max_new_tokens=2048, temperature=temperature, top_k=top_k,
+<<<<<<< HEAD
                 do_sample=True, repetition_penalty=repetition_penalty, top_p=top_p, pad_token_id=self.tokenizer.eos_token_id,
+=======
+                do_sample=True, repetition_penalty=1.1, top_p=0.95, pad_token_id=self.tokenizer.eos_token_id,
+>>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
             )
         new_tokens = output_tokens[0, inputs['input_ids'].shape[-1]:].cpu()
         return self.tokenizer.decode(new_tokens, skip_special_tokens=True)
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     def infer(self, text: str, voice: Optional[Any] = None, ref_codes: Optional[Any] = None, temperature: float = 0.4, top_k: int = 50, top_p: float = 1.0, repetition_penalty: float = 1.0, max_chars: int = 256, skip_normalize: bool = False, skip_phonemize: bool = False, show_progress: bool = True, apply_watermark: bool = True, **kwargs) -> np.ndarray:
         phonemes = phonemize_text(text) if not skip_phonemize else text
         chunks = split_into_chunks_v2(phonemes, max_chunk_size=max_chars)
 =======
+=======
+>>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
     def infer(self, text: str, voice: Optional[Any] = None, ref_codes: Optional[Any] = None, temperature: float = 0.4, top_k: int = 50, max_chars: int = 256, skip_normalize: bool = False, skip_phonemize: bool = False, show_progress: bool = True, apply_watermark: bool = True, **kwargs) -> np.ndarray:
         if skip_phonemize:
             # text đã là chuỗi phoneme — chỉ chia chunk ở tầng phoneme.
@@ -202,7 +223,10 @@ class TurboGPUVieNeuTTS(BaseTurboVieNeuTTS):
         else:
             # Normalize TRƯỚC -> phonemize -> chia chunk ở tầng phoneme (sau norm).
             chunks = phonemize_to_chunks(text, max_chars=max_chars, skip_normalize=skip_normalize)
+<<<<<<< HEAD
 >>>>>>> a8c9fbf99749d5ce45c89111f71558d6ceef3424
+=======
+>>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 
         if voice is None:
             voice = ref_codes if ref_codes is not None else self.get_preset_voice()
@@ -218,7 +242,11 @@ class TurboGPUVieNeuTTS(BaseTurboVieNeuTTS):
                 responses = self.backbone([prompt], gen_config=self.gen_config, do_preprocess=False)
                 generated_text = responses[0].text
             else:
+<<<<<<< HEAD
                 generated_text = self._run_standard_generate(prompt, temperature, top_k, top_p, repetition_penalty)
+=======
+                generated_text = self._run_standard_generate(prompt, temperature, top_k)
+>>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
             
             wav = self._decode(generated_text, voice_embedding)
             all_wavs.append(wav)
@@ -269,14 +297,20 @@ class TurboGPUVieNeuTTS(BaseTurboVieNeuTTS):
                 responses = self.backbone([prompt], gen_config=self.gen_config, do_preprocess=False)
                 generated_text = responses[0].text
             else:
+<<<<<<< HEAD
                 generated_text = self._run_standard_generate(prompt, temperature, top_k, top_p, repetition_penalty)
 
+=======
+                generated_text = self._run_standard_generate(prompt, temperature, top_k)
+            
+>>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
             yield self._apply_watermark(self._decode(generated_text, voice_embedding))
             if i < len(chunks) - 1:
                 silence_dur = get_silence_duration_v2(chunk)
                 if silence_dur > 0:
                     yield np.zeros(int(self.sample_rate * silence_dur), dtype=np.float32)
 
+<<<<<<< HEAD
     def get_optimization_stats(self) -> Dict[str, Any]:
         """Get optimization stats for Turbo GPU model."""
         return {
@@ -287,6 +321,8 @@ class TurboGPUVieNeuTTS(BaseTurboVieNeuTTS):
             'prefix_caching': getattr(self, 'enable_prefix_caching', True),
         }
 
+=======
+>>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
     def close(self):
         self.backbone = None
         self.decoder_sess = None
@@ -333,10 +369,13 @@ class TurboVieNeuTTS(BaseTurboVieNeuTTS):
         logger.info(f"✅ Turbo GGUF ready")
 
 <<<<<<< HEAD
+<<<<<<< HEAD
     def infer(self, text: str, voice: Optional[Any] = None, ref_codes: Optional[Any] = None, temperature: float = 0.4, top_k: int = 50, top_p: float = 1.0, repetition_penalty: float = 1.0, max_chars: int = 256, skip_normalize: bool = False, skip_phonemize: bool = False, show_progress: bool = True, apply_watermark: bool = True, **kwargs) -> np.ndarray:
         phonemes = phonemize_text(text) if not skip_phonemize else text
         chunks = split_into_chunks_v2(phonemes, max_chunk_size=max_chars)
 =======
+=======
+>>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
     def infer(
         self,
         text: str,
@@ -357,7 +396,10 @@ class TurboVieNeuTTS(BaseTurboVieNeuTTS):
             chunks = phonemize_to_chunks(
                 text, max_chars=max_chars, skip_normalize=skip_normalize
             )
+<<<<<<< HEAD
 >>>>>>> a8c9fbf99749d5ce45c89111f71558d6ceef3424
+=======
+>>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 
         if voice is None:
             voice = ref_codes if ref_codes is not None else self.get_preset_voice()
