@@ -8,13 +8,7 @@ import functools
 import logging
 import re
 from typing import Optional
-<<<<<<< HEAD
-from sea_g2p import SEAPipeline, G2P, Normalizer
-
-from vieneu_utils.spell_checker import get_spell_checker, SpellCheckerBase
-=======
 from sea_g2p import SEAPipeline, G2P, Normalizer, punc_norm
->>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 
 logger = logging.getLogger("Vieneu.Phonemizer")
 
@@ -72,21 +66,11 @@ class PuncNormalizer:
     def __init__(self, lang: str = "vi") -> None:
         self._n = Normalizer(lang=lang)
 
-<<<<<<< HEAD
-    def normalize(self, text, punc_norm: bool = True, **kwargs):
-        # sea-g2p Normalizer doesn't accept punc_norm parameter, just call normalize()
-        return self._n.normalize(text)
-
-    def normalize_batch(self, texts, punc_norm: bool = True, **kwargs):
-        # sea-g2p Normalizer doesn't accept punc_norm parameter
-        return self._n.normalize_batch(texts)
-=======
     def normalize(self, text, punc_norm: bool = True):
         return self._n.normalize(text, punc_norm=punc_norm)
 
     def normalize_batch(self, texts, punc_norm: bool = True):
         return self._n.normalize_batch(texts, punc_norm=punc_norm)
->>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 
 
 # ---------------------------------------------------------------------------
@@ -96,48 +80,24 @@ _pipeline: SEAPipeline = None
 _g2p: G2P = None
 _normalizer: PuncNormalizer = None
 
-<<<<<<< HEAD
-
-=======
->>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 def _get_pipeline() -> SEAPipeline:
     global _pipeline
     if _pipeline is None:
         _pipeline = SEAPipeline(lang="vi")
     return _pipeline
 
-<<<<<<< HEAD
-
-=======
->>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 def _get_g2p() -> G2P:
     global _g2p
     if _g2p is None:
         _g2p = G2P(lang="vi")
     return _g2p
 
-<<<<<<< HEAD
-
-=======
->>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 def _get_normalizer() -> PuncNormalizer:
     global _normalizer
     if _normalizer is None:
         _normalizer = PuncNormalizer()
     return _normalizer
 
-<<<<<<< HEAD
-
-def punc_norm(text: str) -> str:
-    """Apply normalization with punc_norm=True (add trailing punctuation if needed)."""
-    if not text:
-        return text
-    normalizer = _get_normalizer()
-    return normalizer.normalize(text, punc_norm=True)
-
-
-=======
->>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 # ---------------------------------------------------------------------------
 # Public API  (same signatures as before — callers don't need to change)
 # ---------------------------------------------------------------------------
@@ -145,11 +105,7 @@ def punc_norm(text: str) -> str:
 @functools.lru_cache(maxsize=1024)
 def _phonemize_cached(text: str, punc_norm: bool = True) -> str:
     """Cached single-text phonemization (normalize + G2P), punc_norm bật mặc định."""
-<<<<<<< HEAD
-    return _get_pipeline().run(text)
-=======
     return _get_pipeline().run(text, punc_norm=punc_norm)
->>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 
 
 def phonemize_text(text: str) -> str:
@@ -252,8 +208,6 @@ def phonemize_with_dict(
     return _phonemize_cached(text)
 
 
-<<<<<<< HEAD
-=======
 def _normalize_sentence_keep_cues(sentence: str, normalizer) -> str:
     """Normalize MỘT câu, giữ nguyên inline emotion cue thành ``<|emotion_k|>``."""
     if "[" not in sentence and "<|emotion_" not in sentence:
@@ -307,33 +261,10 @@ def _normalized_sentences_by_para(
     return out
 
 
->>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 def normalize_to_chunks(
     text: str,
     max_chars: int = 256,
     skip_normalize: bool = False,
-<<<<<<< HEAD
-    spell_check_engine: str = "off",
-    spell_check_device: str = "auto",
-    spell_check_batch_size: int = 16,
-) -> list[str]:
-    """Normalize FIRST, then split the NORMALIZED text into <= max_chars chunks.
-
-    Chia chunk SAU normalize. Normalizer mở rộng độ dài text (vd "100$" -> "một
-    trăm u s d", "21/02/2025" -> "ngày hai mươi mốt tháng hai năm ..."), nên nếu
-    cắt TRƯỚC khi norm thì chunk sẽ phình vượt ``max_chars`` sau khi chuẩn hóa.
-    Ở đây normalize trước rồi mới cắt theo độ dài ĐÃ chuẩn hóa nên mỗi chunk thực
-    sự <= ``max_chars``.
-
-    Để không truyền nguyên một input cỡ DOCX vào bộ regex backtracking của
-    normalizer, ta normalize theo từng ĐOẠN (tách theo newline) bằng
-    ``normalize_batch`` — ranh giới tự nhiên, không ảnh hưởng độ dài chunk cuối —
-    rồi mới gom lại và cắt. Mỗi chunk được chốt dấu câu cuối hợp lệ.
-
-    Spell check được áp dụng TRƯỚC normalize (nếu engine != "off").
-    """
-    from vieneu_utils.core_utils import split_text_into_chunks
-=======
 ) -> list[str]:
     """Split text thành chunks <= max_chars, cắt ở ranh giới CÂU.
 
@@ -345,46 +276,10 @@ def normalize_to_chunks(
     normalizer ở mức an toàn với văn bản cỡ DOCX.
     """
     from vieneu_utils.core_utils import pack_sentences_into_chunks
->>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 
     if not text:
         return []
 
-<<<<<<< HEAD
-    # Apply spell check BEFORE normalization
-    if spell_check_engine != "off":
-        checker = get_spell_checker(
-            engine=spell_check_engine,
-            device=spell_check_device,
-            batch_size=spell_check_batch_size
-        )
-        text = checker.correct(text)
-
-    if skip_normalize:
-        normalized = text
-    else:
-        normalizer = _get_normalizer()
-        paragraphs = [p for p in RE_NEWLINE_SPLIT.split(text) if p.strip()]
-        normalized = (
-            "\n".join(normalizer.normalize_batch(paragraphs, punc_norm=True))
-            if paragraphs
-            else ""
-        )
-
-    return [
-        punc_norm(c)
-        for c in split_text_into_chunks(normalized, max_chars=max_chars)
-    ]
-
-
-def normalize_to_chunks_v3(
-    text: str,
-    max_chars: int = 256,
-    spell_check_engine: str = "off",
-    spell_check_device: str = "auto",
-    spell_check_batch_size: int = 16,
-) -> list[str]:
-=======
     chunks: list[str] = []
     for sentences in _normalized_sentences_by_para(text, skip_normalize=skip_normalize):
         chunks.extend(pack_sentences_into_chunks(sentences, max_chars=max_chars))
@@ -392,7 +287,6 @@ def normalize_to_chunks_v3(
 
 
 def normalize_to_chunks_v3(text: str, max_chars: int = 256) -> list[str]:
->>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
     """Chia chunk cho đường v3 GIỐNG HỆT v2-gpu: cắt theo độ dài TEXT ĐÃ normalize.
 
     Đường v3 trước đây cắt ở tầng PHONEME (``chunk_phonemes``), mà phoneme dài hơn
@@ -403,58 +297,12 @@ def normalize_to_chunks_v3(text: str, max_chars: int = 256) -> list[str]:
 
     Trả về list TEXT chunk (mỗi chunk có thể chứa ``<|emotion_k|>``); caller
     phonemize từng chunk bằng :func:`phonemize_text_with_emotions`.
-<<<<<<< HEAD
-
-    Spell check được áp dụng TRƯỚC normalize (nếu engine != "off").
-    """
-    from vieneu_utils.core_utils import split_text_into_chunks
-=======
     """
     from vieneu_utils.core_utils import pack_sentences_into_chunks
->>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 
     if not text:
         return []
 
-<<<<<<< HEAD
-    # Apply spell check BEFORE normalization
-    if spell_check_engine != "off":
-        checker = get_spell_checker(
-            engine=spell_check_engine,
-            device=spell_check_device,
-            batch_size=spell_check_batch_size
-        )
-        text = checker.correct(text)
-
-    # Không có emotion cue -> dùng thẳng đường v2-gpu (kết quả giống hệt).
-    if "[" not in text and "<|emotion_" not in text:
-        return normalize_to_chunks(
-            text, max_chars=max_chars,
-            spell_check_engine="off",  # already applied
-            skip_normalize=False
-        )
-
-    # Có cue: normalize từng đoạn text giữa các cue, chèn lại token cảm xúc, rồi
-    # cắt theo text-length (token <|emotion_k|> được splitter giữ nguyên là 1 từ).
-    normalizer = _get_normalizer()
-    rebuilt = []
-    for i, part in enumerate(_EMOTION_SPLIT_RE.split(text)):
-        if i % 2 == 1:                       # emotion tag
-            tok = _emotion_tag_token(part)
-            rebuilt.append(tok if tok is not None else part)
-        elif part.strip():                   # đoạn text: normalize, giữ dấu (không ép câu)
-            rebuilt.append(normalizer.normalize(part, punc_norm=False))
-    normalized = " ".join(p for p in rebuilt if p)
-    return [punc_norm(c) for c in split_text_into_chunks(normalized, max_chars=max_chars)]
-
-
-def normalize_to_chunks_v3_with_gaps(
-    text: str,
-    max_chars: int = 256,
-    spell_check_engine: str = "off",
-    spell_check_device: str = "auto",
-    spell_check_batch_size: int = 16,
-=======
     keep_cues = "[" in text or "<|emotion_" in text
     chunks: list[str] = []
     for sentences in _normalized_sentences_by_para(text, keep_cues=keep_cues):
@@ -464,7 +312,6 @@ def normalize_to_chunks_v3_with_gaps(
 
 def normalize_to_chunks_v3_with_gaps(
     text: str, max_chars: int = 256
->>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 ) -> tuple[list[str], list[str]]:
     """Như :func:`normalize_to_chunks_v3` nhưng trả kèm loại ranh giới GIỮA các
     chunk để ghép audio nghỉ dài/ngắn theo ngữ cảnh.
@@ -476,56 +323,13 @@ def normalize_to_chunks_v3_with_gaps(
 
     Ranh giới ``sentence``/``minor`` được phân loại LẠI trên chunk ĐÃ ``punc_norm``
     (punc_norm có thể ép dấu cuối cho câu ngắn) để khớp intonation audio thật;
-<<<<<<< HEAD
-    ``para`` (ngắt đoạn) giữ nguyên. Đường có emotion cue ghép các đoạn bằng dấu
-    cách nên không còn ranh giới ``para``.
-
-    Spell check được áp dụng TRƯỚC normalize (nếu engine != "off").
-    """
-    from vieneu_utils.core_utils import (
-        split_text_into_chunks_with_gaps,
-        _classify_gap,
-    )
-=======
     ``para`` (ngắt đoạn) giữ nguyên — kể cả trên đường có emotion cue.
     """
     from vieneu_utils.core_utils import pack_sentences_into_chunks, _classify_gap
->>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 
     if not text:
         return [], []
 
-<<<<<<< HEAD
-    # Apply spell check BEFORE normalization
-    if spell_check_engine != "off":
-        checker = get_spell_checker(
-            engine=spell_check_engine,
-            device=spell_check_device,
-            batch_size=spell_check_batch_size
-        )
-        text = checker.correct(text)
-
-    if "[" not in text and "<|emotion_" not in text:
-        normalizer = _get_normalizer()
-        paragraphs = [p for p in RE_NEWLINE_SPLIT.split(text) if p.strip()]
-        normalized = (
-            "\n".join(normalizer.normalize_batch(paragraphs, punc_norm=True))
-            if paragraphs
-            else ""
-        )
-    else:
-        normalizer = _get_normalizer()
-        rebuilt = []
-        for i, part in enumerate(_EMOTION_SPLIT_RE.split(text)):
-            if i % 2 == 1:
-                tok = _emotion_tag_token(part)
-                rebuilt.append(tok if tok is not None else part)
-            elif part.strip():
-                rebuilt.append(normalizer.normalize(part, punc_norm=False))
-        normalized = " ".join(p for p in rebuilt if p)
-
-    chunks, gaps = split_text_into_chunks_with_gaps(normalized, max_chars=max_chars)
-=======
     keep_cues = "[" in text or "<|emotion_" in text
     chunks: list[str] = []
     gaps: list[str] = []
@@ -540,7 +344,6 @@ def normalize_to_chunks_v3_with_gaps(
                 gaps.append("sentence")
             chunks.append(ch)
 
->>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
     chunks = [punc_norm(c) for c in chunks]
     gaps = [g if g == "para" else _classify_gap(chunks[i]) for i, g in enumerate(gaps)]
     return chunks, gaps
@@ -553,12 +356,6 @@ def phonemize_to_chunks(
     source_max_chars: Optional[int] = None,
     skip_normalize: bool = False,
     phoneme_dict: dict = None,
-<<<<<<< HEAD
-    spell_check_engine: str = "off",
-    spell_check_device: str = "auto",
-    spell_check_batch_size: int = 16,
-=======
->>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 ):
     """
     Convert long raw text into bounded phoneme chunks.
@@ -572,29 +369,12 @@ def phonemize_to_chunks(
     Normalize theo đoạn (tách newline) giữ input cho bộ regex backtracking ở mức
     an toàn với văn bản cỡ lớn. ``source_max_chars`` được giữ cho tương thích chữ
     ký nhưng không còn dùng (việc cắt theo độ dài giờ làm ở tầng phoneme).
-<<<<<<< HEAD
-
-    Spell check được áp dụng TRƯỚC normalize (nếu engine != "off").
-=======
->>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
     """
     from vieneu_utils.core_utils import split_into_chunks_v2
 
     if not text:
         return []
 
-<<<<<<< HEAD
-    # Apply spell check BEFORE normalization
-    if spell_check_engine != "off":
-        checker = get_spell_checker(
-            engine=spell_check_engine,
-            device=spell_check_device,
-            batch_size=spell_check_batch_size
-        )
-        text = checker.correct(text)
-
-=======
->>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
     if skip_normalize:
         normalized_units = [text]
     else:

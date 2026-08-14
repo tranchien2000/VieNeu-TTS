@@ -8,7 +8,11 @@
       "Bash(python3 -m py_compile src/vieneu_utils/audiobook_processor.py)",
       "Bash(py *)",
       "Bash(where python *)",
-      "Bash(where python3 *)"
+      "Bash(where python3 *)",
+      "Bash(uv lock *)",
+      "Bash(git checkout *)",
+      "Bash(uv run *)",
+      "Bash(uv pip *)"
     ]
   }
 }

@@ -24,8 +24,6 @@ def _tokenize_keep_en(s: str) -> List[str]:
 RE_SENTENCE_END = re.compile(r'(?<=[\.\!\?\…])\s+')
 RE_MINOR_PUNCT  = re.compile(r'(?<=[\,\;\:\-\–\—])\s+')
 
-<<<<<<< HEAD
-=======
 # ─── Tách câu nhận biết ngoặc/trích dẫn ──────────────────────────────────────
 # Dấu kết câu nằm BÊN TRONG một cặp ngoặc/trích dẫn KHÔNG phải ranh giới câu:
 #   Có phải ... kiểu như: "Rồi sao nữa? Mình phải làm đến bao giờ?", đúng không anh?
@@ -45,7 +43,6 @@ _SENT_END_CHARS  = frozenset('.!?…')
 # Dấu đóng bám NGAY SAU dấu kết câu vẫn thuộc về câu đó: `bao giờ?"` , `(thế à!)`
 _TRAILING_CLOSE = _CLOSERS | frozenset('"\'’”')
 
->>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 # v2 noise cleanup
 _NOISE_RULES: List[Tuple[re.Pattern, str]] = [
     (re.compile(r'([.!?])[.,;:]+'), r'\1'),
@@ -124,8 +121,6 @@ def join_audio_chunks(
 
 # ─── v1: split raw text ──────────────────────────────────────────────────────
 
-<<<<<<< HEAD
-=======
 def _scan_sentences(text: str, quote_aware: bool = True) -> Tuple[List[str], bool]:
     """Quét ``text`` một lượt, cắt ở dấu ``.!?…`` KHÔNG nằm trong ngoặc/trích dẫn.
 
@@ -239,66 +234,11 @@ def pack_sentences_into_chunks(sentences: List[str], max_chars: int = 256) -> Li
     return [c.strip() for c in final_chunks if c.strip()]
 
 
->>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 def split_text_into_chunks(text: str, max_chars: int = 256) -> List[str]:
     """Split raw text (chưa phonemize) thành chunks <= max_chars."""
     if not text:
         return []
 
-<<<<<<< HEAD
-    paragraphs   = RE_NEWLINE.split(text.strip())
-    final_chunks: List[str] = []
-
-    for para in paragraphs:
-        para = para.strip()
-        if not para:
-            continue
-
-        sentences = RE_SENTENCE_END.split(para)
-        buffer    = ""
-
-        for sentence in sentences:
-            sentence = sentence.strip()
-            if not sentence:
-                continue
-
-            if len(sentence) > max_chars:
-                if buffer:
-                    final_chunks.append(buffer)
-                    buffer = ""
-
-                sub_parts = RE_MINOR_PUNCT.split(sentence)
-                for part in sub_parts:
-                    part = part.strip()
-                    if not part:
-                        continue
-                    if len(buffer) + 1 + len(part) <= max_chars:
-                        buffer = (buffer + ' ' + part) if buffer else part
-                    else:
-                        if buffer:
-                            final_chunks.append(buffer)
-                        buffer = part
-                        if len(buffer) > max_chars:
-                            words, current = _tokenize_keep_en(buffer), ""
-                            for word in words:
-                                if current and len(current) + 1 + len(word) > max_chars:
-                                    final_chunks.append(current)
-                                    current = word
-                                else:
-                                    current = (current + ' ' + word) if current else word
-                            buffer = current
-            else:
-                if buffer and len(buffer) + 1 + len(sentence) > max_chars:
-                    final_chunks.append(buffer)
-                    buffer = sentence
-                else:
-                    buffer = (buffer + ' ' + sentence) if buffer else sentence
-
-        if buffer:
-            final_chunks.append(buffer)
-
-    return [c.strip() for c in final_chunks if c.strip()]
-=======
     final_chunks: List[str] = []
     for para in RE_NEWLINE.split(text.strip()):
         para = para.strip()
@@ -307,7 +247,6 @@ def split_text_into_chunks(text: str, max_chars: int = 256) -> List[str]:
                 pack_sentences_into_chunks(split_into_sentences(para), max_chars)
             )
     return final_chunks
->>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 
 
 def _classify_gap(chunk: str) -> str:

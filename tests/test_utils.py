@@ -1,16 +1,12 @@
 import numpy as np
 import pytest
 from vieneu.utils import _linear_overlap_add, extract_speech_ids
-<<<<<<< HEAD
-from vieneu_utils.core_utils import split_text_into_chunks, join_audio_chunks
-=======
 from vieneu_utils.core_utils import (
     split_text_into_chunks,
     split_into_sentences,
     pack_sentences_into_chunks,
     join_audio_chunks,
 )
->>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 
 # --- Text Utils Tests ---
 
@@ -28,8 +24,6 @@ def test_split_text_paragraphs():
     assert "Đoạn 1" in chunks[0]
     assert "Đoạn 2" in chunks[1]
 
-<<<<<<< HEAD
-=======
 # --- Sentence splitting (quote-aware) ---
 
 def test_split_into_sentences_basic():
@@ -100,7 +94,6 @@ def test_chunking_cuts_at_sentence_boundary_not_mid_quote():
     assert chunks[1].startswith("Có phải ý anh")
     assert not any(c.lstrip().startswith(",") for c in chunks)
 
->>>>>>> 54f42abf4460e68aac79c985b9446557c2180f2f
 # --- Audio Utils Tests ---
 
 def test_linear_overlap_add():
