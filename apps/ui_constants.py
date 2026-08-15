@@ -144,66 +144,34 @@ css = """
 head_html = """
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🦜</text></svg>">
 <script>
-// Track active tab: "single_tab", "file_tab", or "conv_tab"
-let activeTab = 'single_tab';
-
-// Observe tab changes to update activeTab
-const observer = new MutationObserver(() => {
-    const tabs = document.querySelectorAll('[role="tabpanel"]');
-    tabs.forEach(tab => {
-        if (tab.getAttribute('aria-hidden') === 'false' || tab.style.display !== 'none') {
-            const id = tab.id;
-            if (id === 'conv_tab') activeTab = 'conv_tab';
-            else if (id === 'file_tab') activeTab = 'file_tab';
-            else if (id === 'single_tab') activeTab = 'single_tab';
+function getVisibleButton(ids) {
+    for (const id of ids) {
+        const btn = document.getElementById(id);
+        if (btn && btn.offsetParent !== null && !btn.disabled) {
+            return btn;
         }
-    });
-});
-observer.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['aria-hidden', 'style'] });
-
-function getButtonsForTab() {
-    if (activeTab === 'conv_tab') {
-        return {
-            generate: document.getElementById('btn_generate_conv'),
-            pause: document.getElementById('btn_pause_conv'),
-            stop: document.getElementById('btn_stop_conv')
-        };
     }
-    return {
-        generate: document.getElementById('btn_generate'),
-        pause: document.getElementById('btn_pause'),
-        stop: document.getElementById('btn_stop')
-    };
-}
-
-function isVisibleAndEnabled(btn) {
-    return btn && btn.offsetParent !== null && !btn.disabled;
+    return null;
 }
 
 document.addEventListener('keydown', function(e) {
-    // Ctrl/Cmd + Enter: Start generation for active tab
+    // Ctrl/Cmd + Enter: Start generation
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
-        const { generate } = getButtonsForTab();
-        if (isVisibleAndEnabled(generate)) {
-            generate.click();
-        }
+        const btn = getVisibleButton(['btn_generate', 'btn_generate_conv']);
+        if (btn) btn.click();
     }
-    // Ctrl/Cmd + Space: Pause/Resume for active tab
+    // Ctrl/Cmd + Space: Pause/Resume
     if ((e.ctrlKey || e.metaKey) && e.key === ' ') {
         e.preventDefault();
-        const { pause } = getButtonsForTab();
-        if (isVisibleAndEnabled(pause)) {
-            pause.click();
-        }
+        const btn = getVisibleButton(['btn_pause', 'btn_pause_conv']);
+        if (btn) btn.click();
     }
-    // Ctrl/Cmd + Shift + Enter: Stop for active tab
+    // Ctrl/Cmd + Shift + Enter: Stop
     if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Enter') {
         e.preventDefault();
-        const { stop } = getButtonsForTab();
-        if (isVisibleAndEnabled(stop)) {
-            stop.click();
-        }
+        const btn = getVisibleButton(['btn_stop', 'btn_stop_conv']);
+        if (btn) btn.click();
     }
 });
 </script>
