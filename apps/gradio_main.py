@@ -1,5 +1,5 @@
-import sys
-import io
+import sys, os
+sys.path.append(os.path.abspath('src'))
 if sys.platform == "win32":
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -21,9 +21,9 @@ import threading
 import yaml
 import uuid
 from vieneu_utils.core_utils import join_audio_chunks, env_bool, get_silence_duration_v2, gaps_to_silence
-from vieneu_utils.phonemize_text import phonemize_to_chunks, normalize_to_chunks, normalize_to_chunks_v3, normalize_to_chunks_v3_with_gaps
+from vieneu_utils.chapter_detector import detect_chapters
 # PuncNormalizer = sea_g2p.Normalizer luôn bật punc_norm=True.
-from vieneu_utils.phonemize_text import PuncNormalizer as Normalizer
+from vieneu_utils.phonemize_text import PuncNormalizer as Normalizer, normalize_to_chunks_v3_with_gaps
 import gc
 
 # PDF text extraction
@@ -228,10 +228,13 @@ def restore_ui_state():
     global model_loaded
     msg = get_model_status_message()
     return (
-        msg, 
+        msg,
         gr.update(interactive=model_loaded), # btn_generate
+        gr.update(interactive=False),        # btn_pause
+        gr.update(interactive=False),        # btn_stop
         gr.update(interactive=model_loaded), # btn_generate_conv
-        gr.update(interactive=False)         # btn_stop
+        gr.update(interactive=False),        # btn_pause_conv
+        gr.update(interactive=False),        # btn_stop_conv
     )
 
 def should_use_lmdeploy(backbone_choice: str, device_choice: str) -> bool:
@@ -745,10 +748,8 @@ def load_model(backbone_choice: str, codec_choice: str, device_choice: str,
             tab_sel = gr.update(selected="preset_mode")
             mode_state = "preset_mode"
 
-        # Conversation tab: available for v2 (sequential) and v3 Turbo (batched).
-        is_v2 = (backbone_choice == "VieNeu-TTS-v2 (GPU)" or backbone_choice == "VieNeu-TTS-v2 (CPU)")
-        is_v3_conv = "v3" in (backbone_choice or "").lower()
-        conv_tab_update = gr.update(visible=is_v2 or is_v3_conv)
+        # Conversation tab: always visible
+        conv_tab_update = gr.update(visible=True)
 
         # Update all MAX_SPEAKERS slot dropdowns
         slot_updates = [slot_dd_update] * MAX_SPEAKERS
@@ -941,6 +942,7 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                         if _STOP_EVENT.is_set():
                             yield None, "⏹️ Đã dừng tạo giọng nói."
                             return
+                        _PAUSE_EVENT.wait()  # Block until resumed
                         idxs = v3_order[i:i + v3_bs]
                         yield None, f"⚡ v3 Turbo: lô {bi + 1} ({len(idxs)} đoạn, batch size {v3_bs})..."
                         reqs = [{"phonemes": v3_phs[j], "speaker_emb": v3_speaker_emb,
@@ -965,6 +967,7 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                         if _STOP_EVENT.is_set():
                             yield None, "⏹️ Đã dừng tạo giọng nói."
                             return
+                        _PAUSE_EVENT.wait()  # Block until resumed
                         yield None, f"⏳ v3 Turbo: Đang xử lý đoạn {i + 1}/{total_v3}..."
                         ph = phonemize_text_with_emotions(chunk)
                         chunk_wav = tts.engine.infer(
@@ -1039,6 +1042,7 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                     if _STOP_EVENT.is_set():
                         yield None, "⏹️ Đã dừng tạo giọng nói."
                         return
+                    _PAUSE_EVENT.wait()  # Block until resumed
                     yield None, f"⚡ Turbo v2: Đang xử lý đoạn {i+1}/{total_chunks}..."
                     
                     chunk_wav = tts.infer(
@@ -1070,6 +1074,7 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                         print("🛑 Synthesis stopped during batch processing.")
                         yield None, "⏹️ Đã dừng tạo giọng nói."
                         return
+                    _PAUSE_EVENT.wait()  # Block until resumed
                     
                     batch_idx = i // max_batch_size_run
                     estimate_info = ""
@@ -1115,6 +1120,7 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                     if _STOP_EVENT.is_set():
                         yield None, "⏹️ Đã dừng tạo giọng nói."
                         return
+                    _PAUSE_EVENT.wait()  # Block until resumed
                     yield None, f"⏳ Đang xử lý đoạn {i+1}/{total_chunks}..."
                     chunk_wav = tts.infer(
                         chunk, 
@@ -1202,11 +1208,12 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                 for i, chunk_text in enumerate(text_chunks):
                     if _STOP_EVENT.is_set():
                         break
-                    
+                    _PAUSE_EVENT.wait()  # Block until resumed
+
                     if is_v2_turbo:
                         stream_gen = tts.infer_stream(
                             chunk_text.text,
-                            ref_codes=ref_codes, 
+                            ref_codes=ref_codes,
                             temperature=temperature,
                             max_chars=max_chars_chunk,
                             skip_normalize=True,
@@ -1215,18 +1222,19 @@ def synthesize_speech(text: str, voice_choice: str, custom_audio, custom_text: s
                         )
                     else:
                         stream_gen = tts.infer_stream(
-                            chunk_text, 
-                            ref_codes=ref_codes, 
+                            chunk_text,
+                            ref_codes=ref_codes,
                             ref_text=ref_text_raw,
                             temperature=temperature,
                             max_chars=max_chars_chunk,
                             skip_normalize=True,
                             emotion_tag=""
                         )
-                    
+
                     for part_idx, audio_part in enumerate(stream_gen):
                         if _STOP_EVENT.is_set():
                             break
+                        _PAUSE_EVENT.wait()  # Block until resumed
                         if audio_part is None or len(audio_part) == 0:
                             continue
                         
@@ -1338,6 +1346,8 @@ def synthesize_conversation_with_empty_estimate(*args):
 # threading.Event is a mutable object: never reassigned, always the same reference.
 # All threads share the exact same object — no scoping/serialization issues.
 _STOP_EVENT = threading.Event()
+_PAUSE_EVENT = threading.Event()
+_PAUSE_EVENT.set()  # Initially not paused (set = running)
 
 # --- 3. CONVERSATION LOGIC ---
 
@@ -1388,6 +1398,7 @@ def _synthesize_conversation_v3(lines, mapping, temperature, max_chars_chunk, si
             if _STOP_EVENT.is_set():
                 yield None, "⏹️ Đã dừng hội thoại."
                 return
+            _PAUSE_EVENT.wait()  # Block until resumed
             cfg = mapping.get(line['speaker'].lower())
             v_id = (cfg or {}).get('voice') or tts._default_voice
             yield None, f"⏳ [{li+1}/{len(lines)}] {line['speaker']}: {line['text'][:30]}..."
@@ -1448,6 +1459,7 @@ def _synthesize_conversation_v3(lines, mapping, temperature, max_chars_chunk, si
         if _STOP_EVENT.is_set():
             yield None, "⏹️ Đã dừng hội thoại."
             return
+        _PAUSE_EVENT.wait()  # Block until resumed
         idxs = req_order[i:i + BS]
         yield None, f"⚡ v3 Turbo hội thoại: lô {bi + 1}/{total_batches} ({len(idxs)} đoạn, batch 32)..."
         for j, w in zip(idxs, tts._v3_batch_engine.generate_batch(
@@ -1563,6 +1575,7 @@ def synthesize_conversation(
             if _STOP_EVENT.is_set():
                 yield None, "⏹️ Đã dừng hội thoại."
                 return
+            _PAUSE_EVENT.wait()  # Block until resumed
             spk_name = line['speaker']
             text = line['text']
             
@@ -1906,13 +1919,16 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
 
             btn_load = gr.Button("🔄 Tải Model", variant="primary")
             model_status = gr.Markdown("⏳ Chưa tải model.")
-        
+
         with gr.Row(elem_classes="container"):
-            # --- INPUT ---
+            # --- LEFT COLUMN: INPUT TABS ---
             with gr.Column(scale=3):
+                # State to track active input tab
+                active_input_tab = gr.State("single_tab")
                 with gr.Tabs() as main_input_tabs:
                     # --- TAB 1: SINGLE SPEAKER ---
-                    with gr.Tab("🦜 Đọc truyện", id="single_tab") as single_tab:
+                    with gr.TabItem("🦜 Đọc truyện", id="single_tab") as single_tab:
+                        single_tab.select(lambda: "single_tab", outputs=active_input_tab)
                         with gr.Accordion("📄 Tải lên PDF để trích xuất văn bản", open=False):
                             gr.Markdown(
                                 "Tải lên file PDF, văn bản sẽ được tự động trích xuất và điền vào ô bên dưới. "
@@ -1933,11 +1949,11 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                             lines=8,
                             value=default_text,
                         )
-                        
+
                         with gr.Tabs() as tabs:
                             with gr.TabItem("👤 Preset", id="preset_mode") as tab_preset:
                                 voice_select = gr.Dropdown(choices=[], value=None, label="Giọng mẫu", allow_custom_value=True)
-                            
+
                             # Voice cloning is only available on v3+ models. Hidden by
                             # default and toggled on by on_backbone_change when a v3
                             # model is selected.
@@ -1975,29 +1991,131 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                                         inputs=[custom_audio, custom_text],
                                         label="Ví dụ mẫu để thử nghiệm clone giọng"
                                     )
-                                    
+
                                     gr.Markdown("""
-                                    **💡 Mẹo nhỏ:** Nếu kết quả Zero-shot Voice Cloning chưa như ý, bạn hãy cân nhắc **Finetune (LoRA)** để đạt chất lượng tốt nhất. 
+                                    **💡 Mẹo nhỏ:** Nếu kết quả Zero-shot Voice Cloning chưa như ý, bạn hãy cân nhắc **Finetune (LoRA)** để đạt chất lượng tốt nhất.
                                     Hướng dẫn chi tiết có tại file: `finetune/README.md` hoặc xem trên [GitHub](https://github.com/pnnbao97/VieNeu-TTS/tree/main/finetune).
                                     """)
-                        
-                        generation_mode = gr.Radio(
-                            ["Standard (Một lần)"],
-                            value="Standard (Một lần)",
-                            label="Chế độ sinh"
-                        )
-                        btn_generate = gr.Button("🎵 Bắt đầu", variant="primary", scale=2, interactive=False)
 
-                    # --- TAB 2: MULTI-SPEAKER CONVERSATION ---
-                    with gr.Tab("🎭 Hội thoại", id="conv_tab", visible=False) as conv_tab:
+                    # --- TAB 2: FILE PROCESSING ---
+                    with gr.TabItem("📂 Xử lý File", id="file_tab") as file_tab:
+                        with gr.Column(scale=1):
+                            file_upload = gr.File(label="Chọn file .txt hoặc .docx", file_types=[".txt", ".docx"], type="filepath")
+                            file_status = gr.Markdown(visible=False)
+                        with gr.Column(scale=2):
+                            file_content = gr.Textbox(label="Nội dung file", lines=12, interactive=False)
+                            # Split mode selection
+                            split_mode = gr.Dropdown(label="Phương thức tách chương", choices=["Tự động", "Theo từ khóa (Chap, Chương...)", "Theo số từ", "Theo số ký tự"], value="Tự động")
+                            # Parameter inputs (visible conditionally)
+                            words_per_chunk = gr.Number(label="Số từ/chapter", value=1000, precision=0, visible=False)
+                            chars_per_chunk = gr.Number(label="Số ký tự/chapter", value=2000, precision=0, visible=False)
+                            # Update visibility based on mode
+                            def update_param_visibility(mode):
+                                return {
+                                    words_per_chunk: gr.update(visible=mode=="Theo số từ"),
+                                    chars_per_chunk: gr.update(visible=mode=="Theo số ký tự")
+                                }
+                            split_mode.change(fn=update_param_visibility, inputs=split_mode, outputs=[words_per_chunk, chars_per_chunk])
+                            # Button to start chapter detection
+                            btn_detect = gr.Button("🔎 Phát hiện chương", variant="primary")
+                            with gr.Row():
+                                btn_select_all = gr.Button("✅ Chọn tất cả", variant="secondary", size="sm")
+                                btn_deselect_all = gr.Button("❌ Bỏ chọn tất cả", variant="secondary", size="sm")
+                            chapters_checkbox = gr.CheckboxGroup(label="Chương", choices=[], value=[])
+                            # Show selected chapters text
+                            chapter_text = gr.Textbox(label="Nội dung chương đã chọn", lines=12, interactive=False)
+
+                            # State to store detected chapters
+                            chapters_state = gr.State([])
+
+                            # Callback: load file content
+                            def load_file(filepath):
+                                import os
+                                if not filepath:
+                                    return "", gr.update(visible=False)
+                                ext = os.path.splitext(filepath)[1].lower()
+                                try:
+                                    if ext == ".txt":
+                                        with open(filepath, "r", encoding="utf-8") as f:
+                                            content = f.read()
+                                    elif ext == ".docx":
+                                        import mammoth
+                                        with open(filepath, "rb") as f:
+                                            result = mammoth.convert_to_text(f)
+                                            content = result.value
+                                    else:
+                                        return "", gr.update(visible=False)
+                                    return content, gr.update(visible=True, value="✅ Đọc file thành công")
+                                except Exception as e:
+                                    return "", gr.update(visible=True, value=f"❌ Lỗi đọc file: {e}")
+                            file_upload.change(fn=load_file, inputs=file_upload, outputs=[file_content, file_status])
+
+                            # Callback: detect chapters
+                            def detect(text, mode, words, chars):
+                                if not text:
+                                    return gr.update(choices=[], value=[]), gr.update(visible=True, value="❌ Không có nội dung để tách"), []
+                                # map UI string to API param
+                                mode_map = {"Tự động": "auto", "Theo từ khóa (Chap, Chương...)": "numbered", "Theo số từ": "wordcount", "Theo số ký tự": "charcount"}
+                                split_mode_api = mode_map.get(mode, "auto")
+                                # Default keywords for Vietnamese chapter detection
+                                custom_keywords = ["Chapter", "CHAPTER", "Chương", "CHƯƠNG", "Phần", "PHẦN", "Chap", "CHAP"] if split_mode_api == "numbered" else None
+                                chapters = detect_chapters(
+                                    text,
+                                    format="auto",
+                                    custom_keywords=custom_keywords,
+                                    words_per_chunk=words,
+                                    split_mode=split_mode_api,
+                                    chars_per_chunk=chars,
+                                )
+                                titles = [c["title"] for c in chapters]
+                                return gr.update(choices=titles, value=[]), gr.update(visible=True, value=f"✅ Tìm thấy {len(chapters)} chương"), chapters
+                            btn_detect.click(fn=detect, inputs=[file_content, split_mode, words_per_chunk, chars_per_chunk], outputs=[chapters_checkbox, file_status, chapters_state])
+
+                            # Show chapter text when selected
+                            def show_chapters(selected_titles, chapters):
+                                if not selected_titles or not chapters:
+                                    return ""
+                                selected_texts = []
+                                for c in chapters:
+                                    if c["title"] in selected_titles:
+                                        selected_texts.append(c["text"])
+                                return "\n\n---\n\n".join(selected_texts)
+                            # Enable generate button when any chapter is selected (registered after btn_generate is defined)
+                            def on_chapter_select(selected_titles, chapters):
+                                if selected_titles and chapters:
+                                    return gr.update(interactive=True)
+                                return gr.update(interactive=False)
+
+                            chapters_checkbox.change(fn=show_chapters, inputs=[chapters_checkbox, chapters_state], outputs=chapter_text)
+                            # Note: btn_generate change handler registered later after btn_generate is defined
+
+                            # Select all / deselect all handlers
+                            def select_all_chapters(chapters):
+                                if not chapters:
+                                    return gr.update(value=[])
+                                titles = [c["title"] for c in chapters]
+                                return gr.update(value=titles)
+
+                            def deselect_all_chapters():
+                                return gr.update(value=[])
+
+                            btn_select_all.click(fn=select_all_chapters, inputs=[chapters_state], outputs=[chapters_checkbox])
+                            btn_deselect_all.click(fn=deselect_all_chapters, inputs=[], outputs=[chapters_checkbox])
+
+                    # Track tab selection for file tab
+                    file_tab.select(lambda: "file_tab", outputs=active_input_tab)
+
+                    # --- TAB 3: MULTI-SPEAKER CONVERSATION ---
+                    with gr.TabItem("🎭 Hội thoại", id="conv_tab") as conv_tab:
+                        conv_tab.select(lambda: "conv_tab", outputs=active_input_tab)
                         conv_script_input = gr.Textbox(
-                            label="Kịch bản hội thoại",
-                            placeholder="Phương: Chào mọi người, mình là Phương...",
-                            lines=10,
-                            elem_classes="script-box",
-                            value='Phương: Chào mọi người, mình là Phương. Hôm nay team có một announcement cực lớn về VieNeu-TTS Version 2. Đồng hành cùng mình là anh Dũng và Hùng. Hi guys!\n\nDũng: Yo, chào cả nhà. Mình sẽ đi thẳng vào technical side của bản nâng cấp này để mọi người có cái nhìn deep hơn nhé.\n\nHùng: Chào mọi người. Thật sự V2 là một huge milestone. Nó phá vỡ rào cản của những công cụ đọc văn bản khô khan, hướng tới một sự natural communication đúng nghĩa.\n\nPhương: Correct! Và bất ngờ nhất là: nãy giờ mọi người đang nghe bản demo được tạo ra 100% bằng VieNeu-TTS V2 đấy. Tụi mình đều là sản phẩm của AI hết. Amazing, right?\n\nDũng: Đỉnh thật sự! Tiện đây Hùng share thêm về cái nội công bên trong của model này đi.\n\nHùng: Chắc chắn rồi. Model được train trên 10000 hours audio chất lượng cao, nên nó hỗ trợ code-switching Anh Việt cực mượt, tự nhiên như podcast. Đặc biệt, dự án này hoàn toàn open-source để cộng đồng cùng phát triển.\n\nDũng: Về hiệu năng thì khỏi bàn. Khi test trên GPU quốc dân RTX 3060, tốc độ sinh audio nhanh gấp 10 lần realtime. Và đừng lo, nếu bạn không có card đồ hỏa xịn, tụi mình có sẵn bản CPU version để ai cũng có thể tiếp cận được.\n\nPhương: Tốc độ cực nhanh, hỗ trợ đa nền tảng và hoàn toàn miễn phí. Mọi người hãy cùng trải nghiệm nhé!'
+                        label="Kịch bản hội thoại",
+                        placeholder="Phương: Chào mọi người, mình là Phương...",
+                        lines=10,
+                        elem_classes="script-box",
+                        value='Phương: Chào mọi người, mình là Phương. Hôm nay team có một announcement cực lớn về VieNeu-TTS Version 2. Đồng hành cùng mình là anh Dũng và Hùng. Hi guys!\n\nDũng: Yo, chào cả nhà. Mình sẽ đi thẳng vào technical side của bản nâng cấp này để mọi người có cái nhìn deep hơn nhé.\n\nHùng: Chào mọi người. Thật sự V2 là một huge milestone. Nó phá vỡ rào cản của những công cụ đọc văn bản khô khan, hướng tới một sự natural communication đúng nghĩa.\n\nPhương: Correct! Và bất ngờ nhất là: nãy giờ mọi người đang nghe bản demo được tạo ra 100% bằng VieNeu-TTS V2 đấy. Tụi mình đều là sản phẩm của AI hết. Amazing, right?\n\nDũng: Đỉnh thật sự! Tiện đây Hùng share thêm về cái nội công bên trong của model này đi.\n\nHùng: Chắc chắn rồi. Model được train trên 10000 hours audio chất lượng cao, nên nó hỗ trợ code-switching Anh Việt cực mượt, tự nhiên như podcast. Đặc biệt, dự án này hoàn toàn open-source để cộng đồng cùng phát triển.\n\nDũng: Về hiệu năng thì khỏi bàn. Khi test trên GPU quốc dân RTX 3060, tốc độ sinh audio nhanh gấp 10 lần realtime. Và đừng lo, nếu bạn không có card đồ hỏa xịn, tụi mình có sẵn bản CPU version để ai cũng có thể tiếp cận được.\n\nPhương: Tốc độ cực nhanh, hỗ trợ đa nền tảng và hoàn toàn miễn phí. Mọi người hãy cùng trải nghiệm nhé!'
                         )
-                        
+
                         with gr.Row():
                             btn_detect_speakers = gr.Button("🔍 Quét nhân vật", size="sm", variant="secondary")
                             silence_slider = gr.Slider(minimum=0, maximum=3, value=0.1, step=0.1, label="⏱️ Khoảng lặng (giây)")
@@ -2010,40 +2128,13 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                         speaker_voice_dds  = []
                         speaker_slot_rows  = []
 
-                        for _i in range(MAX_SPEAKERS):
-                            # Mặc định cho 3 nhân vật đầu tiên theo yêu cầu
-                            _default_name = ""
-                            _default_voice = None
-                            _row_visible = False
-                            
-                            if _i == 0:
-                                _default_name = "Phương"
-                                _default_voice = "Ly"
-                                _row_visible = True
-                            elif _i == 1:
-                                _default_name = "Dũng"
-                                _default_voice = "Binh"
-                                _row_visible = True
-                            elif _i == 2:
-                                _default_name = "Hùng"
-                                _default_voice = "Sơn"
-                                _row_visible = True
-                            elif _i < 2:
-                                _default_name = f"Nhân vật {_i+1}"
-                                _row_visible = True
-
-                            with gr.Row(visible=_row_visible) as _row:
-                                _name = gr.Textbox(
-                                    value=_default_name,
-                                    label="👤 Nhân vật",
-                                    interactive=False,
-                                    scale=1,
-                                    min_width=120
-                                )
+                        for i in range(MAX_SPEAKERS):
+                            with gr.Row(visible=False) as _row:
+                                _name = gr.Textbox(label=f"Nhân vật {i+1}", scale=2, interactive=True, placeholder="Tên nhân vật (VD: Phương, Dũng...)")
                                 _dd = gr.Dropdown(
                                     choices=PRESET_VOICES_CACHE,
-                                    value=_default_voice,
-                                    label="🎤 Giọng đọc",
+                                    value=None,
+                                    label="Giọng đọc",
                                     interactive=True,
                                     scale=3,
                                     allow_custom_value=True
@@ -2051,16 +2142,37 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                             speaker_slot_rows.append(_row)
                             speaker_name_boxes.append(_name)
                             speaker_voice_dds.append(_dd)
-                        
-                        btn_generate_conv = gr.Button("🎭 Bắt đầu hội thoại", variant="primary", interactive=False)
 
-                # Global Generation Settings
+                        with gr.Row():
+                            btn_generate_conv = gr.Button("🎭 Bắt đầu hội thoại", variant="primary", scale=2, interactive=False, elem_id="btn_generate_conv")
+                            btn_pause_conv = gr.Button("⏸️ Tạm dừng", variant="secondary", scale=1, interactive=False, elem_id="btn_pause_conv")
+                            btn_stop_conv = gr.Button("⏹️ Dừng", variant="stop", scale=1, interactive=False, elem_id="btn_stop_conv")
+
+            # --- RIGHT COLUMN: CONTROLS & OUTPUT (FIXED, NOT IN TABS) ---
+            with gr.Column(scale=2, min_width=400):
+                # Control buttons row
                 with gr.Row():
-                    use_batch = gr.Checkbox(
-                        value=True, 
-                        label="⚡ Batch Processing",
-                        info="Xử lý nhiều đoạn cùng lúc (chỉ áp dụng khi sử dụng GPU và đã cài đặt LMDeploy)"
-                    )
+                    btn_generate = gr.Button("🎵 Bắt đầu", variant="primary", scale=2, interactive=False, elem_id="btn_generate")
+                    btn_pause = gr.Button("⏸️ Tạm dừng", variant="secondary", scale=1, interactive=False, elem_id="btn_pause")
+                    btn_stop = gr.Button("⏹️ Dừng", variant="stop", scale=1, interactive=False, elem_id="btn_stop")
+
+                # Register chapter selection handler after btn_generate is defined
+                chapters_checkbox.change(fn=on_chapter_select, inputs=[chapters_checkbox, chapters_state], outputs=btn_generate)
+
+                with gr.Accordion("⚙️ Cài đặt nâng cao (Generation)", open=False):
+                    with gr.Row():
+                        generation_mode = gr.Radio(
+                            ["Standard (Một lần)"],
+                            value="Standard (Một lần)",
+                            label="Chế độ sinh",
+                            scale=2
+                        )
+                        use_batch = gr.Checkbox(
+                            value=True,
+                            label="⚡ Batch Processing",
+                            info="Xử lý nhiều đoạn cùng lúc (chỉ áp dụng khi sử dụng GPU và đã cài đặt LMDeploy)",
+                            scale=1
+                        )
                     max_batch_size_run = gr.Slider(
                         minimum=1,
                         maximum=32,
@@ -2069,29 +2181,22 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                         label="📊 Batch Size (Generation)",
                         info="Số lượng đoạn văn bản xử lý cùng lúc. Giá trị cao = nhanh hơn nhưng tốn VRAM hơn. Giảm xuống nếu gặp lỗi Out of Memory."
                     )
-                
-                with gr.Accordion("⚙️ Cài đặt nâng cao (Generation)", open=False):
-                    with gr.Row():
-                        temperature_slider = gr.Slider(
-                            minimum=0.1, maximum=1.5, value=default_temp, step=0.1,
-                            label="🌡️ Temperature", 
-                            info="Độ sáng tạo. Cao = đa dạng cảm xúc hơn nhưng dễ lỗi. Thấp = ổn định hơn."
-                        )
-                        max_chars_chunk_slider = gr.Slider(
-                            minimum=128, maximum=512,
-                            value=256, step=32,
-                            label="📝 Max Chars per Chunk",
-                            info="Độ dài tối đa mỗi đoạn xử lý (mặc định: 256)."
-                        )
-                
+                    temperature_slider = gr.Slider(
+                        minimum=0.1, maximum=1.5, value=default_temp, step=0.1,
+                        label="🌡️ Temperature",
+                        info="Độ sáng tạo. Cao = đa dạng cảm xúc hơn nhưng dễ lỗi. Thấp = ổn định hơn."
+                    )
+                    max_chars_chunk_slider = gr.Slider(
+                        minimum=128, maximum=512,
+                        value=256, step=32,
+                        label="📝 Max Chars per Chunk",
+                        info="Độ dài tối đa mỗi đoạn xử lý (mặc định: 256)."
+                    )
+
                 # State to track current mode
                 current_mode_state = gr.State("preset_mode")
-                
-                with gr.Row():
-                    btn_stop = gr.Button("⏹️ Dừng", variant="stop", scale=1, interactive=False)
-            
-            # --- OUTPUT ---
-            with gr.Column(scale=2):
+
+                # --- OUTPUT ---
                 audio_output = gr.Audio(
                     label="Kết quả",
                     type="filepath",
@@ -2099,18 +2204,18 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                 )
                 with gr.Group():
                     status_output = gr.Textbox(
-                        label="Trạng thái", 
+                        label="Trạng thái",
                         elem_classes="status-box",
                         lines=2,
                         max_lines=10,
-                                            )
+                    )
                 with gr.Group():
                     estimate_output = gr.Textbox(
                         label="Ước tính thời gian",
                         elem_classes="estimate-box",
                         lines=2,
                         max_lines=4,
-                                            )
+                    )
                 download_btn = gr.DownloadButton(
                     "📥 Tải xuống file Audio",
                     variant="primary",
@@ -2118,7 +2223,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
                     elem_classes="download-btn"
                 )
                 gr.Markdown("<div style='text-align: center; color: #64748b; font-size: 0.8rem;'>🔒 Audio được đóng dấu bản quyền ẩn (Watermarker) để bảo mật và định danh AI.</div>")
-        
+
         codec_select.change(
             on_codec_change, 
             inputs=[codec_select, current_mode_state], 
@@ -2281,8 +2386,168 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             outputs=[audio_output, status_output, estimate_output]
         )
         btn_generate_conv.click(lambda: gr.update(visible=False), outputs=[download_btn])
-        btn_generate_conv.click(lambda: gr.update(interactive=True), outputs=btn_stop)
-        conv_gen_event.then(lambda: gr.update(interactive=False), outputs=btn_stop)
+        btn_generate_conv.click(lambda: (gr.update(interactive=True), gr.update(interactive=True)), outputs=[btn_pause_conv, btn_stop_conv])
+        conv_gen_event.then(lambda: (gr.update(interactive=False), gr.update(interactive=False)), outputs=[btn_pause_conv, btn_stop_conv])
+
+        # --- Stop Button ---
+        def request_stop():
+            print("🛑 STOP REQUESTED via button click.")
+            _STOP_EVENT.set()
+            _PAUSE_EVENT.set()  # Resume in case paused
+            return None, "⏹️ Đã dừng tạo giọng nói.", "", gr.update(interactive=False), gr.update(interactive=False)
+
+        # Pause/Resume handler
+        def request_pause():
+            print("⏸️ PAUSE REQUESTED via button click.")
+            _PAUSE_EVENT.clear()
+            return gr.update(value="▶️ Tiếp tục", variant="primary")
+
+        def request_resume():
+            print("▶️ RESUME REQUESTED via button click.")
+            _PAUSE_EVENT.set()
+            return gr.update(value="⏸️ Tạm dừng", variant="secondary")
+
+        # Toggle pause/resume
+        def toggle_pause(btn_value):
+            if "Tạm dừng" in btn_value:
+                return request_pause()
+            else:
+                return request_resume()
+
+        # Download button handler
+        def on_audio_generated(audio_path):
+            """Show download button when audio is generated."""
+            if audio_path and os.path.exists(audio_path):
+                return gr.update(value=audio_path, visible=True)
+            return gr.update(visible=False)
+
+        # --- Batch Chapter Generation Handler (for file_tab) ---
+        def generate_chapters_batch(active_tab, chapters_checkbox, chapters_state, voice_select, custom_audio, custom_text, current_mode_state,
+                                     generation_mode, use_batch, max_batch_size_run,
+                                     temperature_slider, max_chars_chunk_slider,
+                                     denoise_checkbox, session_id_state,
+                                     chapter_text, text_input):
+            """Process each selected chapter individually with progress tracking.
+            Only used when active_tab == "file_tab".
+            """
+            # active_tab already verified by caller
+            if not chapters_checkbox or not chapters_state:
+                yield None, "❌ Không có chương nào được chọn.", ""
+                return
+
+            selected_titles = chapters_checkbox
+            selected_chapters = []
+            for c in chapters_state:
+                if c["title"] in selected_titles:
+                    selected_chapters.append(c)
+
+            if not selected_chapters:
+                yield None, "❌ Không có chương nào được chọn.", ""
+                return
+
+            total_chapters = len(selected_chapters)
+            all_wavs = []
+            for idx, chapter in enumerate(selected_chapters):
+                if _STOP_EVENT.is_set():
+                    yield None, f"⏹️ Đã dừng tại chương {idx}/{total_chapters}", ""
+                    return
+                _PAUSE_EVENT.wait()
+                chapter_text = chapter["text"]
+                chapter_title = chapter["title"]
+                progress_pct = int((idx / total_chapters) * 100)
+                yield None, f"⏳ [{idx+1}/{total_chapters}] ({progress_pct}%) Đang xử lý: {chapter_title}", f"Tiến độ: {idx+1}/{total_chapters} chương"
+                try:
+                    audio_gen = synthesize_speech(
+                        chapter_text, voice_select, custom_audio, custom_text, current_mode_state,
+                        generation_mode, use_batch, max_batch_size_run,
+                        temperature_slider, max_chars_chunk_slider,
+                        denoise_checkbox, session_id_state
+                    )
+                    chapter_audio = None
+                    for audio_path, status in audio_gen:
+                        if audio_path:
+                            chapter_audio = audio_path
+                    if chapter_audio:
+                        import soundfile as sf
+                        wav, sr = sf.read(chapter_audio)
+                        all_wavs.append(wav)
+                except Exception as e:
+                    yield None, f"❌ Lỗi chương {idx+1} ({chapter_title}): {e}", ""
+                    continue
+
+            if not all_wavs:
+                yield None, "❌ Không tạo được âm thanh cho bất kỳ chương nào.", ""
+                return
+            yield None, "🪄 Đang ghép nối các chương...", f"Hoàn tất {total_chapters}/{total_chapters} chương"
+            sr = 48000
+            silence = np.zeros(int(sr * 0.5), dtype=np.float32)
+            final_wav = all_wavs[0]
+            for wav in all_wavs[1:]:
+                final_wav = np.concatenate([final_wav, silence, wav])
+            import tempfile
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp:
+                sf.write(tmp.name, final_wav, sr)
+                yield tmp.name, f"✅ Hoàn tất {total_chapters} chương!", f"Đã xử lý xong {total_chapters}/{total_chapters} chương"
+
+        # Wrapper to route generate button based on active tab
+        def handle_generate(active_tab, chapter_text, text_input, voice_select, custom_audio, custom_text, current_mode_state,
+                            generation_mode, use_batch, max_batch_size_run,
+                            temperature_slider, max_chars_chunk_slider,
+                            denoise_checkbox, session_id_state,
+                            chapters_checkbox, chapters_state):
+            if active_tab == "file_tab":
+                # Use batch chapter generation
+                yield from generate_chapters_batch(active_tab, chapters_checkbox, chapters_state, voice_select, custom_audio, custom_text, current_mode_state,
+                                                 generation_mode, use_batch, max_batch_size_run,
+                                                 temperature_slider, max_chars_chunk_slider,
+                                                 denoise_checkbox, session_id_state,
+                                                 chapter_text, text_input)
+            else:
+                # Use normal unified generation
+                yield from unified_generate(active_tab, chapter_text, text_input, voice_select, custom_audio, custom_text, current_mode_state,
+                                            generation_mode, use_batch, max_batch_size_run,
+                                            temperature_slider, max_chars_chunk_slider,
+                                            denoise_checkbox, session_id_state)
+            # Select text input based on active tab
+            if active_tab == "file_tab":
+                input_text = chapter_text
+            else:  # single_tab or others
+                input_text = text_input
+
+            if not input_text or not input_text.strip():
+                yield None, "❌ Không có nội dung để tạo audio.", ""
+                return
+
+            yield from synthesize_speech_with_estimate(
+                input_text, voice_select, custom_audio, custom_text, current_mode_state,
+                generation_mode, use_batch, max_batch_size_run,
+                temperature_slider, max_chars_chunk_slider,
+                denoise_checkbox, session_id_state
+            )
+
+        gen_event = btn_generate.click(
+            fn=generate_chapters_batch,
+            inputs=[active_input_tab, chapters_checkbox, chapters_state, voice_select, custom_audio, custom_text, current_mode_state,
+                    generation_mode, use_batch, max_batch_size_run,
+                    temperature_slider, max_chars_chunk_slider,
+                    denoise_checkbox, session_id_state],
+            outputs=[audio_output, status_output, estimate_output]
+        )
+        btn_generate.click(lambda: gr.update(visible=False), outputs=[download_btn])
+        btn_generate.click(lambda: (gr.update(interactive=True), gr.update(interactive=True)), outputs=[btn_pause, btn_stop])
+        gen_event.then(lambda: (gr.update(interactive=False), gr.update(interactive=False)), outputs=[btn_pause, btn_stop])
+
+        # Connect download button for generation
+        gen_event.then(
+            fn=on_audio_generated,
+            inputs=[audio_output],
+            outputs=[download_btn]
+        )
+
+        # --- Conversation Pause/Stop ---
+        btn_pause_conv.click(fn=toggle_pause, inputs=btn_pause_conv, outputs=btn_pause_conv)
+        btn_stop_conv.click(fn=request_stop, outputs=[audio_output, status_output, estimate_output, btn_pause_conv, btn_stop_conv])
+        btn_stop_conv.click(fn=lambda: gr.update(visible=False), outputs=[download_btn])
 
         # --- Auto-adjust Temperature on Tab Switch ---
         conv_tab.select(
@@ -2295,38 +2560,13 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
             inputs=backbone_select,
             outputs=temperature_slider
         )
-        
-        # --- Standard Generation Handlers ---
-        gen_event = btn_generate.click(
-            fn=synthesize_speech_with_estimate,
-            inputs=[text_input, voice_select, custom_audio, custom_text, current_mode_state,
-                    generation_mode, use_batch, max_batch_size_run,
-                    temperature_slider, max_chars_chunk_slider,
-                    denoise_checkbox, session_id_state],
-            outputs=[audio_output, status_output, estimate_output]
-        )
-        btn_generate.click(lambda: gr.update(visible=False), outputs=[download_btn])
-        btn_generate.click(lambda: gr.update(interactive=True), outputs=btn_stop)
-        gen_event.then(lambda: gr.update(interactive=False), outputs=btn_stop)
 
-        # --- Stop Button ---
-        def request_stop():
-            print("🛑 STOP REQUESTED via button click.")
-            _STOP_EVENT.set()
-            return None, "⏹️ Đã dừng tạo giọng nói.", "", gr.update(interactive=False)
-
-        # Handler: set stop event + update UI
-        # Note: We avoid cancels= here to prevent internal Gradio KeyError crashes,
-        # relying instead on the frequent _STOP_EVENT.is_set() checks in the code.
-        btn_stop.click(fn=request_stop, outputs=[audio_output, status_output, estimate_output, btn_stop])
+        # Pause/Stop for standard generation
+        btn_pause.click(fn=toggle_pause, inputs=btn_pause, outputs=btn_pause)
+        btn_stop.click(fn=request_stop, outputs=[audio_output, status_output, estimate_output, btn_pause, btn_stop])
+        btn_stop.click(fn=lambda: gr.update(visible=False), outputs=[download_btn])
 
         # --- Download Button Event Handlers ---
-        def on_audio_generated(audio_path):
-            """Show download button when audio is generated."""
-            if audio_path and os.path.exists(audio_path):
-                return gr.update(value=audio_path, visible=True)
-            return gr.update(visible=False)
-
         # Connect to generation events (must be after gen_event/conv_gen_event are defined)
         gen_event.then(
             fn=on_audio_generated,
@@ -2347,7 +2587,7 @@ with gr.Blocks(theme=theme, css=css, title="VieNeu-TTS", head=head_html) as demo
         # Persistence: Restore UI state on load
         demo.load(
             fn=restore_ui_state,
-            outputs=[model_status, btn_generate, btn_generate_conv, btn_stop]
+            outputs=[model_status, btn_generate, btn_pause, btn_stop, btn_generate_conv, btn_pause_conv, btn_stop_conv]
         )
 
 def main():

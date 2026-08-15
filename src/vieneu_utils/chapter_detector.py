@@ -6,7 +6,7 @@ import re
 from typing import List, Dict, Optional
 
 
-def detect_chapters(text: str, format: str = "auto", custom_keywords: Optional[List[str]] = None, words_per_chunk: int = 1000) -> List[Dict]:
+def detect_chapters(text: str, format: str = "auto", custom_keywords: Optional[List[str]] = None, words_per_chunk: int = 1000, split_mode: str = "auto", chars_per_chunk: int = 2000) -> List[Dict]:
     """
     Detect chapters from text structure.
 
@@ -31,21 +31,29 @@ def detect_chapters(text: str, format: str = "auto", custom_keywords: Optional[L
     """
     chapters = []
 
-    if format == "auto":
-        # Try markdown first
-        chapters = _detect_markdown_chapters(text)
-        if not chapters:
-            # Try numbered chapters
-            chapters = _detect_numbered_chapters(text)
-        if not chapters:
-            # Fallback: split by blank lines
-            chapters = _detect_blank_line_chapters(text)
-    elif format == "markdown":
-        chapters = _detect_markdown_chapters(text)
-    elif format == "numbered":
-        chapters = _detect_numbered_chapters(text, custom_keywords=custom_keywords)
-    elif format == "wordcount":
+    if split_mode == "charcount":
+        chapters = _split_by_char_count(text, chars_per_chunk)
+    elif split_mode == "wordcount":
         chapters = _split_by_word_count(text, words_per_chunk=words_per_chunk)
+    elif split_mode == "numbered":
+        chapters = _detect_numbered_chapters(text, custom_keywords=custom_keywords)
+    else:
+        # Existing format handling (for backward compatibility with format param)
+        if format == "auto":
+            # Try markdown first
+            chapters = _detect_markdown_chapters(text)
+            if not chapters:
+                # Try numbered chapters
+                chapters = _detect_numbered_chapters(text)
+            if not chapters:
+                # Fallback: split by blank lines
+                chapters = _detect_blank_line_chapters(text)
+        elif format == "markdown":
+            chapters = _detect_markdown_chapters(text)
+        elif format == "numbered":
+            chapters = _detect_numbered_chapters(text, custom_keywords=custom_keywords)
+        elif format == "wordcount":
+            chapters = _split_by_word_count(text, words_per_chunk=words_per_chunk)
 
     # If no chapters detected, treat entire text as one chapter
     if not chapters:
@@ -168,6 +176,38 @@ def _detect_numbered_chapters(text: str, custom_keywords: Optional[List[str]] = 
         current_chapter['end_pos'] = current_chapter['start_pos'] + len(current_chapter['text'])
         chapters.append(current_chapter)
 
+    return chapters
+
+
+def _split_by_char_count(text: str, chars_per_chunk: int = 2000) -> List[Dict]:
+    """Split text into chunks by character count.
+
+    Args:
+        text: Full text content.
+        chars_per_chunk: Number of characters per chapter.
+    """
+    chapters = []
+    total_len = len(text)
+    start = 0
+    idx = 1
+    while start < total_len:
+        end = min(start + chars_per_chunk, total_len)
+        # Prefer split at newline boundary
+        slice_ = text[start:end]
+        newline = slice_.rfind('\n')
+        if newline != -1 and end != total_len:
+            end = start + newline
+        chapter_text = text[start:end].strip()
+        title = f"Section {idx}"
+        chapters.append({
+            "title": title,
+            "start_pos": start,
+            "end_pos": end,
+            "text": chapter_text,
+            "level": 1
+        })
+        start = end
+        idx += 1
     return chapters
 
 

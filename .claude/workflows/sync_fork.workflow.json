@@ -1,0 +1,26 @@
+{
+  "name": "Sync Fork with Upstream",
+  "description": "Synchronize this fork with the upstream repository while preserving local commits. Uses rebase and force‑with‑lease push.",
+  "steps": [
+    {
+      "name": "Checkout branch",
+      "command": "git checkout ${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}",
+      "description": "Ensure working on target branch (default current)."
+    },
+    {
+      "name": "Fetch upstream",
+      "command": "git fetch upstream",
+      "description": "Retrieve latest commits from upstream remote."
+    },
+    {
+      "name": "Rebase onto upstream",
+      "command": "git rebase upstream/${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}",
+      "description": "Reapply local commits on top of upstream's branch."
+    },
+    {
+      "name": "Push rebased branch",
+      "command": "git push origin ${BRANCH:-$(git rev-parse --abbrev-ref HEAD)} --force-with-lease",
+      "description": "Update fork on GitHub with rebased history."
+    }
+  ]
+}
