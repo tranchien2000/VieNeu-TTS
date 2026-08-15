@@ -14,7 +14,8 @@
       "Bash(uv run *)",
       "Bash(uv pip *)",
       "Bash(pip install *)",
-      "Bash(GRADIO_SERVER_PORT=7861 python apps/gradio_main.py)"
+      "Bash(GRADIO_SERVER_PORT=7861 python apps/gradio_main.py)",
+      "Bash(git commit *)"
     ]
   }
 }
